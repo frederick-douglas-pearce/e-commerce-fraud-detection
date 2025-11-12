@@ -114,6 +114,76 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 - Model comparison and evaluation
 - Hyperparameter tuning (planned)
 
+## Notebook Best Practices
+
+### Keep Cells Clean with Functions
+
+**Core Principle**: Notebook cells should contain minimal logic - ideally just a single function call. All complex logic should be encapsulated in well-named functions defined in the "Define functions" section.
+
+#### Benefits
+1. **Readability**: Cells are easy to scan and understand at a glance
+2. **Reusability**: Functions can be called multiple times or on different datasets
+3. **Maintainability**: Changes to logic happen in one place
+4. **Testability**: Functions can be unit tested
+5. **Organization**: All logic is centralized in the functions section
+
+#### Examples
+
+**❌ Bad Practice** - Complex logic directly in cell:
+```python
+# Cell with 50+ lines of matplotlib code
+fig, axes = plt.subplots(3, 2, figsize=(14, 12))
+axes = axes.flatten()
+for idx, col in enumerate(numeric_features):
+    ax = axes[idx]
+    train_df[col].hist(bins=50, ax=ax, alpha=0.7, color='steelblue')
+    # ... 40 more lines of plotting code
+```
+
+**✅ Good Practice** - Clean single function call:
+```python
+# Cell with single function call
+plot_numeric_distributions(train_df, numeric_features)
+```
+
+#### Implementation Pattern
+
+1. **Define functions in "Define functions" section**:
+   ```python
+   def plot_numeric_distributions(df, numeric_features):
+       """Visualize distributions of numeric features with histograms."""
+       # All plotting logic here
+       fig, axes = plt.subplots(3, 2, figsize=(14, 12))
+       # ... implementation
+       plt.show()
+       print("\nKey Observations:...")
+   ```
+
+2. **Call functions in notebook cells**:
+   ```python
+   plot_numeric_distributions(train_df, numeric_features)
+   ```
+
+#### Function Naming Conventions
+- **Action-based names**: `analyze_`, `plot_`, `calculate_`, `print_`
+- **Descriptive**: Name should clearly indicate what the function does
+- **Examples**:
+  - `analyze_vif()` - Calculate and visualize VIF
+  - `plot_categorical_fraud_rates()` - Visualize fraud rates by category
+  - `analyze_temporal_patterns()` - Analyze time-based fraud patterns
+
+#### When to Create a Function
+Create a function when:
+- Logic exceeds ~5-10 lines
+- Code involves visualization (matplotlib/seaborn)
+- Analysis might be reused or repeated
+- Cell logic becomes hard to read at a glance
+
+Keep inline when:
+- Single line operations (e.g., `df.head()`)
+- Simple variable assignments
+- Direct function calls to existing functions
+
 ## Key Functions
 
 ### Data Loading & Preprocessing
@@ -121,12 +191,23 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 - `load_data(data_dir, csv_file, verbose)`: Load CSV efficiently
 - `split_train_val_test(df, val_ratio, test_ratio, stratify, r_seed)`: Create train/val/test splits
 
-### Analysis Functions
+### Preprocessing & Analysis Functions
 - `analyze_target_stats(df, target_col)`: Target distribution and imbalance detection
-- `analyze_feature_stats(df, id_cols, target_col)`: Feature summary statistics
+- `analyze_feature_stats(df, id_cols, target_col, categorical_features, numeric_features)`: Feature summary statistics
 - `calculate_mi_scores(df, categorical_features, target_col)`: Mutual information for categorical features
 - `calculate_numeric_correlations(df, numeric_features, target_col)`: Pearson correlations
 - `calculate_vif(df, numeric_features)`: Variance Inflation Factor for multicollinearity
+
+### EDA Visualization Functions
+- `plot_numeric_distributions(df, numeric_features)`: Histogram visualizations with statistics
+- `analyze_vif(df, numeric_features)`: VIF calculation and visualization
+- `analyze_correlations(df, numeric_features, target_col)`: Correlation analysis with visualization
+- `plot_box_plots(df, numeric_features, target_col)`: Box plots comparing fraud vs non-fraud
+- `analyze_temporal_patterns(df, date_feature, target_col, baseline_fraud_rate)`: Time-based fraud patterns
+- `analyze_categorical_fraud_rates(df, categorical_features, target_col)`: Fraud rate calculations by category
+- `plot_categorical_fraud_rates(df, categorical_features, target_col, baseline_fraud_rate)`: Visualize categorical fraud rates
+- `analyze_mutual_information(df, categorical_features, target_col)`: MI score calculation and visualization
+- `print_feature_recommendations(corr_df, mi_df, vif_df, numeric_features, categorical_features)`: Comprehensive feature recommendations
 
 ## Important Notes
 
