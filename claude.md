@@ -12,28 +12,37 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 
 ```
 .
-├── ec_fraud_detection.ipynb  # Main analysis notebook
-├── data/                      # Data directory (gitignored)
-│   └── transactions.csv       # Downloaded dataset (~300k rows, 17 columns)
-├── pyproject.toml             # Python dependencies
-├── uv.lock                    # Locked dependency versions
-├── .python-version            # Python version specification
-├── .gitignore                 # Git exclusions
-└── README.md                  # Project readme
+├── fraud_detection_EDA_FE.ipynb    # EDA & feature engineering notebook
+├── fraud_detection_modeling.ipynb  # Model training & evaluation notebook
+├── data/                            # Data directory (gitignored)
+│   ├── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
+│   ├── train_features.pkl           # Engineered training set (179,817 × 31)
+│   ├── val_features.pkl             # Engineered validation set (59,939 × 31)
+│   └── test_features.pkl            # Engineered test set (59,939 × 31)
+├── models/                          # Model artifacts (to be created)
+├── pyproject.toml                   # Python dependencies
+├── uv.lock                          # Locked dependency versions
+├── .python-version                  # Python version specification
+├── .gitignore                       # Git exclusions
+├── claude.md                        # This file
+└── README.md                        # Project readme
 ```
 
 ## Dataset Information
 
-### Size & Balance
+### Original Dataset (Raw)
+- **Source**: Kaggle - E-Commerce Fraud Detection Dataset
 - **Rows**: 299,695 transactions
-- **Columns**: 17 features
+- **Columns**: 17 original features
 - **Target**: `is_fraud` (binary: 0=normal, 1=fraud)
 - **Class Distribution**:
   - Normal: 97.8%
   - Fraud: 2.2%
   - **Class Imbalance Ratio**: 44.3:1 (highly imbalanced!)
+- **Data Quality**: No missing values, no duplicates
+- **Memory usage**: ~107 MB
 
-### Key Features
+### Original Features (17)
 - **Transaction Identifiers**: `transaction_id`, `user_id`
 - **User Behavior**: `account_age_days`, `total_transactions_user`, `avg_amount_user`
 - **Transaction Details**: `amount`, `transaction_time`, `merchant_category`
@@ -41,11 +50,27 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 - **Security Flags**: `avs_match`, `cvv_result`, `three_ds_flag`
 - **Channel & Promotions**: `channel` (web/app), `promo_used`
 
-### Data Quality
-- No missing values
-- No duplicate records
-- Each row uniquely identified by `transaction_id` and `user_id`
-- Memory usage: ~107 MB
+### Engineered Dataset (After Feature Engineering)
+- **Total Features**: 30 features + 1 target = 31 columns
+- **Splits**: 60% train, 20% validation, 20% test (stratified)
+- **Format**: Pickle files for fast loading
+- **Feature Categories**:
+  1. **Original Numeric (5)**: account_age_days, total_transactions_user, avg_amount_user, amount, shipping_distance_km
+  2. **Original Categorical (5)**: channel, promo_used, avs_match, cvv_result, three_ds_flag
+  3. **Temporal Local (6)**: hour_local, day_of_week_local, month_local, is_weekend_local, is_late_night_local, is_business_hours_local
+  4. **Amount Features (4)**: amount_deviation, amount_vs_avg_ratio, is_micro_transaction, is_large_transaction
+  5. **User Behavior (3)**: transaction_velocity, is_new_account, is_high_frequency_user
+  6. **Geographic (3)**: country_mismatch, high_risk_distance, zero_distance
+  7. **Security (1)**: security_score
+  8. **Interaction (3)**: new_account_with_promo, late_night_micro_transaction, high_value_long_distance
+
+### Feature Selection Decisions
+- **Excluded UTC temporal features** (6): Local time more meaningful for fraud patterns
+- **Excluded country/bin_country** (2): Replaced by country_mismatch (more specific)
+- **Excluded merchant_category** (1): Low predictive signal (all near baseline)
+- **Excluded redundant security** (3): verification_failures, all_verifications_passed/failed
+- **Excluded generic interactions** (3): Covered by base features
+- **Total reduced**: From 45 available → 30 selected (33% reduction)
 
 ## Technical Stack
 
@@ -54,6 +79,7 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 - **Data Science**: pandas, numpy, matplotlib, seaborn
 - **ML Models**: scikit-learn, xgboost
 - **Statistics**: statsmodels
+- **Timezone Handling**: pytz (for UTC to local time conversion)
 - **Data Source**: kaggle (API client)
 - **Notebook**: jupyter
 - **API (future)**: fastapi, uvicorn
@@ -86,33 +112,94 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 
 ## Notebook Structure
 
-### 1. Setup
-- Parameter definitions (data paths, split ratios, column names)
-- Package imports
+### fraud_detection_EDA_FE.ipynb (EDA & Feature Engineering)
+
+#### 1. Setup
+- Parameter definitions (data paths, split ratios, feature lists)
+- Package imports (pandas, numpy, matplotlib, seaborn, sklearn, statsmodels, pytz)
 - Utility function definitions
 
-### 2. Data Loading
+#### 2. Data Loading
 - `download_data_csv()`: Kaggle API download with caching
 - `load_data()`: Efficient pandas CSV loading
 
-### 3. Preprocessing
+#### 3. Preprocessing
 - Table grain verification
-- Target class balance analysis
-- Date type conversion
-- Train/validation/test splits (stratified)
+- Target class balance analysis (before splitting for stratification decision)
+- Date type conversion with UTC enforcement (`pd.to_datetime(..., utc=True)`)
+- Train/validation/test splits (60/20/20, stratified on target)
 
-### 4. Exploratory Data Analysis (EDA)
-- Target variable distribution
-- Numeric feature analysis
-- Multicollinearity detection (VIF)
-- Bivariate analysis (features vs. target)
+#### 4. Exploratory Data Analysis (EDA)
+- Baseline fraud rate calculation
+- Numeric feature distributions with histograms
+- Multicollinearity detection (VIF analysis)
+- Correlations with target (Pearson for numeric)
+- Box plots (fraud vs non-fraud comparison)
+- Temporal patterns analysis (hour, day_of_week, weekend, month)
 - Categorical feature fraud rates
-- Feature selection recommendations
+- Mutual information scores for categorical features
+- Initial feature selection recommendations
 
-### 5. Model Training
-- Baseline models (in progress)
-- Model comparison and evaluation
-- Hyperparameter tuning (planned)
+#### 5. Feature Engineering
+- Timezone conversion (UTC → local time by country capital)
+- Temporal features (UTC and local): hour, day_of_week, is_late_night, etc.
+- Amount features: deviations, ratios, micro/large transaction flags
+- User behavior: velocity, new account, high frequency flags
+- Geographic: country mismatch, high-risk distance, zero distance
+- Security: composite security score
+- Interaction features: fraud scenario-specific combinations
+- **Output**: 32 engineered features created
+
+#### 6. Final Feature Selection
+- Analysis of all 45 available features (13 original + 32 engineered)
+- Elimination of redundant features (UTC, country fields, etc.)
+- Selection criteria: EDA insights, fraud scenarios, interpretability
+- **Output**: 30 selected features stored in categorized lists
+
+#### 7. Dataset Persistence
+- Save train/val/test DataFrames with selected features as pickle files
+- Format: 30 features + 1 target = 31 columns
+- Location: `data/train_features.pkl`, `data/val_features.pkl`, `data/test_features.pkl`
+
+### fraud_detection_modeling.ipynb (Model Training & Evaluation)
+
+#### 1. Setup
+- Parameter definitions (data paths, random seed, model directory)
+- Package imports (sklearn, xgboost, preprocessing, metrics)
+
+#### 2. Data Loading
+- Load pre-engineered datasets from pickle files
+- Feature type identification (numeric, categorical, binary)
+- Dataset shape and target distribution validation
+
+#### 3. Preprocessing (To be implemented)
+- Model-specific transformations
+- One-hot encoding for categorical features (Logistic Regression)
+- StandardScaler for numeric features (Logistic Regression)
+- Minimal preprocessing for tree models (XGBoost, Random Forest)
+
+#### 4. Baseline Models (To be implemented)
+- Logistic Regression with class weights
+- Random Forest with class weights
+- XGBoost with scale_pos_weight
+- Initial performance comparison
+
+#### 5. Hyperparameter Tuning (To be implemented)
+- Grid search or randomized search
+- Cross-validation with stratified folds
+- Optimize for ROC-AUC or F1 score
+
+#### 6. Model Evaluation (To be implemented)
+- ROC-AUC, F1, Precision, Recall scores
+- Confusion matrices
+- ROC curves and Precision-Recall curves
+- Feature importance analysis
+
+#### 7. Final Model Selection (To be implemented)
+- Compare all models on validation set
+- Select best performing model
+- Final evaluation on test set
+- Save model for deployment
 
 ## Notebook Best Practices
 
@@ -187,27 +274,41 @@ Keep inline when:
 ## Key Functions
 
 ### Data Loading & Preprocessing
-- `download_data_csv(kaggle_source, data_dir, csv_file)`: Download from Kaggle
+- `download_data_csv(kaggle_source, data_dir, csv_file)`: Download from Kaggle with caching
 - `load_data(data_dir, csv_file, verbose)`: Load CSV efficiently
-- `split_train_val_test(df, val_ratio, test_ratio, stratify, r_seed)`: Create train/val/test splits
+- `split_train_val_test(df, val_ratio, test_ratio, stratify, r_seed)`: Create train/val/test splits with stratification
 
 ### Preprocessing & Analysis Functions
-- `analyze_target_stats(df, target_col)`: Target distribution and imbalance detection
+- `analyze_target_stats(df, target_col)`: Target distribution and imbalance detection with visualization
 - `analyze_feature_stats(df, id_cols, target_col, categorical_features, numeric_features)`: Feature summary statistics
 - `calculate_mi_scores(df, categorical_features, target_col)`: Mutual information for categorical features
 - `calculate_numeric_correlations(df, numeric_features, target_col)`: Pearson correlations
 - `calculate_vif(df, numeric_features)`: Variance Inflation Factor for multicollinearity
 
 ### EDA Visualization Functions
-- `plot_numeric_distributions(df, numeric_features)`: Histogram visualizations with statistics
-- `analyze_vif(df, numeric_features)`: VIF calculation and visualization
-- `analyze_correlations(df, numeric_features, target_col)`: Correlation analysis with visualization
-- `plot_box_plots(df, numeric_features, target_col)`: Box plots comparing fraud vs non-fraud
-- `analyze_temporal_patterns(df, date_feature, target_col, baseline_fraud_rate)`: Time-based fraud patterns
-- `analyze_categorical_fraud_rates(df, categorical_features, target_col)`: Fraud rate calculations by category
-- `plot_categorical_fraud_rates(df, categorical_features, target_col, baseline_fraud_rate)`: Visualize categorical fraud rates
+- `plot_numeric_distributions(df, numeric_features)`: Histogram visualizations with mean/median lines
+- `analyze_vif(df, numeric_features)`: VIF calculation and visualization with interpretation
+- `analyze_correlations(df, numeric_features, target_col)`: Correlation analysis with bar chart visualization
+- `plot_box_plots(df, numeric_features, target_col)`: Box plots comparing fraud vs non-fraud distributions
+- `analyze_temporal_patterns(df, date_feature, target_col, baseline_fraud_rate)`: Time-based fraud patterns by hour/day/month
+- `analyze_categorical_fraud_rates(df, categorical_features, target_col)`: Fraud rate calculations by category with high-risk identification
+- `plot_categorical_fraud_rates(df, categorical_features, target_col, baseline_fraud_rate)`: Visualize categorical fraud rates with baseline comparison
 - `analyze_mutual_information(df, categorical_features, target_col)`: MI score calculation and visualization
-- `print_feature_recommendations(corr_df, mi_df, vif_df, numeric_features, categorical_features)`: Comprehensive feature recommendations
+- `print_feature_recommendations(corr_df, mi_df, vif_df, numeric_features, categorical_features)`: Comprehensive feature recommendations based on EDA
+
+### Feature Engineering Functions
+- `get_country_timezone_mapping()`: Returns dictionary mapping countries to capital city timezones
+- `convert_utc_to_local_time(df, date_col, country_col)`: Convert UTC to local time with timezone validation
+- `create_temporal_features(df, date_col, use_local_time)`: Generate temporal features (hour, day_of_week, is_late_night, etc.)
+- `create_amount_features(df)`: Transaction amount patterns (deviation, ratios, micro/large flags)
+- `create_user_behavior_features(df)`: User account patterns (velocity, new account, high frequency)
+- `create_geographic_features(df, risk_distance_quantile)`: Geographic features (country mismatch, distance flags)
+- `create_security_features(df)`: Security verification features (composite score, failures)
+- `create_interaction_features(df)`: Fraud scenario-specific interaction features
+- `engineer_features(df, date_col, country_col)`: Master function to create all 32 engineered features with progress logging
+
+### Feature Selection Function
+- `analyze_final_feature_selection(train_new_features)`: Comprehensive feature selection analysis that returns categorized dictionary of 30 selected features with rationale for inclusions/exclusions
 
 ## Important Notes
 
