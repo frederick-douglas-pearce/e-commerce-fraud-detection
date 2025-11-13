@@ -62,21 +62,25 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 
 ```
 .
-├── ec_fraud_detection.ipynb    # Main analysis & modeling notebook
-├── data/                        # Dataset directory (gitignored)
-│   └── transactions.csv         # Transaction data from Kaggle
-├── models/                      # Trained model artifacts (to be created)
-├── src/                         # Source code (to be created)
-│   ├── api/                     # FastAPI application
-│   ├── preprocessing/           # Data preprocessing pipelines
-│   └── training/                # Model training scripts
-├── tests/                       # Unit tests (to be created)
-├── Dockerfile                   # Docker configuration (to be created)
-├── pyproject.toml               # Python dependencies
-├── uv.lock                      # Locked dependency versions
-├── .gitignore                   # Git exclusions
-├── claude.md                    # Project context for Claude Code
-└── README.md                    # This file
+├── fraud_detection_EDA_FE.ipynb        # EDA & feature engineering notebook
+├── fraud_detection_modeling.ipynb     # Model training & evaluation notebook
+├── data/                               # Dataset directory (gitignored)
+│   ├── transactions.csv                # Raw transaction data from Kaggle
+│   ├── train_features.pkl              # Engineered training set
+│   ├── val_features.pkl                # Engineered validation set
+│   └── test_features.pkl               # Engineered test set
+├── models/                             # Trained model artifacts (to be created)
+├── src/                                # Source code (to be created)
+│   ├── api/                            # FastAPI application
+│   ├── preprocessing/                  # Data preprocessing pipelines
+│   └── training/                       # Model training scripts
+├── tests/                              # Unit tests (to be created)
+├── Dockerfile                          # Docker configuration (to be created)
+├── pyproject.toml                      # Python dependencies
+├── uv.lock                             # Locked dependency versions
+├── .gitignore                          # Git exclusions
+├── claude.md                           # Project context for Claude Code
+└── README.md                           # This file
 ```
 
 ## Getting Started
@@ -118,21 +122,45 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    uv run --with jupyter jupyter lab
    ```
 
-4. **Run the notebook**
-   - Open `ec_fraud_detection.ipynb`
+4. **Run the notebooks**
+   - Open `fraud_detection_EDA_FE.ipynb` for EDA and feature engineering
    - Run cells sequentially
    - Dataset will auto-download on first run if not present
+   - Open `fraud_detection_modeling.ipynb` for model training (after EDA is complete)
 
 ## Development Workflow
 
-### Data Analysis & Model Development
-The main notebook (`ec_fraud_detection.ipynb`) contains:
-1. **Data Loading**: Automated Kaggle dataset download
-2. **Preprocessing**: Data cleaning, type conversion, train/val/test splits (60/20/20)
-3. **EDA**: Target analysis, feature distributions, correlation analysis, VIF
-4. **Feature Engineering**: Creating predictive features from raw data
-5. **Model Training**: Baseline models, hyperparameter tuning, model comparison
-6. **Evaluation**: ROC-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
+### Data Analysis & Feature Engineering
+The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
+1. **Data Loading**: Automated Kaggle dataset download with caching
+2. **Preprocessing**: Data cleaning, type conversion, train/val/test splits (60/20/20, stratified)
+3. **EDA**: Comprehensive exploratory data analysis
+   - Target distribution and class imbalance analysis (44:1 ratio)
+   - Numeric feature distributions and correlations
+   - Categorical feature fraud rates and mutual information
+   - Temporal pattern analysis
+   - Multicollinearity detection (VIF)
+4. **Feature Engineering**: Created 32 engineered features
+   - **Temporal**: UTC and local timezone features (hour, day_of_week, is_late_night, etc.)
+   - **Amount**: Deviation, ratios, micro/large transaction flags
+   - **User Behavior**: Transaction velocity, new account flags, frequency indicators
+   - **Geographic**: Country mismatch, high-risk distance, zero distance
+   - **Security**: Composite security score from verification flags
+   - **Interaction**: Fraud scenario-specific combinations (e.g., new_account_with_promo)
+5. **Feature Selection**: Final selection of **30 features** from 45 available
+   - Removed redundant features (UTC features, duplicate country fields)
+   - Excluded low-signal features (merchant_category)
+   - Prioritized interpretability and fraud scenario alignment
+6. **Dataset Persistence**: Saves engineered train/val/test sets as pickle files
+
+### Model Training & Evaluation
+The modeling notebook (`fraud_detection_modeling.ipynb`) contains:
+1. **Data Loading**: Load pre-engineered feature sets from pickle files
+2. **Preprocessing**: Model-specific transformations (one-hot encoding, scaling)
+3. **Baseline Models**: Logistic Regression, Random Forest, XGBoost
+4. **Hyperparameter Tuning**: Grid search / randomized search
+5. **Evaluation**: ROC-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
+6. **Model Selection**: Choose best performing model for deployment
 
 ### Model Training Strategy
 Given the 44:1 class imbalance, the project employs:
@@ -151,13 +179,57 @@ uv add <package-name>
 pytest tests/
 ```
 
+## Feature Engineering Summary
+
+The project implements comprehensive feature engineering targeting the three specific fraud scenarios:
+
+### Engineered Features (30 selected from 32 created)
+
+**1. Temporal Features (6) - Local Timezone**
+- `hour_local`, `day_of_week_local`, `month_local`
+- `is_weekend_local`, `is_late_night_local` (11 PM - 4 AM), `is_business_hours_local`
+- **Why local time?** Better captures human behavior patterns. Fraud at "2 AM local" is suspicious regardless of UTC time.
+
+**2. Transaction Amount Features (4)**
+- `amount_deviation` - Absolute deviation from user's average
+- `amount_vs_avg_ratio` - Ratio of transaction to user average
+- `is_micro_transaction` - Flags amounts ≤$5 (card testing pattern)
+- `is_large_transaction` - Flags 95th percentile+ amounts
+
+**3. User Behavior Features (3)**
+- `transaction_velocity` - Transactions per day of account age
+- `is_new_account` - Accounts <30 days old (promo abuse pattern)
+- `is_high_frequency_user` - 75th percentile+ transaction count
+
+**4. Geographic Features (3)**
+- `country_mismatch` - User country ≠ card issuing country (replaces separate fields)
+- `high_risk_distance` - Shipping distance >75th percentile
+- `zero_distance` - Billing = shipping address (lower risk)
+
+**5. Security Features (1)**
+- `security_score` - Composite score: avs_match + cvv_result + three_ds_flag (0-3)
+
+**6. Interaction Features (3) - Fraud Scenario Specific**
+- `new_account_with_promo` → **Scenario #3**: Promo abuse from fresh accounts
+- `late_night_micro_transaction` → **Scenario #1**: Card testing at midnight
+- `high_value_long_distance` → **Scenario #2 variant**: Large amounts shipped far
+
+**Original Features Retained (10)**
+- Numeric (5): account_age_days, total_transactions_user, avg_amount_user, amount, shipping_distance_km
+- Categorical (5): channel, promo_used, avs_match, cvv_result, three_ds_flag
+
+**Total: 30 features + 1 target = 31 columns**
+
 ## Deployment Plan
 
-### Phase 1: Model Development (Current)
+### Phase 1: Model Development (In Progress)
 - [x] Dataset acquisition and exploration
 - [x] Initial EDA and data quality checks
-- [x] Preprocessing pipeline setup
-- [ ] Feature engineering
+- [x] Preprocessing pipeline setup (stratified splits, type conversion)
+- [x] Comprehensive exploratory data analysis
+- [x] Feature engineering (32 features created)
+- [x] Final feature selection (30 features selected)
+- [x] Dataset persistence for modeling
 - [ ] Baseline model training
 - [ ] Model optimization and selection
 - [ ] Final model evaluation on test set
