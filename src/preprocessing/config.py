@@ -24,7 +24,7 @@ class FeatureConfig:
     """
 
     amount_95th_percentile: float
-    total_transactions_75th_percentile: float
+    total_transactions_75th_percentile: int
     shipping_distance_75th_percentile: float
     timezone_mapping: Dict[str, str]
     final_features: List[str]
@@ -48,8 +48,8 @@ class FeatureConfig:
 
         return cls(
             amount_95th_percentile=round(float(train_df['amount'].quantile(0.95)), 2),
-            total_transactions_75th_percentile=float(train_df['total_transactions_user'].quantile(0.75)),
-            shipping_distance_75th_percentile=round(float(train_df['shipping_distance_km'].quantile(0.75)), 2),
+            total_transactions_75th_percentile=int(train_df['total_transactions_user'].quantile(0.75)),
+            shipping_distance_75th_percentile=round(float(train_df['shipping_distance_km'].quantile(0.75)), 1),
             timezone_mapping=get_country_timezone_mapping(),
             final_features=get_final_feature_names()
         )
