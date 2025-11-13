@@ -58,3 +58,7 @@ Thumbs.db
 *.pth
 *.onnx
 *.pb
+
+# Models directory (except JSON configs)
+models/
+!models/*.json

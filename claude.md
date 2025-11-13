@@ -19,7 +19,20 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │   ├── train_features.pkl           # Engineered training set (179,817 × 31)
 │   ├── val_features.pkl             # Engineered validation set (59,939 × 31)
 │   └── test_features.pkl            # Engineered test set (59,939 × 31)
-├── models/                          # Model artifacts (to be created)
+├── src/                             # Source code for production
+│   └── preprocessing/               # Feature engineering pipeline
+│       ├── config.py                # FeatureConfig dataclass
+│       ├── features.py              # Feature engineering functions
+│       ├── transformer.py           # FraudFeatureTransformer (sklearn-compatible)
+│       └── __init__.py              # Package exports
+├── tests/                           # Test suite
+│   ├── conftest.py                  # Shared pytest fixtures
+│   └── test_preprocessing/          # Preprocessing tests
+│       ├── test_config.py           # FeatureConfig tests
+│       ├── test_features.py         # Feature function tests
+│       └── test_transformer.py      # Transformer integration tests
+├── models/                          # Model artifacts (gitignored except .json)
+│   └── feature_config.json          # Training-time configuration (tracked in git)
 ├── pyproject.toml                   # Python dependencies
 ├── uv.lock                          # Locked dependency versions
 ├── .python-version                  # Python version specification
@@ -82,10 +95,234 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 - **Timezone Handling**: pytz (for UTC to local time conversion)
 - **Data Source**: kaggle (API client)
 - **Notebook**: jupyter
+- **Testing**: pytest (for unit and integration tests)
 - **API (future)**: fastapi, uvicorn
 
 ### Package Management
 This project uses `uv` for fast, reliable Python dependency management.
+
+## Production Feature Engineering Pipeline
+
+### Overview
+The production feature engineering pipeline is implemented in `src/preprocessing/` as a scikit-learn compatible transformer. This architecture enables seamless integration with sklearn pipelines and consistent feature engineering between training and inference.
+
+### Architecture: Option 4 (Hybrid Class + Config)
+
+**Design Pattern**: Sklearn-compatible transformer with external JSON configuration
+
+**Key Benefits**:
+- ✅ Sklearn Pipeline compatible (fit/transform pattern)
+- ✅ Lightweight serialization (JSON config, not pickled Python objects)
+- ✅ Version control friendly (config changes visible in git diffs)
+- ✅ Type-safe configuration (dataclass with validation)
+- ✅ Testable (unit tests for each component)
+- ✅ Production-ready (industry standard pattern)
+
+### Module Structure
+
+#### 1. `src/preprocessing/config.py` - Configuration Management
+**Purpose**: Type-safe configuration for feature engineering
+
+**FeatureConfig dataclass** stores training-time statistics:
+- `amount_95th_percentile`: Threshold for is_large_transaction feature
+- `total_transactions_75th_percentile`: Threshold for is_high_frequency_user feature
+- `shipping_distance_75th_percentile`: Threshold for high_risk_distance feature
+- `timezone_mapping`: Dict mapping country codes to capital city timezones (10 countries)
+- `final_features`: List of 30 selected features for model input
+- `date_col`: Name of datetime column (default: 'transaction_time')
+- `country_col`: Name of country column (default: 'country')
+
+**Methods**:
+- `from_training_data(train_df)`: Calculate thresholds from training set
+- `save(path)`: Serialize to JSON file
+- `load(path)`: Deserialize from JSON file
+
+**Usage**:
+```python
+from src.preprocessing import FeatureConfig
+
+# During training (in EDA notebook)
+config = FeatureConfig.from_training_data(train_df)
+config.save("models/feature_config.json")
+
+# During inference (in API)
+config = FeatureConfig.load("models/feature_config.json")
+```
+
+#### 2. `src/preprocessing/features.py` - Feature Engineering Functions
+**Purpose**: Modular functions for each feature engineering step
+
+**Helper Functions**:
+- `get_country_timezone_mapping()`: Returns dict of country → timezone (10 countries)
+- `get_final_feature_names()`: Returns list of 30 selected features (categorized)
+
+**Feature Engineering Functions** (all return `Tuple[DataFrame, List[str]]`):
+- `convert_to_local_time(df, date_col, country_col, timezone_mapping)`:
+  - Converts UTC to local time by country capital timezone
+  - Strict validation: raises ValueError if input not timezone-aware UTC
+  - Returns timezone-naive local_time column
+
+- `create_temporal_features(df, date_col, use_local_time=False)`:
+  - Creates 6 features: hour, day_of_week, month, is_weekend, is_late_night, is_business_hours
+  - Can create UTC or local time features (with '_local' suffix)
+
+- `create_amount_features(df, amount_threshold)`:
+  - Creates 4 features: amount_deviation, amount_vs_avg_ratio, is_micro_transaction, is_large_transaction
+  - Handles division by zero (when avg_amount_user = 0)
+
+- `create_user_behavior_features(df, transaction_threshold)`:
+  - Creates 3 features: transaction_velocity, is_new_account, is_high_frequency_user
+  - Handles division by zero (when account_age_days = 0)
+
+- `create_geographic_features(df, distance_threshold)`:
+  - Creates 3 features: country_mismatch, high_risk_distance, zero_distance
+
+- `create_security_features(df)`:
+  - Creates 4 features: security_score, verification_failures, all_verifications_passed, all_verifications_failed
+  - Only security_score used in final 30 features
+
+- `create_interaction_features(df)`:
+  - Creates 6 features targeting fraud scenarios
+  - Only 3 used in final 30: new_account_with_promo, late_night_micro_transaction, high_value_long_distance
+
+#### 3. `src/preprocessing/transformer.py` - Sklearn Transformer
+**Purpose**: Orchestrate complete feature engineering pipeline
+
+**FraudFeatureTransformer class** (inherits from `BaseEstimator`, `TransformerMixin`):
+
+**Methods**:
+- `__init__(config=None)`: Initialize with optional configuration
+- `fit(X, y=None)`: Calculate FeatureConfig from training data, return self
+- `transform(X)`: Apply full pipeline, return DataFrame with 30 features
+- `fit_transform(X, y=None)`: Convenience method (fit + transform)
+- `save(path)`: Save config to JSON
+- `load(path)`: Class method to load from JSON config
+
+**Pipeline Steps** (executed in `transform()`):
+1. **Preprocessing**: Convert transaction_time to UTC timezone-aware datetime
+2. **Timezone conversion**: UTC → local time by country
+3. **Temporal features (UTC)**: 6 features (excluded from final 30)
+4. **Temporal features (local)**: 6 features (included in final 30)
+5. **Amount features**: 4 features using amount_95th_percentile threshold
+6. **User behavior features**: 3 features using transaction_75th_percentile threshold
+7. **Geographic features**: 3 features using distance_75th_percentile threshold
+8. **Security features**: 4 features (only security_score in final 30)
+9. **Interaction features**: 6 features (only 3 in final 30)
+10. **Feature selection**: Return only 30 selected features
+
+**Usage**:
+```python
+from src.preprocessing import FraudFeatureTransformer
+
+# Training workflow
+transformer = FraudFeatureTransformer()
+transformer.fit(train_df)  # Calculates quantile thresholds
+X_train = transformer.transform(train_df)
+transformer.save("models/transformer_config.json")
+
+# Inference workflow
+transformer = FraudFeatureTransformer.load("models/transformer_config.json")
+X_new = transformer.transform(new_df)
+
+# Sklearn Pipeline integration
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+
+pipeline = Pipeline([
+    ('feature_engineering', FraudFeatureTransformer()),
+    ('model', LogisticRegression())
+])
+pipeline.fit(train_df, y_train)
+predictions = pipeline.predict(test_df)
+```
+
+### Testing Strategy
+
+**Test Coverage**: Unit tests for each component + integration tests
+
+**Test Structure**:
+- `tests/conftest.py`: Shared pytest fixtures
+  - `sample_raw_df()`: Small raw DataFrame (10 rows)
+  - `sample_raw_df_utc()`: Same data with UTC timestamps
+  - `sample_config()`: Pre-configured FeatureConfig
+  - `fitted_transformer()`: Fitted FraudFeatureTransformer
+  - `sample_engineered_df()`: Transformed data (30 features)
+
+- `tests/test_preprocessing/test_config.py`: FeatureConfig tests
+  - Configuration creation and validation
+  - Save/load round-trip testing
+  - JSON structure verification
+  - Quantile calculation from training data
+
+- `tests/test_preprocessing/test_features.py`: Feature function tests
+  - Individual function testing (isolation)
+  - Edge case handling (zero values, division by zero)
+  - Timezone validation (strict UTC enforcement)
+  - Binary feature output verification
+
+- `tests/test_preprocessing/test_transformer.py`: Integration tests
+  - Full pipeline execution
+  - Output shape verification (30 features)
+  - Sklearn Pipeline compatibility
+  - Save/load consistency
+  - Multiple transform consistency
+
+**Run Tests**:
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=src/preprocessing --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_preprocessing/test_transformer.py
+```
+
+### Notebook Integration
+
+The EDA notebook (`fraud_detection_EDA_FE.ipynb`) now includes a cell that automatically generates and saves the FeatureConfig:
+
+```python
+# Create and save feature configuration for deployment
+from src.preprocessing import FeatureConfig
+
+feature_config = FeatureConfig.from_training_data(train_fe)
+feature_config.save("models/feature_config.json")
+```
+
+This config file (`models/feature_config.json`) is:
+- ✅ Tracked in git (added to repo)
+- ✅ Human-readable JSON format
+- ✅ Contains all training-time statistics needed for inference
+- ✅ Used by transformer during deployment
+
+### Design Decisions
+
+1. **Config as JSON (not pickle)**:
+   - Version control friendly (diffs are readable)
+   - Lightweight (no Python object serialization)
+   - Cross-language compatible (can be read by non-Python services)
+
+2. **Quantile thresholds from training data**:
+   - Prevents data leakage (test set never seen during threshold calculation)
+   - Consistent between training and inference
+   - Stored in config for reproducibility
+
+3. **Strict timezone validation**:
+   - Fails fast if input data missing timezone info
+   - Prevents silent errors from timezone assumptions
+   - Clear error messages guide users to fix data issues
+
+4. **30 features hardcoded in `get_final_feature_names()`**:
+   - Explicit feature selection (no magic)
+   - Easy to audit and modify
+   - Clear categorization (original, temporal, amount, etc.)
+
+5. **Sklearn-compatible transformer**:
+   - Standard fit/transform pattern
+   - Works with sklearn Pipeline
+   - Familiar API for ML practitioners
 
 ## Development Setup
 
