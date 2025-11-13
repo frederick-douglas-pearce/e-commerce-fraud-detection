@@ -59,6 +59,7 @@ Thumbs.db
 *.onnx
 *.pb
 
-# Models directory (except JSON configs)
-models/
+# Models directory - ignore all except .gitkeep and JSON configs
+models/*
+!models/.gitkeep
 !models/*.json
