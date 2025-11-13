@@ -47,9 +47,9 @@ class FeatureConfig:
         from .features import get_country_timezone_mapping, get_final_feature_names
 
         return cls(
-            amount_95th_percentile=float(train_df['amount'].quantile(0.95)),
+            amount_95th_percentile=round(float(train_df['amount'].quantile(0.95)), 2),
             total_transactions_75th_percentile=float(train_df['total_transactions_user'].quantile(0.75)),
-            shipping_distance_75th_percentile=float(train_df['shipping_distance_km'].quantile(0.75)),
+            shipping_distance_75th_percentile=round(float(train_df['shipping_distance_km'].quantile(0.75)), 2),
             timezone_mapping=get_country_timezone_mapping(),
             final_features=get_final_feature_names()
         )
