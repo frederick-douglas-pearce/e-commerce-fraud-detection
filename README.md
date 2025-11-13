@@ -50,12 +50,15 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 - **Visualization**: matplotlib, seaborn
 - **ML Models**: scikit-learn, xgboost
 - **Statistics**: statsmodels
+- **Timezone Handling**: pytz (UTC to local time conversion)
+- **Testing**: pytest (unit and integration tests)
 - **Notebook Environment**: Jupyter
 
-### Deployment (Planned)
-- **API Framework**: FastAPI
-- **ASGI Server**: Uvicorn
-- **Containerization**: Docker
+### Deployment
+- **Feature Engineering**: Production-ready sklearn-compatible transformer
+- **API Framework**: FastAPI (planned)
+- **ASGI Server**: Uvicorn (planned)
+- **Containerization**: Docker (planned)
 - **Package Management**: uv (fast Python package installer)
 
 ## Project Structure
@@ -66,16 +69,23 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ├── fraud_detection_modeling.ipynb     # Model training & evaluation notebook
 ├── data/                               # Dataset directory (gitignored)
 │   ├── transactions.csv                # Raw transaction data from Kaggle
-│   ├── train_features.pkl              # Engineered training set
-│   ├── val_features.pkl                # Engineered validation set
-│   └── test_features.pkl               # Engineered test set
-├── models/                             # Trained model artifacts (to be created)
-├── src/                                # Source code (to be created)
-│   ├── api/                            # FastAPI application
-│   ├── preprocessing/                  # Data preprocessing pipelines
-│   └── training/                       # Model training scripts
-├── tests/                              # Unit tests (to be created)
-├── Dockerfile                          # Docker configuration (to be created)
+│   ├── train_features.pkl              # Engineered training set (179,817 × 31)
+│   ├── val_features.pkl                # Engineered validation set (59,939 × 31)
+│   └── test_features.pkl               # Engineered test set (59,939 × 31)
+├── src/                                # Production source code
+│   └── preprocessing/                  # Feature engineering pipeline
+│       ├── config.py                   # FeatureConfig dataclass (JSON serialization)
+│       ├── features.py                 # Feature engineering functions
+│       ├── transformer.py              # FraudFeatureTransformer (sklearn-compatible)
+│       └── __init__.py                 # Package exports
+├── tests/                              # Test suite (41 passing tests)
+│   ├── conftest.py                     # Shared pytest fixtures
+│   └── test_preprocessing/             # Preprocessing tests
+│       ├── test_config.py              # FeatureConfig tests (8 tests)
+│       ├── test_features.py            # Feature function tests (23 tests)
+│       └── test_transformer.py         # Transformer integration tests (18 tests)
+├── models/                             # Model artifacts
+│   └── feature_config.json             # Training-time configuration (tracked in git)
 ├── pyproject.toml                      # Python dependencies
 ├── uv.lock                             # Locked dependency versions
 ├── .gitignore                          # Git exclusions
@@ -152,6 +162,10 @@ The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
    - Excluded low-signal features (merchant_category)
    - Prioritized interpretability and fraud scenario alignment
 6. **Dataset Persistence**: Saves engineered train/val/test sets as pickle files
+7. **Config Export**: Automatically generates `feature_config.json` for deployment
+   - Stores quantile thresholds from training data
+   - 30 selected feature names
+   - Timezone mappings for 10 countries
 
 ### Model Training & Evaluation
 The modeling notebook (`fraud_detection_modeling.ipynb`) contains:
@@ -169,14 +183,144 @@ Given the 44:1 class imbalance, the project employs:
 - **Appropriate metrics**: F1, ROC-AUC, PR-AUC (not accuracy)
 - **Threshold tuning** to optimize precision/recall trade-offs
 
-### Adding Dependencies
-```bash
-uv add <package-name>
+## Production Feature Engineering Pipeline
+
+The project includes a production-ready feature engineering pipeline (`src/preprocessing/`) designed for deployment. This sklearn-compatible transformer ensures consistent feature engineering between training and inference.
+
+### Architecture Overview
+
+**Design Pattern**: Hybrid Class + Config (sklearn-compatible transformer with JSON configuration)
+
+**Key Components**:
+1. **`FraudFeatureTransformer`** - Sklearn-compatible transformer class
+   - `fit(X)` - Calculates quantile thresholds from training data
+   - `transform(X)` - Applies feature engineering pipeline
+   - `save(path)` / `load(path)` - Persists configuration as JSON
+
+2. **`FeatureConfig`** - Type-safe configuration dataclass
+   - Stores training-time statistics (95th/75th percentile thresholds)
+   - Timezone mappings for 10 countries
+   - List of 30 final selected features
+   - JSON serialization for version control
+
+3. **Feature Engineering Functions** - Modular, testable functions
+   - Timezone conversion (UTC → local time by country)
+   - Temporal, amount, behavior, geographic, security features
+   - Fraud scenario-specific interaction features
+
+### Usage
+
+**Training Workflow**:
+```python
+from src.preprocessing import FraudFeatureTransformer
+
+# Fit transformer on training data
+transformer = FraudFeatureTransformer()
+transformer.fit(train_df)  # Calculates quantile thresholds
+X_train = transformer.transform(train_df)
+
+# Save configuration for deployment
+transformer.save("models/feature_config.json")
 ```
 
-### Running Tests (Future)
+**Inference Workflow**:
+```python
+# Load transformer with saved configuration
+transformer = FraudFeatureTransformer.load("models/feature_config.json")
+X_new = transformer.transform(new_df)
+```
+
+**Sklearn Pipeline Integration**:
+```python
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+
+pipeline = Pipeline([
+    ('feature_engineering', FraudFeatureTransformer()),
+    ('classifier', LogisticRegression())
+])
+pipeline.fit(train_df, y_train)
+predictions = pipeline.predict(test_df)
+```
+
+### Benefits
+
+✅ **Sklearn Pipeline compatible** - Standard fit/transform API
+✅ **Lightweight** - JSON config (not pickled Python objects)
+✅ **Version control friendly** - Config changes visible in diffs
+✅ **Type-safe** - Dataclass with validation
+✅ **Fully tested** - 41 passing tests with edge case coverage
+✅ **Production-ready** - Industry standard pattern
+
+### Configuration File
+
+The `feature_config.json` file stores:
+```json
+{
+  "amount_95th_percentile": 595.97,
+  "total_transactions_75th_percentile": 56,
+  "shipping_distance_75th_percentile": 408.9,
+  "timezone_mapping": { "US": "America/New_York", ... },
+  "final_features": [ "account_age_days", "amount", ... ],
+  "date_col": "transaction_time",
+  "country_col": "country"
+}
+```
+
+## Testing
+
+The project includes comprehensive test coverage for the feature engineering pipeline.
+
+### Running Tests
+
 ```bash
-pytest tests/
+# Run all tests
+uv run pytest
+
+# Run with coverage report
+uv run pytest --cov=src/preprocessing --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_preprocessing/test_transformer.py
+
+# Run tests in verbose mode
+uv run pytest -v
+```
+
+### Test Suite Overview
+
+**Total: 41 passing tests**
+
+- **`test_config.py`** (8 tests)
+  - Configuration creation and validation
+  - Save/load round-trip testing
+  - JSON structure verification
+  - Quantile calculation from training data
+
+- **`test_features.py`** (23 tests)
+  - Individual feature function testing
+  - Edge case handling (zero values, division by zero)
+  - Timezone validation (strict UTC enforcement)
+  - Binary feature output verification
+
+- **`test_transformer.py`** (18 tests)
+  - Full pipeline integration
+  - Output shape verification (30 features)
+  - Sklearn Pipeline compatibility
+  - Save/load consistency
+  - Multiple transform consistency
+
+### Development Commands
+
+```bash
+# Add new dependencies
+uv add <package-name>
+
+# Update dependencies
+uv sync
+
+# Run Jupyter notebook
+uv run --with jupyter jupyter lab
 ```
 
 ## Feature Engineering Summary
@@ -222,7 +366,7 @@ The project implements comprehensive feature engineering targeting the three spe
 
 ## Deployment Plan
 
-### Phase 1: Model Development (In Progress)
+### Phase 1: Model Development & Feature Engineering (85% Complete)
 - [x] Dataset acquisition and exploration
 - [x] Initial EDA and data quality checks
 - [x] Preprocessing pipeline setup (stratified splits, type conversion)
@@ -230,6 +374,9 @@ The project implements comprehensive feature engineering targeting the three spe
 - [x] Feature engineering (32 features created)
 - [x] Final feature selection (30 features selected)
 - [x] Dataset persistence for modeling
+- [x] **Production feature engineering pipeline** (sklearn-compatible)
+- [x] **Comprehensive test suite** (41 passing tests)
+- [x] **Configuration management** (JSON-based FeatureConfig)
 - [ ] Baseline model training
 - [ ] Model optimization and selection
 - [ ] Final model evaluation on test set
