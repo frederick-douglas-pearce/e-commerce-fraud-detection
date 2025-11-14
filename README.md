@@ -429,70 +429,340 @@ The project implements comprehensive feature engineering targeting the three spe
 - [x] **Threshold optimization** (Multiple recall targets: 80%, 85%, 90%)
 - [x] **Model persistence and deployment package** (Model, metadata, thresholds, model card)
 
-### Phase 2: API Development
-- [ ] Create FastAPI application structure
-- [ ] Implement prediction endpoint
-- [ ] Add input validation and error handling
-- [ ] Create health check and monitoring endpoints
-- [ ] Write API documentation (OpenAPI/Swagger)
+### Phase 2: API Development ✅ (100% Complete)
+- [x] Create FastAPI application structure
+- [x] Implement prediction endpoint with Pydantic validation
+- [x] Add input validation and comprehensive error handling
+- [x] Create health check and monitoring endpoints
+- [x] Write API documentation (OpenAPI/Swagger)
+- [x] Multiple threshold strategies (conservative/balanced/aggressive)
+- [x] Request logging and structured error responses
+- [x] Comprehensive API integration tests (41 test cases)
 
-### Phase 3: Containerization
-- [ ] Create Dockerfile
-- [ ] Optimize container image size
-- [ ] Add docker-compose for local development
-- [ ] Test containerized application
+### Phase 3: Containerization ✅ (100% Complete)
+- [x] Create Dockerfile with multi-stage build
+- [x] Optimize container image size (<500MB target)
+- [x] Add docker-compose for local development
+- [x] Test containerized application
+- [x] Security hardening (non-root user, health checks)
+- [x] Build context optimization (.dockerignore)
 
-### Phase 4: Production Deployment
-- [ ] Set up CI/CD pipeline
-- [ ] Deploy to cloud platform (AWS/GCP/Azure)
-- [ ] Implement logging and monitoring
-- [ ] Set up model performance tracking
-- [ ] Create alerting for model drift
+### Phase 4: Production Deployment 🚧 (In Progress)
+- [x] Implement logging and monitoring endpoints
+- [x] Model artifact management and versioning
+- [x] Automated testing (pytest integration)
+- [ ] Deploy to cloud platform (Google Cloud Run/AWS/Azure)
+- [ ] Set up CI/CD pipeline (GitHub Actions)
+- [ ] Production monitoring dashboard
+- [ ] Model performance tracking and alerting
+- [ ] Model drift detection
 
-## API Design (Planned)
+## Model Training
+
+Train the fraud detection model using the provided training script:
+
+### Prerequisites
+1. Ensure you have completed the EDA and feature engineering steps
+2. Preprocessed data files should exist in `data/` directory:
+   - `train_features.pkl`
+   - `val_features.pkl`
+   - `test_features.pkl`
+
+### Training the Model
+
+```bash
+# Basic training (uses optimal hyperparameters, skips tuning for speed)
+uv run python train.py --skip-tuning
+
+# Full training with hyperparameter tuning (takes longer)
+uv run python train.py
+
+# Custom training options
+uv run python train.py \
+  --data-dir data \
+  --output-dir models \
+  --random-seed 42 \
+  --verbose
+```
+
+**Output artifacts** (saved to `models/` directory):
+- `xgb_fraud_detector.joblib` - Trained XGBoost model pipeline
+- `threshold_config.json` - Optimized decision thresholds
+- `model_metadata.json` - Model info, hyperparameters, performance
+- `feature_lists.json` - Feature categorization
+- `training_report.txt` - Detailed training summary
+
+## API Deployment
+
+Deploy the fraud detection model as a production REST API.
+
+### Option 1: Local Development (FastAPI + Uvicorn)
+
+#### 1. Install Dependencies
+```bash
+# Using uv (recommended)
+uv sync
+
+# Or using pip
+pip install -r requirements.txt
+```
+
+#### 2. Train Model (if not already trained)
+```bash
+uv run python train.py --skip-tuning
+```
+
+#### 3. Start API Server
+```bash
+# Development mode with auto-reload
+uv run uvicorn predict:app --reload --host 0.0.0.0 --port 8000
+
+# Production mode
+uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+#### 4. Access API
+- **Interactive Docs**: http://localhost:8000/docs
+- **Alternative Docs**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+
+### Option 2: Docker Deployment (Recommended for Production)
+
+#### 1. Build Docker Image
+```bash
+# Build the image
+docker build -t fraud-detection-api .
+
+# Check image size
+docker images fraud-detection-api
+```
+
+#### 2. Run Container
+```bash
+# Run with docker
+docker run -d \
+  --name fraud-api \
+  -p 8000:8000 \
+  fraud-detection-api
+
+# Or use docker-compose (easier)
+docker-compose up -d
+```
+
+#### 3. Verify Deployment
+```bash
+# Check health
+curl http://localhost:8000/health
+
+# View logs
+docker logs fraud-api
+
+# Stop container
+docker-compose down
+```
+
+### Option 3: Cloud Deployment
+
+#### Google Cloud Run (Recommended - Free Tier Available)
+
+```bash
+# 1. Install Google Cloud SDK
+# 2. Authenticate
+gcloud auth login
+
+# 3. Set project
+gcloud config set project YOUR_PROJECT_ID
+
+# 4. Build and deploy
+gcloud run deploy fraud-detection-api \
+  --source . \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+
+# 5. Get deployment URL
+gcloud run services describe fraud-detection-api --region us-central1 --format 'value(status.url)'
+```
+
+#### AWS Elastic Beanstalk
+
+```bash
+# 1. Initialize EB
+eb init -p docker fraud-detection-api
+
+# 2. Create environment
+eb create fraud-api-prod
+
+# 3. Deploy
+eb deploy
+
+# 4. Open in browser
+eb open
+```
+
+## API Usage
 
 ### Prediction Endpoint
+
+Make fraud predictions for transactions using the `/predict` endpoint.
+
+**Request:**
+```bash
+curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_recall" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 12345,
+    "account_age_days": 180,
+    "total_transactions_user": 25,
+    "avg_amount_user": 250.50,
+    "amount": 850.75,
+    "country": "US",
+    "bin_country": "US",
+    "channel": "web",
+    "merchant_category": "retail",
+    "promo_used": 0,
+    "avs_match": 1,
+    "cvv_result": 1,
+    "three_ds_flag": 1,
+    "shipping_distance_km": 12.5,
+    "transaction_hour": 14,
+    "transaction_day_of_week": 2,
+    "is_weekend": 0,
+    "is_night": 0,
+    "country_mismatch": 0,
+    "high_value_txn": 1,
+    "new_user": 0,
+    "low_security": 0,
+    "amount_z_user": 2.3,
+    "txn_velocity_1h": 1,
+    "txn_velocity_24h": 3,
+    "card_type": "credit",
+    "device_type": "desktop",
+    "ip_country": "US",
+    "email_domain": "gmail.com"
+  }'
 ```
-POST /predict
-Content-Type: application/json
 
+**Response:**
+```json
 {
-  "user_id": 12345,
-  "account_age_days": 150,
-  "amount": 99.99,
-  "country": "US",
-  "bin_country": "US",
-  "channel": "web",
-  "merchant_category": "electronics",
-  "promo_used": 0,
-  "avs_match": 1,
-  "cvv_result": 1,
-  "three_ds_flag": 1,
-  "shipping_distance_km": 250.5,
-  "total_transactions_user": 45,
-  "avg_amount_user": 125.50
-}
-
-Response:
-{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
   "is_fraud": false,
-  "fraud_probability": 0.03,
+  "fraud_probability": 0.12,
   "risk_level": "low",
-  "transaction_id": "550e8400-e29b-41d4-a716-446655440000"
+  "threshold_used": "balanced_85pct_recall",
+  "threshold_value": 0.35,
+  "model_version": "1.0",
+  "processing_time_ms": 15.3
 }
+```
+
+### Threshold Strategies
+
+Choose different risk tolerance levels:
+
+| Strategy | Target Recall | Use Case |
+|----------|---------------|----------|
+| `conservative_90pct_recall` | 90% | Catch maximum fraud (more false positives) |
+| `balanced_85pct_recall` | 85% | Balanced approach (default) |
+| `aggressive_80pct_recall` | 80% | Minimize false positives |
+
+**Example - Conservative Strategy:**
+```bash
+curl -X POST "http://localhost:8000/predict?threshold_strategy=conservative_90pct_recall" \
+  -H "Content-Type: application/json" \
+  -d @transaction.json
 ```
 
 ### Health Check
+```bash
+curl http://localhost:8000/health
 ```
-GET /health
 
-Response:
+**Response:**
+```json
 {
   "status": "healthy",
-  "model_version": "1.0.0",
-  "uptime": 3600
+  "model_loaded": true,
+  "model_version": "1.0",
+  "uptime_seconds": 3600.5,
+  "timestamp": "2025-01-14T10:30:00Z"
 }
 ```
+
+### Model Information
+```bash
+curl http://localhost:8000/model/info
+```
+
+**Response:**
+```json
+{
+  "model_name": "XGBoost Fraud Detector",
+  "version": "1.0",
+  "training_date": "2025-01-14T09:00:00",
+  "algorithm": "XGBoost Gradient Boosting",
+  "performance": {
+    "pr_auc": 0.8679,
+    "precision": 0.7233,
+    "recall": 0.8360,
+    "f1": 0.7756
+  },
+  "threshold_strategies": {
+    "balanced_85pct_recall": {
+      "threshold": 0.35,
+      "precision": 0.72,
+      "recall": 0.85
+    }
+  },
+  "features_required": ["user_id", "amount", "country", ...]
+}
+```
+
+## Testing
+
+Run comprehensive test suite to verify model and API functionality:
+
+### Unit Tests (Preprocessing Pipeline)
+```bash
+# Run all preprocessing tests
+pytest tests/test_preprocessing/ -v
+
+# Run specific test file
+pytest tests/test_preprocessing/test_transformer.py -v
+
+# Run with coverage
+pytest tests/test_preprocessing/ --cov=src/preprocessing --cov-report=html
+```
+
+### Integration Tests (API)
+```bash
+# Run all API tests
+pytest tests/test_api.py -v
+
+# Run specific test class
+pytest tests/test_api.py::TestPredictEndpoint -v
+
+# Run with detailed output
+pytest tests/test_api.py -v --tb=short
+```
+
+### All Tests
+```bash
+# Run entire test suite
+pytest tests/ -v
+
+# Quick smoke test
+pytest tests/ -x  # Stop on first failure
+```
+
+**Test Coverage:**
+- 41 preprocessing tests (100% passing)
+- 25+ API integration tests
+- Request/response validation
+- Error handling scenarios
+- Threshold strategies
+- Performance validation
 
 ## Model Performance
 
