@@ -198,6 +198,12 @@ The modeling pipeline includes production-ready tuning capabilities:
 - **Stage 2 (Refinement)**: GridSearchCV on a focused parameter subset with narrow ranges, guided by Stage 1 insights
 - Applied to Random Forest and XGBoost for efficient, thorough hyperparameter optimization
 
+**Critical Hyperparameter Finding:**
+- XGBoost's `scale_pos_weight` critically controls the recall/precision trade-off and was included in the hyperparameter search space
+- Using the actual class imbalance ratio (44:1) produced excessive false positives
+- Optimal value of 8 (5.5× lower than class imbalance) achieved performance targets for both metrics
+- Key tuning parameter for adapting model behavior to changing business requirements
+
 **Flexible Search Strategy:**
 - Switch between GridSearchCV and RandomizedSearchCV with a single parameter
 - Automatic calculation of total parameter combinations
