@@ -1,0 +1,91 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files (large datasets)
+data/
+*.csv
+*.zip
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints
+
+# Documentation
+README.md
+LICENSE
+*.md
+docs/
+
+# Test files
+tests/
+pytest.ini
+.pytest_cache/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Model training logs (keep final models only)
+models/logs/
+models/*.log
+models/training_report.txt
+models/*_tuning_*.log
+models/*_tuning_*.csv
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Package management
+pyproject.toml
+uv.lock
+poetry.lock
+
+# Keep these files/directories for the container:
+# !predict.py
+# !train.py
+# !src/
+# !models/*.json
+# !models/*.joblib
+# !requirements.txt
