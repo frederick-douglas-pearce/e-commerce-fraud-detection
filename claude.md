@@ -32,7 +32,10 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │       ├── test_features.py         # Feature function tests
 │       └── test_transformer.py      # Transformer integration tests
 ├── models/                          # Model artifacts (gitignored except .json)
-│   └── feature_config.json          # Training-time configuration (tracked in git)
+│   ├── feature_config.json          # Training-time configuration (tracked in git)
+│   └── logs/                        # Hyperparameter tuning logs (gitignored)
+│       ├── *_tuning_*.log           # Timestamped CV progress logs
+│       └── *_cv_results_*.csv       # CV results for analysis
 ├── pyproject.toml                   # Python dependencies
 ├── uv.lock                          # Locked dependency versions
 ├── .python-version                  # Python version specification
@@ -409,34 +412,135 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 - Feature type identification (numeric, categorical, binary)
 - Dataset shape and target distribution validation
 
-#### 3. Preprocessing (To be implemented)
-- Model-specific transformations
-- One-hot encoding for categorical features (Logistic Regression)
-- StandardScaler for numeric features (Logistic Regression)
-- Minimal preprocessing for tree models (XGBoost, Random Forest)
+#### 3. Preprocessing Pipeline
+- **Sklearn Pipeline Architecture**: Model-agnostic preprocessing using ColumnTransformer
+- **Numeric Features**: StandardScaler applied (Logistic Regression only)
+- **Categorical Features**: OneHotEncoder with `drop='first'` to avoid multicollinearity
+- **Tree Models**: Minimal preprocessing (XGBoost and Random Forest handle raw features)
+- **Pipeline Configuration**: Stored in `pipeline_lr`, `pipeline_rf`, `pipeline_xgb`
 
-#### 4. Baseline Models (To be implemented)
-- Logistic Regression with class weights
-- Random Forest with class weights
-- XGBoost with scale_pos_weight
-- Initial performance comparison
+#### 4. Baseline Models
+- **Logistic Regression**: `class_weight='balanced'`, max_iter=1000, random_state=42
+  - Performance: PR-AUC 0.6975, Precision 41.54%, Recall 83.60%
+  - Weakness: High false positive rate (2,841 FP)
 
-#### 5. Hyperparameter Tuning (To be implemented)
-- Grid search or randomized search
-- Cross-validation with stratified folds
-- Optimize for ROC-AUC or F1 score
+- **Random Forest**: `class_weight='balanced'`, n_estimators=100, random_state=42
+  - Performance: PR-AUC 0.8456, Precision 94.19%, Recall 71.13%
+  - Strength: Excellent precision, low false positives
 
-#### 6. Model Evaluation (To be implemented)
-- ROC-AUC, F1, Precision, Recall scores
-- Confusion matrices
-- ROC curves and Precision-Recall curves
-- Feature importance analysis
+- **XGBoost**: `scale_pos_weight=44.3` (class imbalance ratio), n_estimators=100
+  - Performance: PR-AUC 0.8460, Precision 54.78%, Recall 84.05%
+  - Issue: Recall-dominated, high false positives (918 FP)
 
-#### 7. Final Model Selection (To be implemented)
-- Compare all models on validation set
-- Select best performing model
-- Final evaluation on test set
-- Save model for deployment
+**Helper Functions**:
+- `create_preprocessing_pipeline(numeric_features, categorical_features, scale_numeric)`: Creates sklearn Pipeline
+- `train_and_evaluate_model(model_name, pipeline, X_train, y_train, X_val, y_val)`: Training and evaluation wrapper
+- `compare_models(results_dict)`: Side-by-side model comparison with metrics
+
+#### 5. Hyperparameter Tuning
+- **Optimization Metric**: PR-AUC (Precision-Recall Area Under Curve) - ideal for imbalanced datasets
+- **Cross-Validation**: 4-fold Stratified CV to maintain class distribution
+- **Search Strategy**: Flexible GridSearchCV/RandomizedSearchCV switching via `create_search_object()`
+- **Logging**: Comprehensive logs saved to `models/logs/` directory
+
+**Helper Functions**:
+- `create_search_object(search_type, estimator, param_grid, scoring, cv, n_iter, verbose, random_state, n_jobs)`:
+  - Flexible switching between 'grid' and 'random' search strategies
+  - Automatic calculation of total parameter combinations
+  - Returns configured search object ready for fitting
+
+- `tune_with_logging(search_type, pipeline, param_grid, X_train, y_train, cv, model_name, random_state, n_iter)`:
+  - Executes hyperparameter search with progress logging
+  - Saves detailed logs to timestamped files in `models/logs/`
+  - Saves CV results to CSV for analysis
+  - Returns: (search_object, log_path, csv_path)
+
+- `analyze_cv_results(cv_results_csv_path, top_n=5)`:
+  - Production-focused analysis of CV results
+  - Identifies best model by PR-AUC and stability (std_test_score)
+  - **⚠ Timing Caveats**: Includes warnings about unreliable timing from parallel processing (n_jobs=-1)
+  - Displays comprehensive metrics with reliability labels (✓ Reliable / ⚠ Unreliable)
+  - Returns best parameters dictionary
+
+**Random Forest Tuning**:
+- **Search Type**: GridSearchCV (8 combinations)
+- **Parameter Grid**:
+  - n_estimators: [350, 400, 450, 500]
+  - max_depth: [25, 30]
+  - min_samples_split: [2]
+  - min_samples_leaf: [2]
+  - max_features: ['sqrt']
+  - class_weight: ['balanced_subsample']
+- **Best Parameters**: n_estimators=500, max_depth=30, min_samples_leaf=2
+- **Performance**: PR-AUC 0.8583 (+1.5% vs baseline)
+- **Trade-off**: Sacrificed 4.4% precision to gain 7.3% recall
+
+**XGBoost Tuning**:
+- **Search Type**: GridSearchCV (108 combinations)
+- **Parameter Grid**:
+  - n_estimators: [90, 100, 110]
+  - max_depth: [4, 5]
+  - learning_rate: [0.08, 0.1, 0.12]
+  - subsample: [0.9]
+  - colsample_bytree: [0.9]
+  - min_child_weight: [5]
+  - gamma: [0.5, 0.6]
+  - scale_pos_weight: [8, 10, 12] ⭐ **Key parameter - tunable, not fixed at class ratio**
+  - eval_metric: ['aucpr'] (changed from 'logloss')
+- **Best Parameters**: n_estimators=90, max_depth=5, learning_rate=0.08, scale_pos_weight=8, gamma=0.6
+- **Performance**: PR-AUC 0.8679 (+2.6% vs baseline)
+- **Major Win**: Precision 54.78% → 72.33% (+32.1% improvement!)
+- **False Positive Reduction**: 918 → 423 (54% reduction)
+
+**Key Insights**:
+- Making `scale_pos_weight` tunable (not just using class imbalance ratio) was crucial
+- Changing `eval_metric` to 'aucpr' aligned training with optimization goal
+- Shallow trees (max_depth=5) consistently outperformed deeper trees
+- High regularization (gamma=0.6, min_child_weight=5) essential for precision
+
+#### 6. Model Evaluation
+- **Primary Metrics**: PR-AUC (optimization target), ROC-AUC, F1 Score
+- **Secondary Metrics**: Precision, Recall, Confusion Matrix
+- **Evaluation Functions**:
+  - `calculate_metrics(y_true, y_pred, y_pred_proba)`: Comprehensive metric calculation
+  - `print_evaluation_metrics(metrics_dict, model_name, dataset_name)`: Formatted metric display
+  - `plot_confusion_matrix(y_true, y_pred, model_name)`: Confusion matrix visualization
+
+**Model Comparison (Validation Set)**:
+
+| Model | PR-AUC | ROC-AUC | F1 | Precision | Recall | FP | FN |
+|-------|--------|---------|-------|-----------|--------|-----|-----|
+| Logistic Regression | 0.6975 | 0.9647 | 0.5523 | 41.54% | 83.60% | 2,841 | 217 |
+| Random Forest (Baseline) | 0.8456 | 0.9762 | 0.8146 | 94.19% | 71.13% | 89 | 382 |
+| Random Forest (Tuned) | 0.8583 | 0.9777 | 0.8257 | 90.02% | 76.34% | 146 | 313 |
+| XGBoost (Baseline) | 0.8460 | 0.9767 | 0.6633 | 54.78% | 84.05% | 918 | 211 |
+| **XGBoost (Tuned)** | **0.8679** | **0.9790** | **0.7756** | **72.33%** | **83.60%** | **423** | **217** |
+
+**Performance Targets vs Achieved (XGBoost Tuned)**:
+- ✅ PR-AUC > 0.85: **0.8679**
+- ✅ ROC-AUC > 0.95: **0.9790**
+- ✅ F1 > 0.75: **0.7756**
+- ✅ Precision > 0.70: **0.7233**
+- ✅ Recall > 0.80: **0.8360**
+
+#### 7. Final Model Selection
+- **Selected Model**: XGBoost (Tuned) with PR-AUC 0.8679
+- **Rationale**:
+  - Best PR-AUC score (primary optimization metric)
+  - Excellent precision-recall balance for production deployment
+  - All performance targets exceeded
+  - Significant improvement over baseline (+32.1% precision, +2.6% PR-AUC)
+  - 54% reduction in false positives vs XGBoost baseline
+
+- **Use Cases by Model**:
+  - **XGBoost (Tuned)**: Production deployment - best overall balance
+  - **Random Forest (Tuned)**: Applications requiring very low false positive rates (precision 90%)
+
+- **Next Steps**:
+  - Evaluate XGBoost (Tuned) on held-out test set
+  - Analyze feature importance
+  - Consider threshold optimization for custom precision-recall trade-offs
+  - Prepare model serialization for deployment
 
 ## Notebook Best Practices
 
@@ -583,6 +687,40 @@ Keep inline when:
 ### Feature Selection Function
 - `analyze_final_feature_selection(train_new_features)`: Comprehensive feature selection analysis that returns categorized dictionary of 30 selected features with rationale for inclusions/exclusions
 
+### Model Training & Evaluation Functions
+
+#### Preprocessing Functions
+- `create_preprocessing_pipeline(numeric_features, categorical_features, scale_numeric=True)`: Creates sklearn Pipeline with ColumnTransformer for numeric scaling and categorical encoding
+
+#### Training & Evaluation Functions
+- `train_and_evaluate_model(model_name, pipeline, X_train, y_train, X_val, y_val)`: Trains model pipeline and evaluates on validation set, returns metrics dictionary
+- `compare_models(results_dict)`: Compares multiple models side-by-side with formatted output of key metrics
+- `calculate_metrics(y_true, y_pred, y_pred_proba)`: Calculates comprehensive metrics (PR-AUC, ROC-AUC, F1, Precision, Recall, Confusion Matrix)
+- `print_evaluation_metrics(metrics_dict, model_name, dataset_name='Validation')`: Formatted display of evaluation metrics with confusion matrix breakdown
+- `plot_confusion_matrix(y_true, y_pred, model_name)`: Visualizes confusion matrix with seaborn heatmap
+
+#### Hyperparameter Tuning Functions
+- `create_search_object(search_type, estimator, param_grid, scoring='average_precision', cv=4, n_iter=None, verbose=1, random_state=42, n_jobs=-1)`:
+  - Creates either GridSearchCV or RandomizedSearchCV based on `search_type` parameter ('grid' or 'random')
+  - Calculates and displays total parameter combinations
+  - Flexible switching between exhaustive and sampling-based search strategies
+  - Returns configured search object ready for fitting
+
+- `tune_with_logging(search_type, pipeline, param_grid, X_train, y_train, cv, model_name, random_state=42, n_iter=None)`:
+  - Executes hyperparameter search with comprehensive logging
+  - Creates timestamped log files in `models/logs/` directory
+  - Saves CV results to CSV for post-analysis
+  - Supports both GridSearchCV and RandomizedSearchCV
+  - Returns: (search_object, log_path, csv_path)
+
+- `analyze_cv_results(cv_results_csv_path, top_n=5)`:
+  - Production-focused analysis of cross-validation results
+  - Identifies best model by PR-AUC score and stability (std_test_score)
+  - Displays top N parameter combinations with comprehensive metrics
+  - **Includes timing caveats** for parallel processing (n_jobs=-1) unreliability
+  - Labels metrics as "✓ Reliable" (PR-AUC, std) or "⚠ Unreliable" (timing)
+  - Returns best parameters dictionary for easy model instantiation
+
 ## Important Notes
 
 ### Gitignore
@@ -595,11 +733,17 @@ The following are excluded from version control:
 - Model artifacts (`.pkl`, `.h5`, `.pt`, etc.)
 
 ### Class Imbalance Strategy
-With a 44:1 imbalance ratio, consider:
-- Stratified sampling (already implemented in splits)
-- SMOTE or other oversampling techniques
-- Class weights in model training
-- Appropriate metrics (F1, ROC-AUC, PR-AUC instead of accuracy)
+With a 44:1 imbalance ratio, the following techniques are implemented:
+- ✅ **Stratified sampling**: Applied in train/val/test splits (60/20/20)
+- ✅ **Class weights**:
+  - Logistic Regression: `class_weight='balanced'`
+  - Random Forest: `class_weight='balanced'` and `class_weight='balanced_subsample'` (tuned)
+  - XGBoost: `scale_pos_weight` parameter (tuned from 8-12, optimal=8)
+- ✅ **Appropriate metrics**: PR-AUC as primary optimization metric (ideal for imbalanced data)
+  - Secondary metrics: ROC-AUC, F1 Score, Precision, Recall
+  - Avoid accuracy as evaluation metric
+- ✅ **Stratified Cross-Validation**: 4-fold StratifiedKFold during hyperparameter tuning
+- ❌ **SMOTE not used**: Class weights proved sufficient for strong performance
 
 ### Data Split Configuration
 Default split ratios (configurable in notebook):
@@ -647,8 +791,18 @@ git push
 5. **Handle class imbalance**: Use appropriate techniques (weights, sampling, threshold tuning)
 
 ## Future Enhancements
-- Model deployment with FastAPI
-- Real-time prediction API
-- Model monitoring and drift detection
-- Feature engineering pipeline
-- Automated retraining workflow
+
+### Completed ✅
+- ✅ **Feature engineering pipeline**: Implemented as sklearn-compatible transformer in `src/preprocessing/`
+- ✅ **Baseline model training**: Logistic Regression, Random Forest, XGBoost
+- ✅ **Hyperparameter tuning**: GridSearchCV/RandomizedSearchCV with comprehensive logging
+- ✅ **Model selection**: XGBoost (Tuned) selected as best performer
+
+### Remaining 🚧
+- **Test set evaluation**: Final evaluation of XGBoost (Tuned) on held-out test set
+- **Feature importance analysis**: Understand key fraud detection drivers
+- **Model serialization**: Save final model for deployment (pickle or joblib)
+- **Threshold optimization**: Custom precision-recall trade-offs for different use cases
+- **Model deployment with FastAPI**: Production API endpoint for real-time predictions
+- **Model monitoring and drift detection**: Track performance degradation over time
+- **Automated retraining workflow**: Pipeline for periodic model updates
