@@ -440,6 +440,42 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 
 ## Notebook Best Practices
 
+### Import Organization
+
+**Core Principle**: Keep all imports at the top of the notebook in the "Import packages" section. Never add imports scattered throughout the notebook.
+
+#### Import Guidelines
+1. **Centralized imports**: All `import` and `from ... import` statements go in the "Import packages" section at the top
+2. **Alphabetical ordering**: Maintain alphabetical order for readability and easier scanning
+3. **Grouping**: Organize imports into logical groups (standard library, third-party, local)
+4. **No inline imports**: Avoid importing packages in the middle of analysis cells
+
+#### Example Structure
+```python
+# Standard library
+import sys
+from datetime import datetime
+from pathlib import Path
+
+# Third-party packages (alphabetical)
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import xgboost as xgb
+
+# Sklearn (grouped and alphabetical)
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, f1_score
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+
+# Local imports (if any)
+from src.preprocessing import FeatureConfig, FraudFeatureTransformer
+```
+
 ### Keep Cells Clean with Functions
 
 **Core Principle**: Notebook cells should contain minimal logic - ideally just a single function call. All complex logic should be encapsulated in well-named functions defined in the "Define functions" section.
