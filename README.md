@@ -193,6 +193,11 @@ Given the 44:1 class imbalance, the project employs:
 ### Hyperparameter Tuning Features
 The modeling pipeline includes production-ready tuning capabilities:
 
+**Two-Stage Tuning Approach:**
+- **Stage 1 (Exploration)**: RandomizedSearchCV with broad parameter ranges identifies stable parameters that remain unchanged across top-performing models
+- **Stage 2 (Refinement)**: GridSearchCV on a focused parameter subset with narrow ranges, guided by Stage 1 insights
+- Applied to Random Forest and XGBoost for efficient, thorough hyperparameter optimization
+
 **Flexible Search Strategy:**
 - Switch between GridSearchCV and RandomizedSearchCV with a single parameter
 - Automatic calculation of total parameter combinations
