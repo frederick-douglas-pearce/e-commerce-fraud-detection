@@ -30,9 +30,12 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
+
+# Import production feature engineering pipeline
+from src.preprocessing.transformer import FraudFeatureTransformer
 
 
 def parse_args():
@@ -65,28 +68,39 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_data(data_dir: Path):
-    """Load preprocessed train, validation, and test datasets."""
-    print("Loading data...")
+def load_data(data_dir: Path, random_seed: int = 42):
+    """Load raw transaction data and split into train/val/test sets."""
+    print("Loading raw transaction data...")
     print(f"  Data directory: {data_dir}")
 
-    train_path = data_dir / "train_features.pkl"
-    val_path = data_dir / "val_features.pkl"
-    test_path = data_dir / "test_features.pkl"
+    csv_path = data_dir / "transactions.csv"
 
-    if not all([train_path.exists(), val_path.exists(), test_path.exists()]):
+    if not csv_path.exists():
         raise FileNotFoundError(
-            f"Missing data files in {data_dir}. "
-            "Please run fraud_detection_EDA_FE.ipynb first to generate preprocessed data."
+            f"Raw data file not found: {csv_path}\n"
+            "Please ensure data/transactions.csv exists.\n"
+            "Download from Kaggle: umuttuygurr/e-commerce-fraud-detection-dataset"
         )
 
-    train_df = pd.read_pickle(train_path)
-    val_df = pd.read_pickle(val_path)
-    test_df = pd.read_pickle(test_path)
+    # Load raw CSV data
+    df = pd.read_csv(csv_path, low_memory=False)
+    print(f"  Total samples: {len(df):,}")
+    print(f"  Fraud rate: {df['is_fraud'].mean():.2%}")
 
-    print(f"  Training set: {len(train_df):,} samples")
-    print(f"  Validation set: {len(val_df):,} samples")
-    print(f"  Test set: {len(test_df):,} samples")
+    # Split into train/val/test (60/20/20)
+    # First split: separate test set
+    train_val_df, test_df = train_test_split(
+        df, test_size=0.2, stratify=df['is_fraud'], random_state=random_seed
+    )
+
+    # Second split: separate train and validation
+    train_df, val_df = train_test_split(
+        train_val_df, test_size=0.25, stratify=train_val_df['is_fraud'], random_state=random_seed
+    )
+
+    print(f"\n  Training set: {len(train_df):,} samples ({len(train_df)/len(df)*100:.1f}%)")
+    print(f"  Validation set: {len(val_df):,} samples ({len(val_df)/len(df)*100:.1f}%)")
+    print(f"  Test set: {len(test_df):,} samples ({len(test_df)/len(df)*100:.1f}%)")
 
     return train_df, val_df, test_df
 
@@ -348,13 +362,18 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
     joblib.dump(results["model"], model_path)
     print(f"  ✓ Model saved: {model_path} ({model_path.stat().st_size / 1024:.1f} KB)")
 
-    # 2. Save threshold configuration
+    # 2. Save feature transformer configuration
+    transformer_config_path = output_dir / "transformer_config.json"
+    results["transformer"].save(str(transformer_config_path))
+    print(f"  ✓ Transformer config saved: {transformer_config_path}")
+
+    # 3. Save threshold configuration
     threshold_path = output_dir / "threshold_config.json"
     with open(threshold_path, "w") as f:
         json.dump(results["threshold_config"], f, indent=2)
     print(f"  ✓ Threshold config saved: {threshold_path}")
 
-    # 3. Save feature lists
+    # 4. Save feature lists
     feature_lists = {
         "all_features": results["feature_names"],
         "categorical_features": results["categorical_features"],
@@ -367,7 +386,7 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         json.dump(feature_lists, f, indent=2)
     print(f"  ✓ Feature lists saved: {feature_lists_path}")
 
-    # 4. Save model metadata
+    # 5. Save model metadata
     metadata = {
         "model_info": {
             "name": "XGBoost Fraud Detector",
@@ -398,7 +417,7 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         json.dump(metadata, f, indent=2)
     print(f"  ✓ Model metadata saved: {metadata_path}")
 
-    # 5. Save training report
+    # 6. Save training report
     report_path = output_dir / "training_report.txt"
     with open(report_path, "w") as f:
         f.write("=" * 100 + "\n")
@@ -430,6 +449,7 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
 
     return {
         "model_path": model_path,
+        "transformer_config_path": transformer_config_path,
         "threshold_path": threshold_path,
         "feature_lists_path": feature_lists_path,
         "metadata_path": metadata_path,
@@ -451,11 +471,37 @@ def main():
     print("=" * 100)
 
     try:
-        # Load data
+        # Load raw data and split
         data_dir = Path(args.data_dir)
-        train_df, val_df, test_df = load_data(data_dir)
+        train_raw, val_raw, test_raw = load_data(data_dir, random_seed=args.random_seed)
 
-        # Train model
+        # Apply feature engineering pipeline
+        print("\n" + "=" * 100)
+        print("FEATURE ENGINEERING - USING PRODUCTION PIPELINE")
+        print("=" * 100)
+        print("Applying FraudFeatureTransformer from src/preprocessing/")
+
+        transformer = FraudFeatureTransformer()
+        transformer.fit(train_raw)
+
+        print(f"  ✓ Transformer fitted on {len(train_raw):,} training samples")
+
+        # Transform all datasets
+        train_df = transformer.transform(train_raw)
+        val_df = transformer.transform(val_raw)
+        test_df = transformer.transform(test_raw)
+
+        print(f"  ✓ Engineered features: {train_df.shape[1]} features")
+        print(f"  ✓ Training set: {len(train_df):,} samples")
+        print(f"  ✓ Validation set: {len(val_df):,} samples")
+        print(f"  ✓ Test set: {len(test_df):,} samples")
+
+        # Add target column back (transformer removes it)
+        train_df['is_fraud'] = train_raw['is_fraud'].values
+        val_df['is_fraud'] = val_raw['is_fraud'].values
+        test_df['is_fraud'] = test_raw['is_fraud'].values
+
+        # Train model on engineered features
         results = train_model(
             train_df,
             val_df,
@@ -464,6 +510,9 @@ def main():
             skip_tuning=args.skip_tuning,
             verbose=args.verbose,
         )
+
+        # Add transformer to results for saving
+        results['transformer'] = transformer
 
         # Save artifacts
         output_dir = Path(args.output_dir)

@@ -24,9 +24,13 @@ from typing import Literal, Optional
 
 import joblib
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
+
+# Import production feature engineering pipeline
+from src.preprocessing.transformer import FraudFeatureTransformer
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +49,7 @@ app = FastAPI(
 
 # Global variables for model and configuration
 model = None
+transformer = None
 threshold_config = None
 model_metadata = None
 feature_lists = None
@@ -52,8 +57,12 @@ startup_time = None
 
 
 # Pydantic models for request/response validation
-class TransactionRequest(BaseModel):
-    """Transaction data for fraud prediction."""
+class RawTransactionRequest(BaseModel):
+    """Raw transaction data for fraud prediction.
+
+    The API accepts raw transaction data and automatically applies feature engineering
+    using the production FraudFeatureTransformer pipeline.
+    """
 
     # User features
     user_id: int = Field(..., description="User ID", ge=0)
@@ -70,7 +79,7 @@ class TransactionRequest(BaseModel):
     channel: str = Field(..., description="Transaction channel", pattern="^(web|app)$")
     merchant_category: str = Field(..., description="Merchant category code")
 
-    # Binary flags
+    # Security flags
     promo_used: int = Field(..., description="Promo code used (0 or 1)", ge=0, le=1)
     avs_match: int = Field(..., description="AVS match result (0 or 1)", ge=0, le=1)
     cvv_result: int = Field(..., description="CVV verification result (0 or 1)", ge=0, le=1)
@@ -78,41 +87,39 @@ class TransactionRequest(BaseModel):
 
     # Geographic and temporal features
     shipping_distance_km: float = Field(..., description="Shipping distance in km", ge=0.0)
-    transaction_hour: int = Field(..., description="Transaction hour (0-23)", ge=0, le=23)
-    transaction_day_of_week: int = Field(..., description="Day of week (0-6, Mon-Sun)", ge=0, le=6)
-    is_weekend: int = Field(..., description="Weekend indicator (0 or 1)", ge=0, le=1)
-    is_night: int = Field(..., description="Night transaction indicator (0 or 1)", ge=0, le=1)
-
-    # Derived features (computed in preprocessing)
-    country_mismatch: int = Field(..., description="Country mismatch indicator (0 or 1)", ge=0, le=1)
-    high_value_txn: int = Field(..., description="High value transaction indicator (0 or 1)", ge=0, le=1)
-    new_user: int = Field(..., description="New user indicator (0 or 1)", ge=0, le=1)
-    low_security: int = Field(..., description="Low security indicator (0 or 1)", ge=0, le=1)
-
-    # Risk scores (if available from preprocessing)
-    amount_z_user: float = Field(
-        ..., description="Amount z-score relative to user's history"
-    )
-    txn_velocity_1h: int = Field(
-        ..., description="Number of transactions in last hour", ge=0
-    )
-    txn_velocity_24h: int = Field(
-        ..., description="Number of transactions in last 24 hours", ge=0
+    transaction_time: str = Field(
+        ...,
+        description="Transaction timestamp in ISO format (e.g., '2024-01-15 14:30:00')",
+        pattern=r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"
     )
 
-    # Card and device features
-    card_type: str = Field(..., description="Card type (e.g., credit, debit)")
-    device_type: str = Field(..., description="Device type (e.g., mobile, desktop)")
-    ip_country: str = Field(..., description="IP country (2-letter code)", min_length=2, max_length=2)
-    email_domain: str = Field(..., description="Email domain")
-
-    @field_validator("country", "bin_country", "ip_country")
+    @field_validator("country", "bin_country")
     @classmethod
     def validate_country_code(cls, v: str) -> str:
         """Validate country code is uppercase."""
         return v.upper()
 
-    model_config = {"json_schema_extra": {"example": {"user_id": 12345, "account_age_days": 180, "total_transactions_user": 25, "avg_amount_user": 250.50, "amount": 850.75, "country": "US", "bin_country": "US", "channel": "web", "merchant_category": "retail", "promo_used": 0, "avs_match": 1, "cvv_result": 1, "three_ds_flag": 1, "shipping_distance_km": 12.5, "transaction_hour": 14, "transaction_day_of_week": 2, "is_weekend": 0, "is_night": 0, "country_mismatch": 0, "high_value_txn": 1, "new_user": 0, "low_security": 0, "amount_z_user": 2.3, "txn_velocity_1h": 1, "txn_velocity_24h": 3, "card_type": "credit", "device_type": "desktop", "ip_country": "US", "email_domain": "gmail.com"}}}
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "user_id": 12345,
+                "account_age_days": 180,
+                "total_transactions_user": 25,
+                "avg_amount_user": 250.50,
+                "amount": 850.75,
+                "country": "US",
+                "bin_country": "US",
+                "channel": "web",
+                "merchant_category": "retail",
+                "promo_used": 0,
+                "avs_match": 1,
+                "cvv_result": 1,
+                "three_ds_flag": 1,
+                "shipping_distance_km": 12.5,
+                "transaction_time": "2024-01-15 14:30:00"
+            }
+        }
+    }
 
 
 class PredictionResponse(BaseModel):
@@ -149,7 +156,8 @@ class ModelInfoResponse(BaseModel):
     algorithm: str
     performance: dict
     threshold_strategies: dict
-    features_required: list[str]
+    raw_features_required: list[str]
+    engineered_features_count: int
 
 
 class ErrorResponse(BaseModel):
@@ -164,13 +172,21 @@ class ErrorResponse(BaseModel):
 @app.on_event("startup")
 async def load_model_artifacts():
     """Load model and configuration files on startup."""
-    global model, threshold_config, model_metadata, feature_lists, startup_time
+    global model, transformer, threshold_config, model_metadata, feature_lists, startup_time
 
     startup_time = datetime.now()
     logger.info("Starting E-Commerce Fraud Detection API...")
 
     try:
         models_dir = Path("models")
+
+        # Load feature transformer
+        transformer_config_path = models_dir / "transformer_config.json"
+        if not transformer_config_path.exists():
+            raise FileNotFoundError(f"Transformer config not found: {transformer_config_path}")
+
+        transformer = FraudFeatureTransformer.load(str(transformer_config_path))
+        logger.info(f"✓ Feature transformer loaded from {transformer_config_path}")
 
         # Load model
         model_path = models_dir / "xgb_fraud_detector.joblib"
@@ -250,12 +266,32 @@ async def get_model_info():
     Get model information and metadata.
 
     Returns model version, training date, performance metrics, and configuration.
+    The API accepts raw transaction data and automatically applies feature engineering.
     """
     if model_metadata is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model metadata not loaded",
         )
+
+    # List of raw features required for prediction
+    raw_features = [
+        "user_id",
+        "account_age_days",
+        "total_transactions_user",
+        "avg_amount_user",
+        "amount",
+        "country",
+        "bin_country",
+        "channel",
+        "merchant_category",
+        "promo_used",
+        "avs_match",
+        "cvv_result",
+        "three_ds_flag",
+        "shipping_distance_km",
+        "transaction_time"
+    ]
 
     return ModelInfoResponse(
         model_name=model_metadata["model_info"]["name"],
@@ -264,19 +300,23 @@ async def get_model_info():
         algorithm=model_metadata["model_info"]["algorithm"],
         performance=model_metadata["performance"]["test_set"],
         threshold_strategies=threshold_config,
-        features_required=feature_lists["all_features"],
+        raw_features_required=raw_features,
+        engineered_features_count=len(feature_lists["all_features"]),
     )
 
 
 @app.post("/predict", response_model=PredictionResponse, tags=["prediction"])
 async def predict_fraud(
-    transaction: TransactionRequest,
+    transaction: RawTransactionRequest,
     threshold_strategy: Literal[
         "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
     ] = "balanced_85pct_recall",
 ):
     """
-    Predict fraud for a transaction.
+    Predict fraud for a raw transaction.
+
+    The API accepts raw transaction data and automatically applies feature engineering
+    using the production FraudFeatureTransformer pipeline before making predictions.
 
     **Threshold Strategies:**
     - `conservative_90pct_recall`: Catches 90% of fraud (more false positives)
@@ -292,26 +332,25 @@ async def predict_fraud(
     start_time = time.time()
 
     try:
-        # Validate model is loaded
-        if model is None:
+        # Validate model and transformer are loaded
+        if model is None or transformer is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Model not loaded. Please check server logs.",
+                detail="Model or transformer not loaded. Please check server logs.",
             )
 
         # Generate transaction ID
         transaction_id = str(uuid.uuid4())
 
-        # Convert transaction to feature array (must match training feature order)
-        feature_dict = transaction.model_dump()
+        # Convert request to DataFrame for transformer
+        transaction_dict = transaction.model_dump()
+        transaction_df = pd.DataFrame([transaction_dict])
 
-        # Create feature array in correct order
-        feature_array = np.array(
-            [[feature_dict[feat] for feat in feature_lists["all_features"]]]
-        )
+        # Apply feature engineering transformer
+        engineered_features = transformer.transform(transaction_df)
 
         # Get prediction probability
-        fraud_probability = float(model.predict_proba(feature_array)[0, 1])
+        fraud_probability = float(model.predict_proba(engineered_features)[0, 1])
 
         # Apply threshold strategy
         threshold_info = threshold_config[threshold_strategy]

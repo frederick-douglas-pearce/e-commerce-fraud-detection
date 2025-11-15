@@ -3,6 +3,9 @@ Integration tests for E-Commerce Fraud Detection API.
 
 Tests all API endpoints, request/response validation, error handling, and model predictions.
 
+The API accepts raw transaction data (15 fields) and automatically applies feature engineering
+using the production FraudFeatureTransformer pipeline before making predictions.
+
 Run with: pytest tests/test_api.py -v
 """
 
@@ -96,7 +99,11 @@ class TestPredictEndpoint:
 
     @pytest.fixture
     def valid_transaction(self):
-        """Sample valid transaction for testing."""
+        """Sample valid raw transaction for testing.
+
+        The API now accepts raw transaction data and automatically applies
+        feature engineering using FraudFeatureTransformer.
+        """
         return {
             "user_id": 12345,
             "account_age_days": 180,
@@ -112,21 +119,7 @@ class TestPredictEndpoint:
             "cvv_result": 1,
             "three_ds_flag": 1,
             "shipping_distance_km": 12.5,
-            "transaction_hour": 14,
-            "transaction_day_of_week": 2,
-            "is_weekend": 0,
-            "is_night": 0,
-            "country_mismatch": 0,
-            "high_value_txn": 1,
-            "new_user": 0,
-            "low_security": 0,
-            "amount_z_user": 2.3,
-            "txn_velocity_1h": 1,
-            "txn_velocity_24h": 3,
-            "card_type": "credit",
-            "device_type": "desktop",
-            "ip_country": "US",
-            "email_domain": "gmail.com",
+            "transaction_time": "2024-01-15 14:30:00"
         }
 
     def test_predict_success(self, valid_transaction):
@@ -219,6 +212,13 @@ class TestPredictEndpoint:
         """Test prediction fails with invalid channel."""
         invalid_transaction = valid_transaction.copy()
         invalid_transaction["channel"] = "mobile"  # Should be "web" or "app"
+        response = client.post("/predict", json=invalid_transaction)
+        assert response.status_code == 422
+
+    def test_predict_invalid_timestamp(self, valid_transaction):
+        """Test prediction fails with invalid timestamp format."""
+        invalid_transaction = valid_transaction.copy()
+        invalid_transaction["transaction_time"] = "2024-01-15"  # Missing time
         response = client.post("/predict", json=invalid_transaction)
         assert response.status_code == 422
 
