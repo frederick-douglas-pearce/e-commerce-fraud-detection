@@ -459,14 +459,13 @@ The project implements comprehensive feature engineering targeting the three spe
 
 ## Model Training
 
-Train the fraud detection model using the provided training script:
+Train the fraud detection model using the provided training script.
 
 ### Prerequisites
-1. Ensure you have completed the EDA and feature engineering steps
-2. Preprocessed data files should exist in `data/` directory:
-   - `train_features.pkl`
-   - `val_features.pkl`
-   - `test_features.pkl`
+1. Raw transaction data must exist in `data/` directory:
+   - `transactions.csv` (download from Kaggle)
+
+**Note:** The training script now uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. Pre-engineered pickle files are no longer required.
 
 ### Training the Model
 
@@ -487,6 +486,7 @@ uv run python train.py \
 
 **Output artifacts** (saved to `models/` directory):
 - `xgb_fraud_detector.joblib` - Trained XGBoost model pipeline
+- `transformer_config.json` - Feature transformer configuration (quantile thresholds)
 - `threshold_config.json` - Optimized decision thresholds
 - `model_metadata.json` - Model info, hyperparameters, performance
 - `feature_lists.json` - Feature categorization
@@ -606,6 +606,8 @@ eb open
 
 Make fraud predictions for transactions using the `/predict` endpoint.
 
+The API accepts **raw transaction data** (15 fields) and automatically applies feature engineering using the production `FraudFeatureTransformer` pipeline before making predictions.
+
 **Request:**
 ```bash
 curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_recall" \
@@ -625,23 +627,17 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_re
     "cvv_result": 1,
     "three_ds_flag": 1,
     "shipping_distance_km": 12.5,
-    "transaction_hour": 14,
-    "transaction_day_of_week": 2,
-    "is_weekend": 0,
-    "is_night": 0,
-    "country_mismatch": 0,
-    "high_value_txn": 1,
-    "new_user": 0,
-    "low_security": 0,
-    "amount_z_user": 2.3,
-    "txn_velocity_1h": 1,
-    "txn_velocity_24h": 3,
-    "card_type": "credit",
-    "device_type": "desktop",
-    "ip_country": "US",
-    "email_domain": "gmail.com"
+    "transaction_time": "2024-01-15 14:30:00"
   }'
 ```
+
+**Required Fields:**
+- **User Information**: `user_id`, `account_age_days`, `total_transactions_user`, `avg_amount_user`
+- **Transaction Details**: `amount`, `country`, `bin_country`, `channel`, `merchant_category`
+- **Security Flags**: `promo_used`, `avs_match`, `cvv_result`, `three_ds_flag`
+- **Geographic/Temporal**: `shipping_distance_km`, `transaction_time` (ISO format: `YYYY-MM-DD HH:MM:SS`)
+
+**Note:** The API automatically generates 30 engineered features from these 15 raw fields using the production feature engineering pipeline.
 
 **Response:**
 ```json
@@ -715,7 +711,13 @@ curl http://localhost:8000/model/info
       "recall": 0.85
     }
   },
-  "features_required": ["user_id", "amount", "country", ...]
+  "raw_features_required": [
+    "user_id", "account_age_days", "total_transactions_user", "avg_amount_user",
+    "amount", "country", "bin_country", "channel", "merchant_category",
+    "promo_used", "avs_match", "cvv_result", "three_ds_flag",
+    "shipping_distance_km", "transaction_time"
+  ],
+  "engineered_features_count": 30
 }
 ```
 
