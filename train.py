@@ -23,7 +23,6 @@ import xgboost as xgb
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import (
     average_precision_score,
-    classification_report,
     confusion_matrix,
     f1_score,
     precision_recall_curve,
