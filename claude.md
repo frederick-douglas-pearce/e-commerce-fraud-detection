@@ -14,6 +14,7 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 .
 ├── fraud_detection_EDA_FE.ipynb    # EDA & feature engineering notebook
 ├── fraud_detection_modeling.ipynb  # Model training & evaluation notebook
+├── predict.py                       # FastAPI web service for real-time fraud prediction
 ├── data/                            # Data directory (gitignored)
 │   ├── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
 │   ├── train_features.pkl           # Engineered training set (179,817 × 31)
@@ -31,8 +32,12 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │       ├── test_config.py           # FeatureConfig tests
 │       ├── test_features.py         # Feature function tests
 │       └── test_transformer.py      # Transformer integration tests
-├── models/                          # Model artifacts (gitignored except .json)
-│   ├── feature_config.json          # Training-time configuration (tracked in git)
+├── models/                          # Model artifacts
+│   ├── xgb_fraud_detector.joblib    # Trained XGBoost model (gitignored)
+│   ├── transformer_config.json      # Feature transformer configuration (tracked)
+│   ├── threshold_config.json        # Fraud detection thresholds (tracked)
+│   ├── model_metadata.json          # Model version and performance metrics (tracked)
+│   ├── feature_lists.json           # Feature names and categories (tracked)
 │   └── logs/                        # Hyperparameter tuning logs (gitignored)
 │       ├── *_tuning_*.log           # Timestamped CV progress logs
 │       └── *_cv_results_*.csv       # CV results for analysis
@@ -99,7 +104,8 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 - **Data Source**: kaggle (API client)
 - **Notebook**: jupyter
 - **Testing**: pytest (for unit and integration tests)
-- **API (future)**: fastapi, uvicorn
+- **API Deployment**: fastapi, uvicorn, pydantic (REST API for real-time predictions)
+- **Model Serialization**: joblib (for saving/loading trained models)
 
 ### Package Management
 This project uses `uv` for fast, reliable Python dependency management.
@@ -327,6 +333,190 @@ This config file (`models/feature_config.json`) is:
    - Works with sklearn Pipeline
    - Familiar API for ML practitioners
 
+## Production API Deployment
+
+### Overview
+The fraud detection model is deployed as a FastAPI web service (`predict.py`) that provides real-time fraud predictions via REST API. The service integrates the production feature engineering pipeline (`FraudFeatureTransformer`) with the trained XGBoost model.
+
+### Architecture
+
+**Key Components**:
+- **FastAPI Application**: Async web framework with automatic API documentation
+- **Lifespan Context Manager**: Loads model artifacts on startup (no per-request overhead)
+- **Feature Transformer**: Applies production feature engineering pipeline
+- **XGBoost Model**: Tuned fraud detection model (PR-AUC 0.8679)
+- **Threshold Strategies**: Configurable precision-recall trade-offs
+
+### API Endpoints
+
+#### 1. `POST /predict` - Fraud Prediction
+**Purpose**: Predict fraud for a raw transaction with automatic feature engineering
+
+**Input**: `RawTransactionRequest` (15 raw features)
+- User features: `user_id`, `account_age_days`, `total_transactions_user`, `avg_amount_user`
+- Transaction: `amount`, `country`, `bin_country`, `channel`, `merchant_category`
+- Security: `promo_used`, `avs_match`, `cvv_result`, `three_ds_flag`
+- Geographic/Temporal: `shipping_distance_km`, `transaction_time`
+
+**Parameters**:
+- `threshold_strategy` (query param): Choose precision-recall trade-off
+  - `conservative_90pct_recall`: Catches 90% of fraud (more false positives)
+  - `balanced_85pct_recall`: Balanced approach (default)
+  - `aggressive_80pct_recall`: Fewer false positives (may miss some fraud)
+
+**Output**: `PredictionResponse`
+```json
+{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "is_fraud": false,
+  "fraud_probability": 0.12,
+  "risk_level": "low",
+  "threshold_used": "balanced_85pct_recall",
+  "threshold_value": 0.35,
+  "model_version": "1.0",
+  "processing_time_ms": 15.3
+}
+```
+
+**Processing Pipeline**:
+1. Validate raw transaction data (Pydantic validation)
+2. Convert to pandas DataFrame
+3. Apply `FraudFeatureTransformer` (15 raw → 30 engineered features)
+4. XGBoost prediction (fraud probability)
+5. Apply threshold strategy (fraud classification)
+6. Calculate risk level (low/medium/high)
+7. Return prediction with metadata
+
+#### 2. `GET /health` - Health Check
+**Purpose**: Monitor service status and uptime
+
+**Output**: `HealthResponse`
+- Service status (healthy/unhealthy)
+- Model loaded status
+- Model version
+- Uptime in seconds
+- Current timestamp
+
+#### 3. `GET /model/info` - Model Information
+**Purpose**: Get model metadata and configuration
+
+**Output**: `ModelInfoResponse`
+- Model name, version, training date
+- Algorithm details (XGBoost)
+- Performance metrics (test set)
+- Available threshold strategies
+- Raw features required (15)
+- Engineered features count (30)
+
+#### 4. `GET /` - API Root
+**Purpose**: API documentation links and endpoint overview
+
+#### 5. `GET /docs` - Interactive API Documentation
+**Purpose**: Auto-generated Swagger UI for testing endpoints
+
+#### 6. `GET /redoc` - Alternative Documentation
+**Purpose**: ReDoc-style API documentation
+
+### Model Artifacts
+
+The API loads the following artifacts on startup from `models/` directory:
+
+1. **`xgb_fraud_detector.joblib`** (gitignored)
+   - Trained XGBoost model (best hyperparameters)
+   - Loaded via joblib
+
+2. **`transformer_config.json`** (tracked in git)
+   - FeatureConfig for FraudFeatureTransformer
+   - Quantile thresholds from training data
+   - Timezone mapping for local time conversion
+
+3. **`threshold_config.json`** (tracked in git)
+   - Three threshold strategies with precision-recall trade-offs
+   - Threshold values calibrated on validation set
+
+4. **`model_metadata.json`** (tracked in git)
+   - Model version, training date, algorithm
+   - Performance metrics (PR-AUC, ROC-AUC, F1, Precision, Recall)
+   - Dataset information
+
+5. **`feature_lists.json`** (tracked in git)
+   - List of 30 engineered features (categorized)
+   - Feature names and descriptions
+
+### Usage
+
+#### Start the API Server
+```bash
+# Development mode (with auto-reload)
+uvicorn predict:app --host 0.0.0.0 --port 8000 --reload
+
+# Production mode (without auto-reload for better performance)
+uvicorn predict:app --host 0.0.0.0 --port 8000
+```
+
+**Note**: The `--reload` flag enables automatic reloading when files change, but can cause elevated CPU usage during idle time due to file watching. Use without `--reload` in production or when performance is critical.
+
+#### Make a Prediction
+```bash
+curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_recall" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 12345,
+    "account_age_days": 180,
+    "total_transactions_user": 25,
+    "avg_amount_user": 250.50,
+    "amount": 850.75,
+    "country": "US",
+    "bin_country": "US",
+    "channel": "web",
+    "merchant_category": "retail",
+    "promo_used": 0,
+    "avs_match": 1,
+    "cvv_result": 1,
+    "three_ds_flag": 1,
+    "shipping_distance_km": 12.5,
+    "transaction_time": "2024-01-15 14:30:00"
+  }'
+```
+
+#### Check Health
+```bash
+curl http://localhost:8000/health
+```
+
+#### Get Model Info
+```bash
+curl http://localhost:8000/model/info
+```
+
+### Key Features
+
+1. **Automatic Feature Engineering**: API accepts raw transaction data (15 features) and automatically applies the production feature engineering pipeline to create 30 engineered features
+
+2. **Input Validation**: Pydantic models ensure data quality with type checking, range validation, and pattern matching
+
+3. **Flexible Thresholds**: Three pre-configured threshold strategies allow customization of precision-recall trade-offs without retraining
+
+4. **Fast Inference**: ~15ms average processing time (feature engineering + prediction)
+
+5. **Error Handling**: Comprehensive error handling with structured error responses
+
+6. **Logging**: Request/response logging for monitoring and debugging
+
+7. **Auto-Documentation**: Swagger UI and ReDoc for interactive API exploration
+
+### Design Decisions
+
+1. **Raw Input Features**: API accepts raw transaction data (not engineered features) to simplify client integration and ensure consistent feature engineering
+
+2. **Lifespan Context Manager**: Replaced deprecated `@app.on_event` with modern `@asynccontextmanager` pattern for startup/shutdown events
+
+3. **Threshold Strategies**: Pre-calibrated thresholds stored in JSON allow flexibility without model retraining
+
+4. **JSON Configuration**: All configuration stored as JSON (not pickle) for version control and cross-language compatibility
+
+5. **Pydantic Validation**: Strong typing and validation prevent invalid inputs from reaching the model
+
 ## Development Setup
 
 ### Prerequisites
@@ -421,16 +611,16 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 
 #### 4. Baseline Models
 - **Logistic Regression**: `class_weight='balanced'`, max_iter=1000, random_state=42
-  - Performance: PR-AUC 0.6975, Precision 41.54%, Recall 83.60%
-  - Weakness: High false positive rate (2,841 FP)
+  - Performance: PR-AUC 0.6973, Precision 20.50%, Recall 89.34%
+  - Weakness: Very high false positive rate (low precision)
 
 - **Random Forest**: `class_weight='balanced'`, n_estimators=100, random_state=42
-  - Performance: PR-AUC 0.8456, Precision 94.19%, Recall 71.13%
+  - Performance: PR-AUC 0.8482, Precision 93.84%, Recall 71.43%
   - Strength: Excellent precision, low false positives
 
-- **XGBoost**: `scale_pos_weight=44.3` (class imbalance ratio), n_estimators=100
-  - Performance: PR-AUC 0.8460, Precision 54.78%, Recall 84.05%
-  - Issue: Recall-dominated, high false positives (918 FP)
+- **XGBoost**: `scale_pos_weight=44.3` (class imbalance ratio), n_estimators=100, random_state=42
+  - Performance: PR-AUC 0.8458, Precision 55.42%, Recall 84.66%
+  - Issue: Recall-dominated, high false positives, moderate precision
 
 **Helper Functions**:
 - `create_preprocessing_pipeline(numeric_features, categorical_features, scale_numeric)`: Creates sklearn Pipeline
@@ -471,9 +661,11 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
   - min_samples_leaf: [2]
   - max_features: ['sqrt']
   - class_weight: ['balanced_subsample']
-- **Best Parameters**: n_estimators=500, max_depth=30, min_samples_leaf=2
-- **Performance**: PR-AUC 0.8583 (+1.5% vs baseline)
-- **Trade-off**: Sacrificed 4.4% precision to gain 7.3% recall
+- **Best CV Parameters**: n_estimators=500, max_depth=25, min_samples_leaf=2, class_weight='balanced_subsample'
+- **Best CV PR-AUC**: 0.8587
+- **Validation Set Performance**: PR-AUC 0.8579, Precision 89.16%, Recall 76.49%, F1 0.8234
+- **Improvement**: +1.2% PR-AUC vs baseline
+- **Trade-off**: Sacrificed 5.0% precision to gain 7.1% recall (good for fraud detection)
 
 **XGBoost Tuning**:
 - **Search Type**: GridSearchCV (108 combinations)
@@ -487,16 +679,19 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
   - gamma: [0.5, 0.6]
   - scale_pos_weight: [8, 10, 12] ⭐ **Key parameter - tunable, not fixed at class ratio**
   - eval_metric: ['aucpr'] (changed from 'logloss')
-- **Best Parameters**: n_estimators=90, max_depth=5, learning_rate=0.08, scale_pos_weight=8, gamma=0.6
-- **Performance**: PR-AUC 0.8679 (+2.6% vs baseline)
-- **Major Win**: Precision 54.78% → 72.33% (+32.1% improvement!)
-- **False Positive Reduction**: 918 → 423 (54% reduction)
+- **Best CV Parameters**: n_estimators=100, max_depth=4, learning_rate=0.1, subsample=0.9, colsample_bytree=0.9, min_child_weight=5, gamma=0.6, scale_pos_weight=8
+- **Best CV PR-AUC**: 0.8675
+- **Validation Set Performance**: PR-AUC 0.8672, Precision 72.87%, Recall 83.22%, F1 0.7770
+- **Major Win**: Precision +31.5% (55.42% → 72.87%), F1 +16.0%
+- **False Positive Reduction**: 54% fewer false positives vs baseline XGBoost
 
 **Key Insights**:
-- Making `scale_pos_weight` tunable (not just using class imbalance ratio) was crucial
-- Changing `eval_metric` to 'aucpr' aligned training with optimization goal
-- Shallow trees (max_depth=5) consistently outperformed deeper trees
-- High regularization (gamma=0.6, min_child_weight=5) essential for precision
+- **Critical Finding**: Making `scale_pos_weight` tunable (not fixed at class ratio of 44.3) was crucial
+  - Optimal value: **8** (much lower than class ratio)
+  - This allows the model to balance precision-recall more effectively
+- Changing `eval_metric` to 'aucpr' aligned training objective with optimization goal (PR-AUC)
+- **Shallow trees** (max_depth=4) with **high regularization** (gamma=0.6, min_child_weight=5) essential for precision
+- Default learning_rate (0.1) performed best - lower values didn't improve results
 
 #### 6. Model Evaluation
 - **Primary Metrics**: PR-AUC (optimization target), ROC-AUC, F1 Score
@@ -508,22 +703,70 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 
 **Model Comparison (Validation Set)**:
 
-| Model | PR-AUC | ROC-AUC | F1 | Precision | Recall | FP | FN |
-|-------|--------|---------|-------|-----------|--------|-----|-----|
-| Logistic Regression | 0.6975 | 0.9647 | 0.5523 | 41.54% | 83.60% | 2,841 | 217 |
-| Random Forest (Baseline) | 0.8456 | 0.9762 | 0.8146 | 94.19% | 71.13% | 89 | 382 |
-| Random Forest (Tuned) | 0.8583 | 0.9777 | 0.8257 | 90.02% | 76.34% | 146 | 313 |
-| XGBoost (Baseline) | 0.8460 | 0.9767 | 0.6633 | 54.78% | 84.05% | 918 | 211 |
-| **XGBoost (Tuned)** | **0.8679** | **0.9790** | **0.7756** | **72.33%** | **83.60%** | **423** | **217** |
+| Model | PR-AUC | ROC-AUC | F1 | Precision | Recall |
+|-------|--------|---------|-------|-----------|--------|
+| Logistic Regression | 0.6973 | 0.9662 | 0.3334 | 20.50% | 89.34% |
+| Random Forest (Baseline) | 0.8482 | 0.9627 | 0.8112 | 93.84% | 71.43% |
+| Random Forest (Tuned) | 0.8579 | - | 0.8234 | 89.16% | 76.49% |
+| XGBoost (Baseline) | 0.8458 | 0.9667 | 0.6699 | 55.42% | 84.66% |
+| **XGBoost (Tuned)** | **0.8672** | **-** | **0.7770** | **72.87%** | **83.22%** |
 
-**Performance Targets vs Achieved (XGBoost Tuned)**:
-- ✅ PR-AUC > 0.85: **0.8679**
-- ✅ ROC-AUC > 0.95: **0.9790**
-- ✅ F1 > 0.75: **0.7756**
-- ✅ Precision > 0.70: **0.7233**
-- ✅ Recall > 0.80: **0.8360**
+**Performance Targets vs Achieved (XGBoost Tuned - Validation Set)**:
+- ✅ PR-AUC > 0.85: **0.8672**
+- ✅ ROC-AUC > 0.95: ✅ (see test set results)
+- ✅ F1 > 0.75: **0.7770**
+- ✅ Precision > 0.70: **0.7287**
+- ✅ Recall > 0.80: **0.8322**
 
-#### 7. Final Model Selection
+**Test Set Evaluation (Final Model Retrained on Train+Val)**:
+- **Training Data**: 239,756 samples (train+val combined, +33.3% more data)
+- **Test Set**: 59,939 samples (20% of original dataset)
+- **Final Performance**:
+  - **PR-AUC**: **0.8658** ✅ (target: >0.85)
+  - **ROC-AUC**: **0.9766** ✅ (target: >0.95)
+  - **F1 Score**: **0.7774** ✅ (target: >0.75)
+  - **Precision**: **73.36%** ✅ (target: >70%)
+  - **Recall**: **82.68%** ✅ (target: >80%)
+- **Result**: **All performance targets exceeded on held-out test set** - excellent generalization!
+
+#### 7. Feature Importance Analysis
+**Top 10 Features by XGBoost Gain Metric**:
+
+| Rank | Feature | Importance (Gain) | Percentage |
+|------|---------|-------------------|------------|
+| 1 | account_age_days | 0.2052 | 20.5% |
+| 2 | avs_match | 0.1814 | 18.1% |
+| 3 | security_score | 0.1275 | 12.8% |
+| 4 | shipping_distance_km | 0.0893 | 8.9% |
+| 5 | high_risk_distance | 0.0569 | 5.7% |
+| 6 | amount | 0.0556 | 5.6% |
+| 7 | transaction_velocity | 0.0503 | 5.0% |
+| 8 | amount_deviation | 0.0439 | 4.4% |
+| 9 | country_mismatch | 0.0393 | 3.9% |
+| 10 | amount_vs_avg_ratio | 0.0388 | 3.9% |
+
+**Key Insights**:
+- **Account age** is the strongest predictor (20.5%) - newer accounts are higher risk
+- **Security features** (avs_match, security_score) account for 30.9% of importance
+- **Geographic features** (shipping_distance_km, high_risk_distance, country_mismatch) contribute 18.5%
+- **User behavior** (transaction_velocity, amount patterns) adds 13.3%
+- Top 10 features account for **85.1% of total importance**
+
+#### 8. Threshold Optimization
+**Three Pre-Calibrated Strategies** (calibrated on validation set):
+
+| Strategy | Target Recall | Threshold | Precision | Recall | Use Case |
+|----------|---------------|-----------|-----------|--------|----------|
+| **Conservative (90%)** | 90% | 0.2624 | 45.54% | 90.02% | Minimize fraud escapes (high false positives acceptable) |
+| **Balanced (85%)** | 85% | 0.4462 | 68.89% | 85.03% | Production default - good precision-recall balance |
+| **Aggressive (80%)** | 80% | 0.7291 | 85.53% | 79.97% | Minimize false positives (may miss some fraud) |
+
+**Implementation**:
+- Thresholds saved to `models/threshold_config.json`
+- API allows selection via `threshold_strategy` query parameter
+- Default strategy: `balanced_85pct_recall`
+
+#### 9. Final Model Selection
 - **Selected Model**: XGBoost (Tuned) with PR-AUC 0.8679
 - **Rationale**:
   - Best PR-AUC score (primary optimization metric)
@@ -536,11 +779,34 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
   - **XGBoost (Tuned)**: Production deployment - best overall balance
   - **Random Forest (Tuned)**: Applications requiring very low false positive rates (precision 90%)
 
-- **Next Steps**:
-  - Evaluate XGBoost (Tuned) on held-out test set
-  - Analyze feature importance
-  - Consider threshold optimization for custom precision-recall trade-offs
-  - Prepare model serialization for deployment
+#### 10. Model Deployment Preparation
+**All deployment artifacts generated and saved to `models/` directory**:
+
+1. **xgb_fraud_detector.joblib** (gitignored)
+   - Final XGBoost model retrained on train+val (239,756 samples)
+   - Includes full sklearn Pipeline with preprocessing steps
+
+2. **transformer_config.json** (tracked in git)
+   - FeatureConfig for FraudFeatureTransformer
+   - Quantile thresholds calculated from training data
+   - Timezone mapping for local time conversion
+
+3. **threshold_config.json** (tracked in git)
+   - Three pre-calibrated threshold strategies (conservative, balanced, aggressive)
+   - Precision-recall trade-offs for different use cases
+
+4. **model_metadata.json** (tracked in git)
+   - Model version, training date, algorithm details
+   - Test set performance metrics (PR-AUC, ROC-AUC, F1, Precision, Recall)
+   - Hyperparameters used for training
+   - Top 10 feature importance scores
+   - Dataset information (sample counts, feature counts)
+
+5. **feature_lists.json** (tracked in git)
+   - List of 30 engineered features (categorized)
+   - Feature names for API documentation
+
+**Status**: ✅ Model fully trained, evaluated, and ready for production deployment via FastAPI
 
 ## Notebook Best Practices
 
@@ -663,6 +929,7 @@ Keep inline when:
 - `calculate_vif(df, numeric_features)`: Variance Inflation Factor for multicollinearity
 
 ### EDA Visualization Functions
+- `plot_target_distribution(df, target_col)`: Visualizes target distribution with count and percentage plots, shows class imbalance
 - `plot_numeric_distributions(df, numeric_features)`: Histogram visualizations with mean/median lines
 - `analyze_vif(df, numeric_features)`: VIF calculation and visualization with interpretation
 - `analyze_correlations(df, numeric_features, target_col)`: Correlation analysis with bar chart visualization
@@ -694,6 +961,7 @@ Keep inline when:
 
 #### Training & Evaluation Functions
 - `train_and_evaluate_model(model_name, pipeline, X_train, y_train, X_val, y_val)`: Trains model pipeline and evaluates on validation set, returns metrics dictionary
+- `evaluate_model(model, X, y, model_name, dataset_name)`: Comprehensive evaluation of trained model with PR-AUC, ROC-AUC, F1, Precision, Recall, prints formatted results with confusion matrix
 - `compare_models(results_dict)`: Compares multiple models side-by-side with formatted output of key metrics
 - `calculate_metrics(y_true, y_pred, y_pred_proba)`: Calculates comprehensive metrics (PR-AUC, ROC-AUC, F1, Precision, Recall, Confusion Matrix)
 - `print_evaluation_metrics(metrics_dict, model_name, dataset_name='Validation')`: Formatted display of evaluation metrics with confusion matrix breakdown
@@ -720,6 +988,13 @@ Keep inline when:
   - **Includes timing caveats** for parallel processing (n_jobs=-1) unreliability
   - Labels metrics as "✓ Reliable" (PR-AUC, std) or "⚠ Unreliable" (timing)
   - Returns best parameters dictionary for easy model instantiation
+
+#### Threshold Optimization Functions
+- `find_threshold_for_recall(target_recall, precisions, recalls, thresholds)`:
+  - Finds optimal threshold for target recall percentage
+  - Maximizes precision while meeting recall target
+  - Returns (threshold, precision, recall, f1)
+  - Used to calibrate the three deployment threshold strategies (conservative 90%, balanced 85%, aggressive 80%)
 
 ## Important Notes
 
@@ -769,6 +1044,24 @@ uv sync
 uv run jupyter notebook ec_fraud_detection.ipynb
 ```
 
+### Run API server
+```bash
+# Development mode (with auto-reload)
+uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --reload
+
+# Production mode (better performance)
+uv run uvicorn predict:app --host 0.0.0.0 --port 8000
+```
+
+### Run tests
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=src/preprocessing --cov-report=html
+```
+
 ### Git workflow
 ```bash
 # Check status
@@ -797,12 +1090,14 @@ git push
 - ✅ **Baseline model training**: Logistic Regression, Random Forest, XGBoost
 - ✅ **Hyperparameter tuning**: GridSearchCV/RandomizedSearchCV with comprehensive logging
 - ✅ **Model selection**: XGBoost (Tuned) selected as best performer
+- ✅ **Model serialization**: Trained model saved as `xgb_fraud_detector.joblib` with metadata
+- ✅ **Threshold optimization**: Three pre-calibrated threshold strategies calibrated on validation set
+- ✅ **Test set evaluation**: Final model (retrained on train+val) evaluated on held-out test set - all targets exceeded
+- ✅ **Feature importance analysis**: Top 10 features identified using XGBoost gain metric
+- ✅ **Model deployment with FastAPI**: Production REST API with automatic feature engineering and real-time predictions
 
 ### Remaining 🚧
-- **Test set evaluation**: Final evaluation of XGBoost (Tuned) on held-out test set
-- **Feature importance analysis**: Understand key fraud detection drivers
-- **Model serialization**: Save final model for deployment (pickle or joblib)
-- **Threshold optimization**: Custom precision-recall trade-offs for different use cases
-- **Model deployment with FastAPI**: Production API endpoint for real-time predictions
 - **Model monitoring and drift detection**: Track performance degradation over time
 - **Automated retraining workflow**: Pipeline for periodic model updates
+- **Containerization**: Docker image for deployment
+- **API authentication**: Secure API endpoints with API keys or OAuth
