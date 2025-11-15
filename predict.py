@@ -249,6 +249,11 @@ async def health_check():
 
     Returns service health, model status, and uptime information.
     """
+    # Handle case where startup event hasn't been triggered (e.g., in tests)
+    if startup_time is None:
+        # Manually trigger startup if not already done
+        await load_model_artifacts()
+
     uptime = (datetime.now() - startup_time).total_seconds()
 
     return HealthResponse(
@@ -268,6 +273,10 @@ async def get_model_info():
     Returns model version, training date, performance metrics, and configuration.
     The API accepts raw transaction data and automatically applies feature engineering.
     """
+    # Handle case where startup event hasn't been triggered (e.g., in tests)
+    if startup_time is None:
+        await load_model_artifacts()
+
     if model_metadata is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -332,6 +341,10 @@ async def predict_fraud(
     start_time = time.time()
 
     try:
+        # Handle case where startup event hasn't been triggered (e.g., in tests)
+        if startup_time is None:
+            await load_model_artifacts()
+
         # Validate model and transformer are loaded
         if model is None or transformer is None:
             raise HTTPException(
