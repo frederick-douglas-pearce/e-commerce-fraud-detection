@@ -199,8 +199,8 @@ def train_model(
 ):
     """Train XGBoost model with hyperparameter tuning."""
 
-    # Define feature categories
-    categorical_features = ["country", "bin_country", "channel", "merchant_category"]
+    # Define feature categories (after FraudFeatureTransformer, only 'channel' remains categorical)
+    categorical_features = ["channel"]
 
     # Split features and target
     X_train = train_df.drop(columns=[target_col])
