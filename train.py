@@ -204,20 +204,44 @@ def train_model(
     preprocessor = create_preprocessing_pipeline(categorical_features)
     feature_names = X_train.columns.tolist()
 
-    # Optimal hyperparameters (from notebook tuning)
-    optimal_params = {
-        "n_estimators": 90,
-        "max_depth": 5,
-        "learning_rate": 0.08,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "min_child_weight": 3,
-        "gamma": 0.6,
-        "scale_pos_weight": 8,
-        "eval_metric": "aucpr",
-        "random_state": random_seed,
-        "n_jobs": -1,
-    }
+    # Load optimal hyperparameters from previous training if available
+    metadata_path = Path("models/model_metadata.json")
+    if metadata_path.exists():
+        print("\nLoading optimal hyperparameters from previous training...")
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+            loaded_params = metadata["hyperparameters"]
+            # Extract only the model parameters (exclude random_state which may differ)
+            optimal_params = {
+                "n_estimators": loaded_params["n_estimators"],
+                "max_depth": loaded_params["max_depth"],
+                "learning_rate": loaded_params["learning_rate"],
+                "subsample": loaded_params["subsample"],
+                "colsample_bytree": loaded_params["colsample_bytree"],
+                "min_child_weight": loaded_params["min_child_weight"],
+                "gamma": loaded_params["gamma"],
+                "scale_pos_weight": loaded_params["scale_pos_weight"],
+                "eval_metric": "aucpr",
+                "random_state": random_seed,
+                "n_jobs": -1,
+            }
+        print(f"  ✓ Loaded hyperparameters from {metadata_path}")
+    else:
+        # Fallback to optimal hyperparameters from initial notebook tuning
+        print("\nUsing optimal hyperparameters from initial notebook tuning...")
+        optimal_params = {
+            "n_estimators": 90,
+            "max_depth": 5,
+            "learning_rate": 0.08,
+            "subsample": 0.9,
+            "colsample_bytree": 0.9,
+            "min_child_weight": 5,
+            "gamma": 0.6,
+            "scale_pos_weight": 8,
+            "eval_metric": "aucpr",
+            "random_state": random_seed,
+            "n_jobs": -1,
+        }
 
     if not skip_tuning:
         print("\nPerforming hyperparameter tuning with GridSearchCV...")
