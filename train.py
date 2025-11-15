@@ -68,7 +68,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_data(data_dir: Path, random_seed: int = 42):
+def load_data(data_dir: Path, random_seed: int = 1):
     """Load raw transaction data and split into train/val/test sets."""
     print("Loading raw transaction data...")
     print(f"  Data directory: {data_dir}")
@@ -195,7 +195,7 @@ def optimize_thresholds(model, X_val, y_val):
 
 
 def train_model(
-    train_df, val_df, test_df, target_col="is_fraud", random_seed=42, skip_tuning=False, verbose=False
+    train_df, val_df, test_df, target_col="is_fraud", random_seed=1, skip_tuning=False, verbose=False
 ):
     """Train XGBoost model with hyperparameter tuning."""
 
