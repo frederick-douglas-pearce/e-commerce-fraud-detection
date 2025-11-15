@@ -15,14 +15,18 @@ from fastapi.testclient import TestClient
 # Import the FastAPI app
 from predict import app
 
-# Create test client
-client = TestClient(app)
+
+@pytest.fixture(scope="module")
+def client():
+    """Create test client with lifespan context."""
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestAPIRoot:
     """Test root endpoint."""
 
-    def test_root_endpoint(self):
+    def test_root_endpoint(self, client):
         """Test GET / returns API information."""
         response = client.get("/")
         assert response.status_code == 200
@@ -32,7 +36,7 @@ class TestAPIRoot:
         assert "endpoints" in data
         assert "predict" in data["endpoints"]
 
-    def test_root_has_documentation_links(self):
+    def test_root_has_documentation_links(self, client):
         """Test root endpoint includes documentation links."""
         response = client.get("/")
         data = response.json()
@@ -43,7 +47,7 @@ class TestAPIRoot:
 class TestHealthEndpoint:
     """Test health check endpoint."""
 
-    def test_health_check_success(self):
+    def test_health_check_success(self, client):
         """Test health endpoint returns healthy status."""
         response = client.get("/health")
         assert response.status_code == 200
@@ -53,7 +57,7 @@ class TestHealthEndpoint:
         assert "uptime_seconds" in data
         assert data["uptime_seconds"] >= 0
 
-    def test_health_has_model_version(self):
+    def test_health_has_model_version(self, client):
         """Test health endpoint returns model version."""
         response = client.get("/health")
         data = response.json()
@@ -64,7 +68,7 @@ class TestHealthEndpoint:
 class TestModelInfoEndpoint:
     """Test model information endpoint."""
 
-    def test_model_info_success(self):
+    def test_model_info_success(self, client):
         """Test model/info returns model metadata."""
         response = client.get("/model/info")
         assert response.status_code == 200
@@ -74,7 +78,7 @@ class TestModelInfoEndpoint:
         assert "performance" in data
         assert "threshold_strategies" in data
 
-    def test_model_info_has_performance_metrics(self):
+    def test_model_info_has_performance_metrics(self, client):
         """Test model info includes performance metrics."""
         response = client.get("/model/info")
         data = response.json()
@@ -84,7 +88,7 @@ class TestModelInfoEndpoint:
         assert "recall" in performance
         assert performance["pr_auc"] > 0
 
-    def test_model_info_has_threshold_strategies(self):
+    def test_model_info_has_threshold_strategies(self, client):
         """Test model info includes all threshold strategies."""
         response = client.get("/model/info")
         data = response.json()
@@ -122,7 +126,7 @@ class TestPredictEndpoint:
             "transaction_time": "2024-01-15 14:30:00"
         }
 
-    def test_predict_success(self, valid_transaction):
+    def test_predict_success(self, client, valid_transaction):
         """Test successful fraud prediction."""
         response = client.post("/predict", json=valid_transaction)
         assert response.status_code == 200
@@ -134,7 +138,7 @@ class TestPredictEndpoint:
         assert data["fraud_probability"] >= 0.0
         assert data["fraud_probability"] <= 1.0
 
-    def test_predict_has_required_fields(self, valid_transaction):
+    def test_predict_has_required_fields(self, client, valid_transaction):
         """Test prediction response has all required fields."""
         response = client.post("/predict", json=valid_transaction)
         data = response.json()
@@ -151,13 +155,13 @@ class TestPredictEndpoint:
         for field in required_fields:
             assert field in data
 
-    def test_predict_risk_level_valid(self, valid_transaction):
+    def test_predict_risk_level_valid(self, client, valid_transaction):
         """Test risk level is one of the valid values."""
         response = client.post("/predict", json=valid_transaction)
         data = response.json()
         assert data["risk_level"] in ["low", "medium", "high"]
 
-    def test_predict_with_balanced_threshold(self, valid_transaction):
+    def test_predict_with_balanced_threshold(self, client, valid_transaction):
         """Test prediction with balanced threshold strategy."""
         response = client.post(
             "/predict?threshold_strategy=balanced_85pct_recall",
@@ -167,7 +171,7 @@ class TestPredictEndpoint:
         data = response.json()
         assert data["threshold_used"] == "balanced_85pct_recall"
 
-    def test_predict_with_conservative_threshold(self, valid_transaction):
+    def test_predict_with_conservative_threshold(self, client, valid_transaction):
         """Test prediction with conservative threshold strategy."""
         response = client.post(
             "/predict?threshold_strategy=conservative_90pct_recall",
@@ -177,7 +181,7 @@ class TestPredictEndpoint:
         data = response.json()
         assert data["threshold_used"] == "conservative_90pct_recall"
 
-    def test_predict_with_aggressive_threshold(self, valid_transaction):
+    def test_predict_with_aggressive_threshold(self, client, valid_transaction):
         """Test prediction with aggressive threshold strategy."""
         response = client.post(
             "/predict?threshold_strategy=aggressive_80pct_recall",
@@ -187,42 +191,42 @@ class TestPredictEndpoint:
         data = response.json()
         assert data["threshold_used"] == "aggressive_80pct_recall"
 
-    def test_predict_missing_required_field(self, valid_transaction):
+    def test_predict_missing_required_field(self, client, valid_transaction):
         """Test prediction fails with missing required field."""
         incomplete_transaction = valid_transaction.copy()
         del incomplete_transaction["amount"]
         response = client.post("/predict", json=incomplete_transaction)
         assert response.status_code == 422  # Unprocessable Entity
 
-    def test_predict_invalid_amount(self, valid_transaction):
+    def test_predict_invalid_amount(self, client, valid_transaction):
         """Test prediction fails with negative amount."""
         invalid_transaction = valid_transaction.copy()
         invalid_transaction["amount"] = -100.0
         response = client.post("/predict", json=invalid_transaction)
         assert response.status_code == 422
 
-    def test_predict_invalid_country_code(self, valid_transaction):
+    def test_predict_invalid_country_code(self, client, valid_transaction):
         """Test prediction fails with invalid country code."""
         invalid_transaction = valid_transaction.copy()
         invalid_transaction["country"] = "USA"  # Should be 2-letter code
         response = client.post("/predict", json=invalid_transaction)
         assert response.status_code == 422
 
-    def test_predict_invalid_channel(self, valid_transaction):
+    def test_predict_invalid_channel(self, client, valid_transaction):
         """Test prediction fails with invalid channel."""
         invalid_transaction = valid_transaction.copy()
         invalid_transaction["channel"] = "mobile"  # Should be "web" or "app"
         response = client.post("/predict", json=invalid_transaction)
         assert response.status_code == 422
 
-    def test_predict_invalid_timestamp(self, valid_transaction):
+    def test_predict_invalid_timestamp(self, client, valid_transaction):
         """Test prediction fails with invalid timestamp format."""
         invalid_transaction = valid_transaction.copy()
         invalid_transaction["transaction_time"] = "2024-01-15"  # Missing time
         response = client.post("/predict", json=invalid_transaction)
         assert response.status_code == 422
 
-    def test_predict_processing_time_reasonable(self, valid_transaction):
+    def test_predict_processing_time_reasonable(self, client, valid_transaction):
         """Test prediction processing time is reasonable."""
         response = client.post("/predict", json=valid_transaction)
         data = response.json()
@@ -233,17 +237,17 @@ class TestPredictEndpoint:
 class TestAPIDocumentation:
     """Test API documentation endpoints."""
 
-    def test_openapi_docs_accessible(self):
+    def test_openapi_docs_accessible(self, client):
         """Test OpenAPI docs are accessible."""
         response = client.get("/docs")
         assert response.status_code == 200
 
-    def test_redoc_accessible(self):
+    def test_redoc_accessible(self, client):
         """Test ReDoc documentation is accessible."""
         response = client.get("/redoc")
         assert response.status_code == 200
 
-    def test_openapi_json_accessible(self):
+    def test_openapi_json_accessible(self, client):
         """Test OpenAPI JSON schema is accessible."""
         response = client.get("/openapi.json")
         assert response.status_code == 200
@@ -256,12 +260,12 @@ class TestAPIDocumentation:
 class TestErrorHandling:
     """Test API error handling."""
 
-    def test_invalid_endpoint_404(self):
+    def test_invalid_endpoint_404(self, client):
         """Test invalid endpoint returns 404."""
         response = client.get("/invalid-endpoint")
         assert response.status_code == 404
 
-    def test_wrong_method_405(self):
+    def test_wrong_method_405(self, client):
         """Test wrong HTTP method returns 405."""
         response = client.get("/predict")  # Should be POST
         assert response.status_code == 405

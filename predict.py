@@ -18,12 +18,12 @@ import json
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
 import joblib
-import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -38,15 +38,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="E-Commerce Fraud Detection API",
-    description="Real-time fraud prediction service using XGBoost machine learning model",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
-
 # Global variables for model and configuration
 model = None
 transformer = None
@@ -54,6 +45,77 @@ threshold_config = None
 model_metadata = None
 feature_lists = None
 startup_time = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    global model, transformer, threshold_config, model_metadata, feature_lists, startup_time
+
+    # Startup: Load model and configuration files
+    startup_time = datetime.now()
+    logger.info("Starting E-Commerce Fraud Detection API...")
+
+    try:
+        models_dir = Path("models")
+
+        # Load feature transformer
+        transformer_config_path = models_dir / "transformer_config.json"
+        if not transformer_config_path.exists():
+            raise FileNotFoundError(f"Transformer config not found: {transformer_config_path}")
+
+        transformer = FraudFeatureTransformer.load(str(transformer_config_path))
+        logger.info(f"✓ Feature transformer loaded from {transformer_config_path}")
+
+        # Load model
+        model_path = models_dir / "xgb_fraud_detector.joblib"
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        model = joblib.load(model_path)
+        logger.info(f"✓ Model loaded from {model_path}")
+
+        # Load threshold configuration
+        threshold_path = models_dir / "threshold_config.json"
+        with open(threshold_path, "r") as f:
+            threshold_config = json.load(f)
+        logger.info(f"✓ Threshold config loaded: {list(threshold_config.keys())}")
+
+        # Load model metadata
+        metadata_path = models_dir / "model_metadata.json"
+        with open(metadata_path, "r") as f:
+            model_metadata = json.load(f)
+        logger.info(f"✓ Model metadata loaded: v{model_metadata['model_info']['version']}")
+
+        # Load feature lists
+        feature_lists_path = models_dir / "feature_lists.json"
+        with open(feature_lists_path, "r") as f:
+            feature_lists = json.load(f)
+        logger.info(f"✓ Feature lists loaded: {len(feature_lists['all_features'])} features")
+
+        logger.info("=" * 80)
+        logger.info("API READY FOR REQUESTS")
+        logger.info("=" * 80)
+
+    except Exception as e:
+        logger.error(f"Failed to load model artifacts: {e}")
+        raise
+
+    yield
+
+    # Shutdown: cleanup (if needed)
+    logger.info("Shutting down E-Commerce Fraud Detection API...")
+
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(
+    title="E-Commerce Fraud Detection API",
+    description="Real-time fraud prediction service using XGBoost machine learning model",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
 
 
 # Pydantic models for request/response validation
@@ -168,61 +230,6 @@ class ErrorResponse(BaseModel):
     timestamp: str
 
 
-# Model loading and initialization
-@app.on_event("startup")
-async def load_model_artifacts():
-    """Load model and configuration files on startup."""
-    global model, transformer, threshold_config, model_metadata, feature_lists, startup_time
-
-    startup_time = datetime.now()
-    logger.info("Starting E-Commerce Fraud Detection API...")
-
-    try:
-        models_dir = Path("models")
-
-        # Load feature transformer
-        transformer_config_path = models_dir / "transformer_config.json"
-        if not transformer_config_path.exists():
-            raise FileNotFoundError(f"Transformer config not found: {transformer_config_path}")
-
-        transformer = FraudFeatureTransformer.load(str(transformer_config_path))
-        logger.info(f"✓ Feature transformer loaded from {transformer_config_path}")
-
-        # Load model
-        model_path = models_dir / "xgb_fraud_detector.joblib"
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
-
-        model = joblib.load(model_path)
-        logger.info(f"✓ Model loaded from {model_path}")
-
-        # Load threshold configuration
-        threshold_path = models_dir / "threshold_config.json"
-        with open(threshold_path, "r") as f:
-            threshold_config = json.load(f)
-        logger.info(f"✓ Threshold config loaded: {list(threshold_config.keys())}")
-
-        # Load model metadata
-        metadata_path = models_dir / "model_metadata.json"
-        with open(metadata_path, "r") as f:
-            model_metadata = json.load(f)
-        logger.info(f"✓ Model metadata loaded: v{model_metadata['model_info']['version']}")
-
-        # Load feature lists
-        feature_lists_path = models_dir / "feature_lists.json"
-        with open(feature_lists_path, "r") as f:
-            feature_lists = json.load(f)
-        logger.info(f"✓ Feature lists loaded: {len(feature_lists['all_features'])} features")
-
-        logger.info("=" * 80)
-        logger.info("API READY FOR REQUESTS")
-        logger.info("=" * 80)
-
-    except Exception as e:
-        logger.error(f"Failed to load model artifacts: {e}")
-        raise
-
-
 # API endpoints
 @app.get("/", tags=["root"])
 async def root():
@@ -249,11 +256,6 @@ async def health_check():
 
     Returns service health, model status, and uptime information.
     """
-    # Handle case where startup event hasn't been triggered (e.g., in tests)
-    if startup_time is None:
-        # Manually trigger startup if not already done
-        await load_model_artifacts()
-
     uptime = (datetime.now() - startup_time).total_seconds()
 
     return HealthResponse(
@@ -273,10 +275,6 @@ async def get_model_info():
     Returns model version, training date, performance metrics, and configuration.
     The API accepts raw transaction data and automatically applies feature engineering.
     """
-    # Handle case where startup event hasn't been triggered (e.g., in tests)
-    if startup_time is None:
-        await load_model_artifacts()
-
     if model_metadata is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -341,10 +339,6 @@ async def predict_fraud(
     start_time = time.time()
 
     try:
-        # Handle case where startup event hasn't been triggered (e.g., in tests)
-        if startup_time is None:
-            await load_model_artifacts()
-
         # Validate model and transformer are loaded
         if model is None or transformer is None:
             raise HTTPException(
