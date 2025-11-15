@@ -105,19 +105,23 @@ def load_data(data_dir: Path, random_seed: int = 1):
     return train_df, val_df, test_df
 
 
-def create_preprocessing_pipeline(categorical_features: list) -> ColumnTransformer:
-    """Create preprocessing pipeline for tree-based models."""
+def create_preprocessing_pipeline(categorical_features: list, continuous_numeric: list, binary: list) -> ColumnTransformer:
+    """Create preprocessing pipeline for tree-based models.
+
+    Matches the notebook's preprocessing approach for exact reproducibility.
+    """
     return ColumnTransformer(
         transformers=[
             (
                 "cat",
                 OrdinalEncoder(
-                    handle_unknown="use_encoded_value", unknown_value=-1, dtype=np.int32
+                    handle_unknown="use_encoded_value", unknown_value=-1
                 ),
                 categorical_features,
-            )
+            ),
+            ("rest", "passthrough", continuous_numeric + binary)
         ],
-        remainder="passthrough",
+        remainder="drop",
         verbose_feature_names_out=False,
     )
 
@@ -199,8 +203,26 @@ def train_model(
 ):
     """Train XGBoost model with hyperparameter tuning."""
 
-    # Define feature categories (after FraudFeatureTransformer, only 'channel' remains categorical)
-    categorical_features = ["channel"]
+    # Define feature categories to match notebook preprocessing
+    # After FraudFeatureTransformer, these features remain categorical or should be treated as such
+    categorical_features = ['channel', 'promo_used', 'avs_match', 'cvv_result', 'three_ds_flag']
+
+    # Continuous numeric features
+    continuous_numeric = [
+        'account_age_days', 'total_transactions_user', 'avg_amount_user',
+        'amount', 'shipping_distance_km', 'hour_local', 'day_of_week_local',
+        'month_local', 'amount_deviation', 'amount_vs_avg_ratio',
+        'transaction_velocity', 'security_score'
+    ]
+
+    # Binary features (already 0/1, no preprocessing needed but grouped for consistency)
+    binary = [
+        'is_weekend_local', 'is_late_night_local', 'is_business_hours_local',
+        'is_micro_transaction', 'is_large_transaction', 'is_new_account',
+        'is_high_frequency_user', 'country_mismatch', 'high_risk_distance',
+        'zero_distance', 'new_account_with_promo', 'late_night_micro_transaction',
+        'high_value_long_distance'
+    ]
 
     # Split features and target
     X_train = train_df.drop(columns=[target_col])
@@ -214,9 +236,11 @@ def train_model(
     print("FEATURE ENGINEERING & MODEL TRAINING")
     print("=" * 100)
 
-    # Create preprocessing pipeline
-    preprocessor = create_preprocessing_pipeline(categorical_features)
-    feature_names = X_train.columns.tolist()
+    # Create preprocessing pipeline (matches notebook approach)
+    preprocessor = create_preprocessing_pipeline(categorical_features, continuous_numeric, binary)
+
+    # Feature names after preprocessing (order matches notebook)
+    feature_names = categorical_features + continuous_numeric + binary
 
     # Load optimal hyperparameters from previous training if available
     metadata_path = Path("models/model_metadata.json")

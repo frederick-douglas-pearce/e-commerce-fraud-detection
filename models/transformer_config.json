@@ -1,7 +1,7 @@
 {
-  "amount_95th_percentile": 597.99,
+  "amount_95th_percentile": 595.97,
   "total_transactions_75th_percentile": 56,
-  "shipping_distance_75th_percentile": 409.0,
+  "shipping_distance_75th_percentile": 408.9,
   "timezone_mapping": {
     "US": "America/New_York",
     "GB": "Europe/London",
