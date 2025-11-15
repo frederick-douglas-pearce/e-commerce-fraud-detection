@@ -2,14 +2,14 @@
   "model_info": {
     "name": "XGBoost Fraud Detector",
     "version": "1.0",
-    "training_date": "2025-11-15T01:11:24.124460",
+    "training_date": "2025-11-15T02:40:49.877646",
     "algorithm": "XGBoost Gradient Boosting",
     "training_methodology": "GridSearchCV tuning on train \u2192 Retrain on train+val \u2192 Evaluate on test"
   },
   "hyperparameters": {
-    "n_estimators": 90,
-    "max_depth": 5,
-    "learning_rate": 0.08,
+    "n_estimators": 100,
+    "max_depth": 4,
+    "learning_rate": 0.1,
     "subsample": 0.9,
     "colsample_bytree": 0.9,
     "min_child_weight": 5,
@@ -21,71 +21,71 @@
   },
   "performance": {
     "test_set": {
-      "pr_auc": 0.8650380112854139,
-      "roc_auc": 0.9770846413770853,
-      "precision": 0.7168083714846305,
-      "recall": 0.8290468986384266,
-      "f1": 0.7688530340231498
+      "pr_auc": 0.8658131748834137,
+      "roc_auc": 0.9765665341027476,
+      "precision": 0.7335570469798658,
+      "recall": 0.8267776096822995,
+      "f1": 0.7773826458036984
     }
   },
   "feature_importance_top10": [
     {
       "feature": "account_age_days",
-      "importance": 0.2359435111284256
+      "importance": 0.20520181953907013
     },
     {
       "feature": "avs_match",
-      "importance": 0.23158223927021027
+      "importance": 0.18137945234775543
     },
     {
       "feature": "security_score",
-      "importance": 0.12800349295139313
+      "importance": 0.12754403054714203
     },
     {
       "feature": "shipping_distance_km",
-      "importance": 0.08006229251623154
-    },
-    {
-      "feature": "transaction_velocity",
-      "importance": 0.05213746055960655
-    },
-    {
-      "feature": "amount",
-      "importance": 0.04306798055768013
-    },
-    {
-      "feature": "country_mismatch",
-      "importance": 0.04259981960058212
+      "importance": 0.08928526937961578
     },
     {
       "feature": "high_risk_distance",
-      "importance": 0.039266232401132584
+      "importance": 0.05694116652011871
     },
     {
-      "feature": "amount_vs_avg_ratio",
-      "importance": 0.037201687693595886
+      "feature": "amount",
+      "importance": 0.055597491562366486
+    },
+    {
+      "feature": "transaction_velocity",
+      "importance": 0.050256021320819855
     },
     {
       "feature": "amount_deviation",
-      "importance": 0.023913461714982986
+      "importance": 0.04394136369228363
+    },
+    {
+      "feature": "country_mismatch",
+      "importance": 0.039319127798080444
+    },
+    {
+      "feature": "amount_vs_avg_ratio",
+      "importance": 0.038832664489746094
     }
   ],
   "threshold_strategies": {
     "conservative_90pct_recall": {
-      "threshold": 0.2633836567401886,
-      "precision": 0.4679764243614931,
+      "threshold": 0.26238957047462463,
+      "precision": 0.4554493307839388,
       "recall": 0.9002267573696145,
       "target_recall": 0.9
     },
     "balanced_85pct_recall": {
-      "threshold": 0.4702572226524353,
-      "precision": 0.6965944272445821,
+      "threshold": 0.4461546242237091,
+      "precision": 0.6889161053276179,
       "recall": 0.8503401360544217,
       "target_recall": 0.85
     },
     "aggressive_80pct_recall": {
-      "threshold": 0.7253320217132568,
-      "precision": 0.8477564102564102,
+      "threshold": 0.7291278839111328,
+      "precision": 0.8552950687146321,
       "recall": 0.799697656840514,
       "target_recall": 0.8
     }

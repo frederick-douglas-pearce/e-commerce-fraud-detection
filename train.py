@@ -7,7 +7,7 @@ It loads preprocessed data, trains the model with optimized hyperparameters, eva
 performance, and saves all deployment artifacts.
 
 Usage:
-    python train.py --data-dir data --output-dir models --random-seed 42
+    python train.py --data-dir data --output-dir models --random-seed 1
 """
 
 import argparse
@@ -54,7 +54,7 @@ def parse_args():
         "--output-dir", type=str, default="models", help="Directory to save model artifacts"
     )
     parser.add_argument(
-        "--random-seed", type=int, default=42, help="Random seed for reproducibility"
+        "--random-seed", type=int, default=1, help="Random seed for reproducibility"
     )
     parser.add_argument(
         "--skip-tuning",
@@ -268,9 +268,9 @@ def train_model(
         # Fallback to optimal hyperparameters from initial notebook tuning
         print("\nUsing optimal hyperparameters from initial notebook tuning...")
         optimal_params = {
-            "n_estimators": 90,
-            "max_depth": 5,
-            "learning_rate": 0.08,
+            "n_estimators": 100,
+            "max_depth": 4,
+            "learning_rate": 0.1,
             "subsample": 0.9,
             "colsample_bytree": 0.9,
             "min_child_weight": 5,
