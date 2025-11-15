@@ -15,6 +15,9 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ├── fraud_detection_EDA_FE.ipynb    # EDA & feature engineering notebook
 ├── fraud_detection_modeling.ipynb  # Model training & evaluation notebook
 ├── predict.py                       # FastAPI web service for real-time fraud prediction
+├── Dockerfile                       # Multi-stage Docker image definition
+├── docker-compose.yml               # Docker Compose configuration for local deployment
+├── requirements.txt                 # Python dependencies for Docker
 ├── data/                            # Data directory (gitignored)
 │   └── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
 ├── src/                             # Source code for production
@@ -513,6 +516,250 @@ curl http://localhost:8000/model/info
 4. **JSON Configuration**: All configuration stored as JSON (not pickle) for version control and cross-language compatibility
 
 5. **Pydantic Validation**: Strong typing and validation prevent invalid inputs from reaching the model
+
+## Docker Containerization
+
+### Overview
+The API is containerized using Docker for consistent deployment across environments. The implementation uses a multi-stage build for optimized image size and includes security best practices.
+
+### Architecture
+
+**Multi-Stage Build**:
+- **Stage 1 (Builder)**: Installs build dependencies and Python packages
+- **Stage 2 (Runtime)**: Minimal production image with only runtime dependencies
+
+**Security Features**:
+- Non-root user (appuser, UID 1000) for container execution
+- Read-only model volume mounting in docker-compose
+- Health checks for container orchestration
+- Minimal base image (python:3.12-slim)
+
+### Files
+
+#### 1. `Dockerfile` - Container Image Definition
+
+**Key Features**:
+- **Base Image**: `python:3.12-slim` (minimal footprint)
+- **Multi-stage Build**: Separates build-time and runtime dependencies
+- **Non-root User**: Runs as `appuser` for security
+- **Optimizations**:
+  - `--no-cache-dir` for pip to reduce image size
+  - Only copies necessary files (predict.py, train.py, src/, models/)
+  - Uses COPY --from=builder to transfer installed packages
+- **Health Check**: Python-based health check using requests library
+- **Port**: Exposes 8000 for API access
+
+**Build Stages**:
+```dockerfile
+# Stage 1: Install dependencies
+FROM python:3.12-slim AS builder
+# ... install build-essential, pip packages
+
+# Stage 2: Runtime image
+FROM python:3.12-slim
+# ... copy packages, application code, run as non-root
+```
+
+**Artifacts Copied**:
+- Application: `predict.py`, `train.py`, `src/`
+- Model artifacts: `models/*.json` (configs), `models/*.joblib` (trained model)
+
+**Important**: Model files must exist before building. Run `train.py` locally first to generate model artifacts.
+
+#### 2. `docker-compose.yml` - Orchestration Configuration
+
+**Service Definition**:
+- **Service Name**: `fraud-api`
+- **Container Name**: `fraud-detection-api`
+- **Port Mapping**: 8000:8000 (host:container)
+- **Network**: Custom bridge network (`fraud-detection-network`)
+- **Restart Policy**: `unless-stopped` (auto-restart on failure)
+
+**Environment Variables**:
+- `PYTHONUNBUFFERED=1` - Unbuffered Python output for real-time logs
+- `PORT=8000` - API port configuration
+
+**Volume Mounts** (Development):
+- `./predict.py:/app/predict.py` - Hot reload for API changes
+- `./src:/app/src` - Hot reload for source code changes
+- `./models:/app/models:ro` - Read-only model mounting for easy updates
+
+**Note**: Comment out source code volumes for production deployment.
+
+**Health Check**:
+- Test command: `curl -f http://localhost:8000/health`
+- Interval: 30s
+- Timeout: 10s
+- Retries: 3
+- Start period: 5s
+
+### Usage
+
+#### Building the Image
+
+```bash
+# Build Docker image
+docker build -t fraud-detection-api .
+
+# Check image size
+docker images fraud-detection-api
+
+# Expected size: ~400-500MB (optimized multi-stage build)
+```
+
+#### Running with Docker
+
+```bash
+# Run container directly
+docker run -d \
+  --name fraud-api \
+  -p 8000:8000 \
+  fraud-detection-api
+
+# View logs
+docker logs fraud-api
+
+# Follow logs in real-time
+docker logs -f fraud-api
+
+# Stop container
+docker stop fraud-api
+
+# Remove container
+docker rm fraud-api
+```
+
+#### Running with Docker Compose (Recommended)
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Rebuild and restart
+docker-compose up -d --build
+
+# View service status
+docker-compose ps
+```
+
+#### Verification
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Make prediction
+curl -X POST "http://localhost:8000/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 12345,
+    "account_age_days": 180,
+    "total_transactions_user": 25,
+    "avg_amount_user": 250.50,
+    "amount": 850.75,
+    "country": "US",
+    "bin_country": "US",
+    "channel": "web",
+    "merchant_category": "retail",
+    "promo_used": 0,
+    "avs_match": 1,
+    "cvv_result": 1,
+    "three_ds_flag": 1,
+    "shipping_distance_km": 12.5,
+    "transaction_time": "2024-01-15 14:30:00"
+  }'
+
+# Access interactive docs
+open http://localhost:8000/docs
+```
+
+### Development vs Production
+
+**Development Mode** (current docker-compose.yml):
+- Source code volumes mounted for hot reload
+- Models mounted read-only for easy updates
+- Suitable for local testing and development
+
+**Production Mode**:
+```yaml
+# Comment out these lines in docker-compose.yml
+# volumes:
+#   - ./predict.py:/app/predict.py
+#   - ./src:/app/src
+#   - ./models:/app/models:ro
+
+# Or build image with code baked in (no volumes)
+docker build -t fraud-detection-api:prod .
+docker run -d -p 8000:8000 fraud-detection-api:prod
+```
+
+### Image Optimization
+
+**Size Reduction Techniques**:
+1. **Multi-stage build**: ~40% size reduction vs single-stage
+2. **Slim base image**: python:3.12-slim vs python:3.12 (~600MB savings)
+3. **No cache pip installs**: `--no-cache-dir` flag
+4. **Minimal dependencies**: Only production packages in requirements.txt
+5. **Cleanup**: Remove apt lists after package installation
+
+**Expected Image Size**: ~400-500MB (includes Python runtime, FastAPI, XGBoost, scikit-learn, pandas)
+
+### Security Best Practices
+
+✅ **Non-root User**: Container runs as `appuser` (UID 1000), not root
+✅ **Read-only Models**: Model volume mounted as read-only (`:ro`)
+✅ **Minimal Base**: Slim Python image reduces attack surface
+✅ **Health Checks**: Container orchestration can detect failures
+✅ **No Secrets in Image**: No credentials or sensitive data baked in
+✅ **Explicit COPY**: Only necessary files copied to image
+
+### Troubleshooting
+
+**Issue: Model files not found**
+```bash
+# Solution: Train model first
+uv run python train.py --skip-tuning
+
+# Verify artifacts exist
+ls -lh models/*.json models/*.joblib
+```
+
+**Issue: Container health check failing**
+```bash
+# Check container logs
+docker logs fraud-api
+
+# Exec into container
+docker exec -it fraud-api bash
+
+# Test health endpoint manually
+curl http://localhost:8000/health
+```
+
+**Issue: Port already in use**
+```bash
+# Find process using port 8000
+lsof -i :8000
+
+# Change port in docker-compose.yml
+ports:
+  - "8001:8000"  # Map to different host port
+```
+
+**Issue: Image too large**
+```bash
+# Analyze image layers
+docker history fraud-detection-api
+
+# Check for unnecessary files
+docker run --rm -it fraud-detection-api ls -lhR /app
+```
 
 ## Development Setup
 
@@ -1103,9 +1350,11 @@ git push
 - ✅ **Test set evaluation**: Final model (retrained on train+val) evaluated on held-out test set - all targets exceeded
 - ✅ **Feature importance analysis**: Top 10 features identified using XGBoost gain metric
 - ✅ **Model deployment with FastAPI**: Production REST API with automatic feature engineering and real-time predictions
+- ✅ **Containerization**: Multi-stage Docker image with docker-compose for local deployment, optimized for production
 
 ### Remaining 🚧
 - **Model monitoring and drift detection**: Track performance degradation over time
 - **Automated retraining workflow**: Pipeline for periodic model updates
-- **Containerization**: Docker image for deployment
+- **Cloud deployment**: Deploy to cloud platform (Google Cloud Run/AWS/Azure)
+- **CI/CD pipeline**: Automated testing and deployment (GitHub Actions)
 - **API authentication**: Secure API endpoints with API keys or OAuth
