@@ -16,10 +16,7 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ├── fraud_detection_modeling.ipynb  # Model training & evaluation notebook
 ├── predict.py                       # FastAPI web service for real-time fraud prediction
 ├── data/                            # Data directory (gitignored)
-│   ├── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
-│   ├── train_features.pkl           # Engineered training set (179,817 × 31)
-│   ├── val_features.pkl             # Engineered validation set (59,939 × 31)
-│   └── test_features.pkl            # Engineered test set (59,939 × 31)
+│   └── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
 ├── src/                             # Source code for production
 │   └── preprocessing/               # Feature engineering pipeline
 │       ├── config.py                # FeatureConfig dataclass
@@ -74,7 +71,7 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ### Engineered Dataset (After Feature Engineering)
 - **Total Features**: 30 features + 1 target = 31 columns
 - **Splits**: 60% train, 20% validation, 20% test (stratified)
-- **Format**: Pickle files for fast loading
+- **Processing**: Applied on-the-fly using `FraudFeatureTransformer` pipeline
 - **Feature Categories**:
   1. **Original Numeric (5)**: account_age_days, total_transactions_user, avg_amount_user, amount, shipping_distance_km
   2. **Original Categorical (5)**: channel, promo_used, avs_match, cvv_result, three_ds_flag
@@ -586,10 +583,12 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 - Selection criteria: EDA insights, fraud scenarios, interpretability
 - **Output**: 30 selected features stored in categorized lists
 
-#### 7. Dataset Persistence
-- Save train/val/test DataFrames with selected features as pickle files
-- Format: 30 features + 1 target = 31 columns
-- Location: `data/train_features.pkl`, `data/val_features.pkl`, `data/test_features.pkl`
+#### 7. Production Configuration Export
+- Generate and save `FraudFeatureTransformer` configuration for deployment
+- Create `transformer_config.json` with quantile thresholds from training data
+- Store 30 selected feature names with categorical groupings
+- Include timezone mappings for consistent local time conversion
+- Ensure reproducible feature engineering between training and inference
 
 ### fraud_detection_modeling.ipynb (Model Training & Evaluation)
 
@@ -598,7 +597,9 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 - Package imports (sklearn, xgboost, preprocessing, metrics)
 
 #### 2. Data Loading
-- Load pre-engineered datasets from pickle files
+- Load raw transaction data from CSV
+- Apply `FraudFeatureTransformer` pipeline to generate engineered features
+- Transform raw data consistently across train/val/test splits using same configuration
 - Feature type identification (numeric, categorical, binary)
 - Dataset shape and target distribution validation
 
@@ -1005,7 +1006,14 @@ The following are excluded from version control:
 - Jupyter checkpoints
 - Python cache files
 - Virtual environments
-- Model artifacts (`.pkl`, `.h5`, `.pt`, etc.)
+- Trained model binaries (`xgb_fraud_detector.joblib`)
+- Model training logs (`models/logs/*.log`, `models/logs/*.csv`)
+
+**Note**: Configuration files (JSON) are tracked in git for reproducibility:
+- `transformer_config.json` - Feature engineering configuration
+- `threshold_config.json` - Decision threshold strategies
+- `model_metadata.json` - Model version and performance metrics
+- `feature_lists.json` - Feature categorization
 
 ### Class Imbalance Strategy
 With a 44:1 imbalance ratio, the following techniques are implemented:

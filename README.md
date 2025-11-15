@@ -68,10 +68,7 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ├── fraud_detection_EDA_FE.ipynb        # EDA & feature engineering notebook
 ├── fraud_detection_modeling.ipynb     # Model training & evaluation notebook
 ├── data/                               # Dataset directory (gitignored)
-│   ├── transactions.csv                # Raw transaction data from Kaggle
-│   ├── train_features.pkl              # Engineered training set (179,817 × 31)
-│   ├── val_features.pkl                # Engineered validation set (59,939 × 31)
-│   └── test_features.pkl               # Engineered test set (59,939 × 31)
+│   └── transactions.csv                # Raw transaction data from Kaggle
 ├── src/                                # Production source code
 │   └── preprocessing/                  # Feature engineering pipeline
 │       ├── config.py                   # FeatureConfig dataclass (JSON serialization)
@@ -161,15 +158,19 @@ The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
    - Removed redundant features (UTC features, duplicate country fields)
    - Excluded low-signal features (merchant_category)
    - Prioritized interpretability and fraud scenario alignment
-6. **Dataset Persistence**: Saves engineered train/val/test sets as pickle files
-7. **Config Export**: Automatically generates `feature_config.json` for deployment
-   - Stores quantile thresholds from training data
-   - 30 selected feature names
-   - Timezone mappings for 10 countries
+6. **Production Configuration**: Generates `FraudFeatureTransformer` configuration for deployment
+   - Automatically creates `transformer_config.json` from training data
+   - Stores quantile thresholds (95th/75th percentiles) for feature engineering
+   - Saves 30 selected feature names with categorical groupings
+   - Includes timezone mappings for 10 countries
+   - Ensures consistent feature engineering between training and inference
 
 ### Model Training & Evaluation
 The modeling notebook (`fraud_detection_modeling.ipynb`) contains:
-1. **Data Loading**: Load pre-engineered feature sets from pickle files
+1. **Data Loading**: Loads raw transaction data and applies `FraudFeatureTransformer` pipeline
+   - Applies production feature engineering consistently across train/val/test splits
+   - Generates 30 engineered features from 15 raw transaction fields
+   - Uses same transformer configuration as deployment API
 2. **Preprocessing**: Model-specific transformations (one-hot encoding, scaling)
 3. **Baseline Models**: Logistic Regression, Random Forest, XGBoost (all trained)
 4. **Hyperparameter Tuning**: Flexible GridSearchCV/RandomizedSearchCV with detailed logging
@@ -465,7 +466,7 @@ Train the fraud detection model using the provided training script.
 1. Raw transaction data must exist in `data/` directory:
    - `transactions.csv` (download from Kaggle)
 
-**Note:** The training script now uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. Pre-engineered pickle files are no longer required.
+**Note:** The training script uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. All feature engineering is performed on-the-fly using the same transformer configuration deployed in the API.
 
 ### Training the Model
 
