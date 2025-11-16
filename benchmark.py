@@ -36,10 +36,11 @@ import requests
 class FraudAPIBenchmark:
     """Benchmark suite for Fraud Detection API."""
 
-    def __init__(self, base_url: str, iterations: int = 100, concurrent_users: int = 10):
+    def __init__(self, base_url: str, iterations: int = 100, concurrent_users: int = 10, output_path: str = "benchmark_results.json"):
         self.base_url = base_url.rstrip("/")
         self.iterations = iterations
         self.concurrent_users = concurrent_users
+        self.output_path = output_path
         self.results = {
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
@@ -341,9 +342,9 @@ class FraudAPIBenchmark:
 
         print("\n" + "=" * 80)
 
-    def save_report(self, output_path: str = "benchmark_results.json") -> None:
+    def save_report(self) -> None:
         """Save benchmark results to JSON file."""
-        output_file = Path(output_path)
+        output_file = Path(self.output_path)
         with open(output_file, "w") as f:
             json.dump(self.results, f, indent=2)
         print(f"\n💾 Results saved to: {output_file.absolute()}")
@@ -406,6 +407,7 @@ def main():
         base_url=args.url,
         iterations=args.iterations,
         concurrent_users=args.concurrent,
+        output_path=args.output,
     )
     benchmark.run()
 
