@@ -56,9 +56,9 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 
 ### Deployment
 - **Feature Engineering**: Production-ready sklearn-compatible transformer
-- **API Framework**: FastAPI (planned)
-- **ASGI Server**: Uvicorn (planned)
-- **Containerization**: Docker (planned)
+- **API Framework**: FastAPI
+- **ASGI Server**: Uvicorn
+- **Containerization**: Docker
 - **Package Management**: uv (fast Python package installer)
 
 ## Project Structure
@@ -81,6 +81,7 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │       ├── test_config.py              # FeatureConfig tests (8 tests)
 │       ├── test_features.py            # Feature function tests (23 tests)
 │       └── test_transformer.py         # Transformer integration tests (18 tests)
+│   ├── test_api.py                     # Integration tests for Fraud Detection API.
 ├── models/                             # Model artifacts
 │   └── feature_config.json             # Training-time configuration (tracked in git)
 ├── benchmark.py                        # Performance benchmarking script
@@ -136,6 +137,7 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    - Run cells sequentially
    - Dataset will auto-download on first run if not present
    - Open `fraud_detection_modeling.ipynb` for model training (after EDA is complete)
+   - Run cells sequentially
 
 ## Development Workflow
 
@@ -202,7 +204,7 @@ The modeling pipeline includes production-ready tuning capabilities:
 - Applied to Random Forest and XGBoost for efficient, thorough hyperparameter optimization
 
 **Critical Hyperparameter Finding:**
-- XGBoost's `scale_pos_weight` critically controls the recall/precision trade-off and was included in the hyperparameter search space
+- XGBoost's `scale_pos_weight` primarily controls the recall/precision trade-off and was included in the hyperparameter search space
 - Using the actual class imbalance ratio (44:1) produced excessive false positives
 - Optimal value of 8 (5.5× lower than class imbalance) achieved performance targets for both metrics
 - Key tuning parameter for adapting model behavior to changing business requirements
@@ -861,7 +863,7 @@ locust -f locustfile.py \
 
 ### Performance Analysis
 
-✅ **Excellent Latency**: Sub-50ms P95 server processing (well below 100ms target)
+✅ **Excellent Latency**: Sub-50ms P95 server processing (below 50ms target)
 ✅ **Consistent Performance**: Minimal variance between P50 and P95 (27ms → 46ms)
 ✅ **Fast Cold Start**: <30ms even on first request
 ✅ **High Reliability**: 100% success rate under load

@@ -3,8 +3,6 @@ kaggle.json
 .kaggle/
 
 # Data files
-data/
-*.csv
 *.zip
 
 # Jupyter Notebook
