@@ -668,14 +668,14 @@ docker push gcr.io/$PROJECT_ID/fraud-detection-api
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
   --platform managed \
-  --region us-central1 \
+  --region us-west1 \
   --allow-unauthenticated \
   --memory 2Gi \
-  --cpu 2 \
+  --cpu 1 \
   --timeout 60 \
-  --max-instances 10 \
+  --max-instances 1 \
   --min-instances 0 \
-  --port 8000
+  --concurrency 80
 
 # Explanation of flags:
 # --image: The container image to deploy
@@ -708,12 +708,12 @@ Service URL: https://fraud-detection-api-xxxxxxxxxx-uc.a.run.app
 ```bash
 # Retrieve the service URL
 gcloud run services describe fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --format 'value(status.url)'
 
 # Save URL to environment variable
 export SERVICE_URL=$(gcloud run services describe fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --format 'value(status.url)')
 
 echo "Service deployed at: $SERVICE_URL"
@@ -771,7 +771,7 @@ open "$SERVICE_URL/docs"
 # Deploy with authentication required
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --no-allow-unauthenticated
 
 # Create a service account for API access
@@ -780,7 +780,7 @@ gcloud iam service-accounts create fraud-api-client \
 
 # Grant the service account permission to invoke the service
 gcloud run services add-iam-policy-binding fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --member "serviceAccount:fraud-api-client@$PROJECT_ID.iam.gserviceaccount.com" \
   --role "roles/run.invoker"
 
@@ -798,7 +798,7 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 # Deploy with custom environment variables
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --set-env-vars "MODEL_VERSION=1.0,LOG_LEVEL=INFO"
 ```
 
@@ -808,14 +808,14 @@ gcloud run deploy fraud-detection-api \
 # Keep 1 instance warm to eliminate cold starts (costs more)
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --min-instances 1 \
   --max-instances 10
 
 # Scale based on concurrent requests (default: 80)
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --concurrency 50
 ```
 
@@ -827,11 +827,11 @@ gcloud run deploy fraud-detection-api \
 
 ```bash
 # Stream logs in real-time
-gcloud run services logs tail fraud-detection-api --region us-central1
+gcloud run services logs tail fraud-detection-api --region us-west1
 
 # View recent logs
 gcloud run services logs read fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --limit 50
 ```
 
@@ -840,10 +840,10 @@ gcloud run services logs read fraud-detection-api \
 ```bash
 # Open Cloud Console metrics dashboard
 gcloud run services describe fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --format 'value(status.url)' | \
   sed 's|https://||' | \
-  xargs -I {} open "https://console.cloud.google.com/run/detail/us-central1/fraud-detection-api/metrics?project=$PROJECT_ID"
+  xargs -I {} open "https://console.cloud.google.com/run/detail/us-west1/fraud-detection-api/metrics?project=$PROJECT_ID"
 
 # Or view in terminal
 gcloud monitoring time-series list \
@@ -858,7 +858,7 @@ gcloud builds submit --tag gcr.io/$PROJECT_ID/fraud-detection-api
 
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1
+  --region us-west1
 
 # Cloud Run will:
 # - Create a new revision
@@ -870,11 +870,11 @@ gcloud run deploy fraud-detection-api \
 
 ```bash
 # List all revisions
-gcloud run revisions list --service fraud-detection-api --region us-central1
+gcloud run revisions list --service fraud-detection-api --region us-west1
 
 # Rollback to specific revision
 gcloud run services update-traffic fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --to-revisions fraud-detection-api-00001-abc=100
 ```
 
@@ -913,7 +913,7 @@ gcloud run services update-traffic fraud-detection-api \
 gcloud builds log $(gcloud builds list --limit 1 --format 'value(id)')
 
 # Check Cloud Run logs
-gcloud run services logs read fraud-detection-api --region us-central1 --limit 100
+gcloud run services logs read fraud-detection-api --region us-west1 --limit 100
 
 # Common causes:
 # - Missing model files in models/ directory
@@ -926,7 +926,7 @@ gcloud run services logs read fraud-detection-api --region us-central1 --limit 1
 # Increase memory allocation
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --memory 4Gi
 ```
 
@@ -935,7 +935,7 @@ gcloud run deploy fraud-detection-api \
 # Keep minimum instances warm
 gcloud run deploy fraud-detection-api \
   --image gcr.io/$PROJECT_ID/fraud-detection-api \
-  --region us-central1 \
+  --region us-west1 \
   --min-instances 1
 
 # Note: This increases cost but eliminates cold starts
@@ -947,7 +947,7 @@ gcloud run deploy fraud-detection-api \
 
 ```bash
 # Delete the Cloud Run service
-gcloud run services delete fraud-detection-api --region us-central1
+gcloud run services delete fraud-detection-api --region us-west1
 
 # Delete container images
 gcloud container images delete gcr.io/$PROJECT_ID/fraud-detection-api
