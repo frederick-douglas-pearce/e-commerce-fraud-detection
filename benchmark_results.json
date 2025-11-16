@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "timestamp": "2025-11-15T16:22:46.343758",
+    "base_url": "http://localhost:8000",
+    "iterations": 100,
+    "concurrent_users": 10
+  },
+  "health_check": {
+    "status": "healthy",
+    "model_loaded": true,
+    "model_version": "1.0"
+  },
+  "cold_start": {
+    "server_processing_ms": 25.93,
+    "end_to_end_ms": 28.45,
+    "network_overhead_ms": 2.52
+  },
+  "single_request": {
+    "total_requests": 100,
+    "successful_requests": 100,
+    "success_rate": 100.0,
+    "server_processing": {
+      "mean_ms": 29.21,
+      "median_ms": 27.29,
+      "p95_ms": 45.64,
+      "p99_ms": 74.22,
+      "min_ms": 17.42,
+      "max_ms": 74.22
+    },
+    "end_to_end": {
+      "mean_ms": 31.61,
+      "median_ms": 29.65,
+      "p95_ms": 48.84,
+      "p99_ms": 76.29,
+      "min_ms": 19.37,
+      "max_ms": 76.29
+    },
+    "network_overhead": {
+      "mean_ms": 2.4,
+      "median_ms": 2.23
+    }
+  },
+  "concurrent_requests": {
+    "concurrent_users": 10,
+    "total_requests": 100,
+    "successful_requests": 100,
+    "success_rate": 100.0,
+    "total_time_seconds": 2.93,
+    "throughput_rps": 34.08,
+    "server_processing": {
+      "mean_ms": 28.27,
+      "median_ms": 26.1,
+      "p95_ms": 43.15,
+      "p99_ms": 47.35
+    },
+    "end_to_end": {
+      "mean_ms": 279.94,
+      "median_ms": 289.64,
+      "p95_ms": 358.08,
+      "p99_ms": 383.48
+    }
+  }
+}

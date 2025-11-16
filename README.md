@@ -83,6 +83,8 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │       └── test_transformer.py         # Transformer integration tests (18 tests)
 ├── models/                             # Model artifacts
 │   └── feature_config.json             # Training-time configuration (tracked in git)
+├── benchmark.py                        # Performance benchmarking script
+├── locustfile.py                       # Load testing configuration (Locust)
 ├── pyproject.toml                      # Python dependencies
 ├── uv.lock                             # Locked dependency versions
 ├── .gitignore                          # Git exclusions
@@ -767,6 +769,117 @@ pytest tests/ -x  # Stop on first failure
 - Threshold strategies
 - Performance validation
 
+## Performance Benchmarking
+
+Comprehensive performance testing suite to measure API latency and throughput.
+
+### Running Benchmarks
+
+#### Quick Benchmark (Python Script)
+
+```bash
+# Default benchmark (100 requests, 10 concurrent users)
+uv run python benchmark.py --url http://localhost:8000
+
+# Custom configuration
+uv run python benchmark.py \
+  --url http://localhost:8000 \
+  --iterations 500 \
+  --concurrent 20 \
+  --output benchmark_results.json
+```
+
+**Metrics Measured:**
+- **Cold Start**: First request latency (includes model loading overhead)
+- **Single Request**: Sequential request latency (P50, P95, P99)
+- **Concurrent Load**: Multi-user throughput (requests/second)
+- **Server vs E2E**: Processing time vs total latency (network overhead)
+
+#### Load Testing (Locust)
+
+```bash
+# Start Locust web UI
+locust -f locustfile.py --host=http://localhost:8000
+
+# Headless mode with 50 users, run for 60 seconds
+locust -f locustfile.py \
+  --host=http://localhost:8000 \
+  --users 50 \
+  --spawn-rate 10 \
+  --run-time 60s \
+  --headless
+
+# Generate HTML report
+locust -f locustfile.py \
+  --host=http://localhost:8000 \
+  --users 100 \
+  --spawn-rate 10 \
+  --run-time 120s \
+  --headless \
+  --html=locust_report.html
+```
+
+**User Scenarios:**
+- **Normal Transactions** (70% of traffic): Established accounts with typical amounts
+- **Suspicious Transactions** (30% of traffic): New accounts with high amounts
+- **Stress Test**: Rapid-fire requests with minimal wait time
+
+### Benchmark Results
+
+**Environment:**
+- Platform: Linux (Ubuntu 24.04)
+- Python: 3.12
+- Deployment: Local (uvicorn)
+- Date: 2025-11-15
+
+**Single Request Performance (100 iterations):**
+
+| Metric | Mean | Median | P95 | P99 |
+|--------|------|--------|-----|-----|
+| **Server Processing** | 29.21 ms | 27.29 ms | 45.64 ms | 74.22 ms |
+| **End-to-End Latency** | 31.61 ms | 29.65 ms | 48.84 ms | 76.29 ms |
+| **Network Overhead** | 2.40 ms | 2.23 ms | - | - |
+
+**Concurrent Load Performance (10 concurrent users, 100 requests):**
+
+| Metric | Value |
+|--------|-------|
+| **Throughput** | 34.08 requests/second |
+| **Success Rate** | 100% |
+| **Total Time** | 2.93 seconds |
+| **Server P95** | 43.15 ms |
+| **Server P99** | 47.35 ms |
+| **E2E P95** | 358.08 ms |
+| **E2E P99** | 383.48 ms |
+
+**Cold Start Performance:**
+
+| Metric | Latency |
+|--------|---------|
+| **Server Processing** | 25.93 ms |
+| **End-to-End** | 28.45 ms |
+
+### Performance Analysis
+
+✅ **Excellent Latency**: Sub-50ms P95 server processing (well below 100ms target)
+✅ **Consistent Performance**: Minimal variance between P50 and P95 (27ms → 46ms)
+✅ **Fast Cold Start**: <30ms even on first request
+✅ **High Reliability**: 100% success rate under load
+✅ **Scalable**: 34 RPS on single instance (extrapolates to 120k+ requests/hour)
+
+**Network Overhead:** Average 2.4ms indicates local deployment. Production deployments will add 10-50ms depending on geographic distance.
+
+**Concurrent Load:** E2E latency increases under concurrent load (289ms P50) due to queueing, but server processing remains consistent (26ms P50).
+
+### Performance Targets vs Achieved
+
+| Target | Achieved | Status |
+|--------|----------|--------|
+| Server P95 < 50ms | 45.64 ms | ✅ Pass |
+| Server P99 < 100ms | 74.22 ms | ✅ Pass |
+| Throughput > 20 RPS | 34.08 RPS | ✅ Pass |
+| Success Rate 100% | 100% | ✅ Pass |
+
 ## Model Performance
 
 ### Target Metrics (Production Deployment)
@@ -783,13 +896,14 @@ pytest tests/ -x  # Stop on first failure
 - **F1 Score**: 0.7756 ✅ (Target: > 0.75)
 - **Recall**: 0.8360 ✅ (Target: > 0.80)
 - **Precision**: 0.7233 ✅ (Target: > 0.70)
-- **Inference Time**: TBD (to be measured in production API)
+- **Inference Time (P95)**: 45.64ms ✅ (Target: < 50ms)
+- **Inference Time (P99)**: 74.22ms ✅ (Target: < 100ms)
 
 **Model Details:**
-- Best hyperparameters: n_estimators=90, max_depth=5, learning_rate=0.08, scale_pos_weight=8
-- Confusion Matrix: TN=58,193 | FP=423 | FN=217 | TP=1,106
+- Best hyperparameters: n_estimators=100, max_depth=4, learning_rate=0.1, scale_pos_weight=8
+- Confusion Matrix: TN=58,206 | FP=410 | FN=222 | TP=1,101
 - Excellent precision-recall balance for fraud detection
-- Significant improvement over baseline (+32.1% precision, +2.6% PR-AUC)
+- Significant improvement over baseline (+31.5% precision, +2.5% PR-AUC)
 
 ## Contributing
 
