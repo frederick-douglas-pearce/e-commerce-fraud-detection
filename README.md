@@ -447,7 +447,7 @@ The project implements comprehensive feature engineering targeting the three spe
 ### Phase 3: Containerization ✅ (100% Complete)
 - [x] Create Dockerfile with multi-stage build
 - [x] Optimize container image size (<500MB target)
-- [x] Add docker-compose for local development
+- [x] Add docker compose for local development
 - [x] Test containerized application
 - [x] Security hardening (non-root user, health checks)
 - [x] Build context optimization (.dockerignore)
@@ -535,10 +535,10 @@ uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --workers 4
 
 #### 1. Build Docker Image
 ```bash
-# Build the image
+# Build the image (1.5 - 2 minutes)
 docker build -t fraud-detection-api .
 
-# Check image size
+# Check image size (~1.5GB)
 docker images fraud-detection-api
 ```
 
@@ -550,8 +550,8 @@ docker run -d \
   -p 8000:8000 \
   fraud-detection-api
 
-# Or use docker-compose (easier)
-docker-compose up -d
+# Or use docker compose (easier)
+docker compose up -d
 ```
 
 #### 3. Verify Deployment
@@ -563,7 +563,7 @@ curl http://localhost:8000/health
 docker logs fraud-api
 
 # Stop container
-docker-compose down
+docker compose down
 ```
 
 ### Option 3: Cloud Deployment

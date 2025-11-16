@@ -112,6 +112,20 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ### Package Management
 This project uses `uv` for fast, reliable Python dependency management.
 
+**Important**: Always use `uv add <package>` to install new dependencies, NOT `uv pip install <package>`. This ensures:
+- Dependencies are added to `pyproject.toml`
+- Lock file (`uv.lock`) is automatically updated
+- Consistent dependency resolution across all environments
+
+Example:
+```bash
+# ✅ Correct - adds to project dependencies
+uv add requests locust pytest
+
+# ❌ Wrong - does not update pyproject.toml
+uv pip install requests
+```
+
 ## Production Feature Engineering Pipeline
 
 ### Overview
