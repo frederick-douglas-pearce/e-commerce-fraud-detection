@@ -61,3 +61,6 @@ Thumbs.db
 models/*
 !models/.gitkeep
 !models/*.json
+
+# Prevent duplicate config file (use transformer_config.json)
+models/feature_config.json
