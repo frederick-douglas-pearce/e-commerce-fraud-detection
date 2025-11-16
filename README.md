@@ -831,55 +831,58 @@ locust -f locustfile.py \
 **Environment:**
 - Platform: Linux (Ubuntu 24.04)
 - Python: 3.12
-- Deployment: Local (uvicorn)
+- Deployment: Docker (docker compose)
 - Date: 2025-11-15
 
 **Single Request Performance (100 iterations):**
 
 | Metric | Mean | Median | P95 | P99 |
 |--------|------|--------|-----|-----|
-| **Server Processing** | 29.21 ms | 27.29 ms | 45.64 ms | 74.22 ms |
-| **End-to-End Latency** | 31.61 ms | 29.65 ms | 48.84 ms | 76.29 ms |
-| **Network Overhead** | 2.40 ms | 2.23 ms | - | - |
+| **Server Processing** | 30.53 ms | 30.23 ms | 46.32 ms | 60.71 ms |
+| **End-to-End Latency** | 33.96 ms | 32.99 ms | 53.04 ms | 70.70 ms |
+| **Network Overhead** | 3.43 ms | 2.75 ms | - | - |
 
 **Concurrent Load Performance (10 concurrent users, 100 requests):**
 
 | Metric | Value |
 |--------|-------|
-| **Throughput** | 34.08 requests/second |
+| **Throughput** | 31.62 requests/second |
 | **Success Rate** | 100% |
-| **Total Time** | 2.93 seconds |
-| **Server P95** | 43.15 ms |
-| **Server P99** | 47.35 ms |
-| **E2E P95** | 358.08 ms |
-| **E2E P99** | 383.48 ms |
+| **Total Time** | 3.16 seconds |
+| **Server P95** | 47.25 ms |
+| **Server P99** | 59.00 ms |
+| **E2E P95** | 366.83 ms |
+| **E2E P99** | 385.01 ms |
 
 **Cold Start Performance:**
 
 | Metric | Latency |
 |--------|---------|
-| **Server Processing** | 25.93 ms |
-| **End-to-End** | 28.45 ms |
+| **Server Processing** | 53.41 ms |
+| **End-to-End** | 55.88 ms |
+| **Network Overhead** | 2.47 ms |
 
 ### Performance Analysis
 
-✅ **Excellent Latency**: Sub-50ms P95 server processing (below 50ms target)
-✅ **Consistent Performance**: Minimal variance between P50 and P95 (27ms → 46ms)
-✅ **Fast Cold Start**: <30ms even on first request
+✅ **Excellent Latency**: Sub-50ms P95 server processing (46.32ms - below 50ms target)
+✅ **Consistent Performance**: Minimal variance between P50 and P95 (30ms → 46ms)
+✅ **Fast Cold Start**: <60ms even on first request (including container overhead)
 ✅ **High Reliability**: 100% success rate under load
-✅ **Scalable**: 34 RPS on single instance (extrapolates to 120k+ requests/hour)
+✅ **Scalable**: 31.62 RPS on single instance (extrapolates to 113k+ requests/hour)
 
-**Network Overhead:** Average 2.4ms indicates local deployment. Production deployments will add 10-50ms depending on geographic distance.
+**Docker Overhead:** Cold start is ~53ms (vs ~26ms for local uvicorn), which is acceptable for production deployment. The containerization provides isolation and portability benefits with minimal performance impact.
 
-**Concurrent Load:** E2E latency increases under concurrent load (289ms P50) due to queueing, but server processing remains consistent (26ms P50).
+**Network Overhead:** Average 3.4ms indicates local deployment. Production deployments will add 10-50ms depending on geographic distance.
+
+**Concurrent Load:** E2E latency increases under concurrent load (302ms P50) due to request queueing, but server processing remains consistent (30ms P50).
 
 ### Performance Targets vs Achieved
 
-| Target | Achieved | Status |
-|--------|----------|--------|
-| Server P95 < 50ms | 45.64 ms | ✅ Pass |
-| Server P99 < 100ms | 74.22 ms | ✅ Pass |
-| Throughput > 20 RPS | 34.08 RPS | ✅ Pass |
+| Target | Achieved (Docker) | Status |
+|--------|-------------------|--------|
+| Server P95 < 50ms | 46.32 ms | ✅ Pass |
+| Server P99 < 100ms | 60.71 ms | ✅ Pass |
+| Throughput > 20 RPS | 31.62 RPS | ✅ Pass |
 | Success Rate 100% | 100% | ✅ Pass |
 
 ## Model Performance
@@ -898,8 +901,8 @@ locust -f locustfile.py \
 - **F1 Score**: 0.7756 ✅ (Target: > 0.75)
 - **Recall**: 0.8360 ✅ (Target: > 0.80)
 - **Precision**: 0.7233 ✅ (Target: > 0.70)
-- **Inference Time (P95)**: 45.64ms ✅ (Target: < 50ms)
-- **Inference Time (P99)**: 74.22ms ✅ (Target: < 100ms)
+- **Inference Time (P95)**: 46.32ms ✅ (Target: < 50ms)
+- **Inference Time (P99)**: 60.71ms ✅ (Target: < 100ms)
 
 **Model Details:**
 - Best hyperparameters: n_estimators=100, max_depth=4, learning_rate=0.1, scale_pos_weight=8
