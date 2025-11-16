@@ -3,7 +3,7 @@
 .gitignore
 .gitattributes
 
-# Python
+# Python cache
 __pycache__
 *.py[cod]
 *$py.class
@@ -56,8 +56,7 @@ pytest.ini
 .gitlab-ci.yml
 .travis.yml
 
-# Docker
-Dockerfile
+# Docker files (not needed inside image)
 docker-compose.yml
 .dockerignore
 
@@ -77,15 +76,14 @@ models/*_tuning_*.csv
 *.temp
 .cache/
 
-# Package management
-pyproject.toml
-uv.lock
-poetry.lock
+# Benchmarking and local testing
+benchmark.py
+benchmark_results.json
+locustfile.py
+locust_report.html
 
-# Keep these files/directories for the container:
-# !predict.py
-# !train.py
-# !src/
-# !models/*.json
-# !models/*.joblib
-# !requirements.txt
+# Note: The following files ARE included in the Docker build:
+# - pyproject.toml, uv.lock (dependencies)
+# - predict.py, train.py (application code)
+# - src/ (source code modules)
+# - models/*.json, models/*.joblib (trained models)

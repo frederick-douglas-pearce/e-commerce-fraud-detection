@@ -57,10 +57,11 @@ Thumbs.db
 *.onnx
 *.pb
 
-# Models directory - ignore all except .gitkeep and JSON configs
+# Models directory - ignore all except .gitkeep, JSON configs, and joblib models
 models/*
 !models/.gitkeep
 !models/*.json
+!models/*.joblib
 
 # Prevent duplicate config file (use transformer_config.json)
 models/feature_config.json
