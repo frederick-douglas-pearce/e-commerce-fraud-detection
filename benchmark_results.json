@@ -1,9 +1,9 @@
 {
   "metadata": {
-    "timestamp": "2025-11-15T21:31:29.153070",
+    "timestamp": "2025-11-15T22:35:03.374243",
     "base_url": "http://localhost:8000",
-    "iterations": 100,
-    "concurrent_users": 10
+    "iterations": 500,
+    "concurrent_users": 20
   },
   "health_check": {
     "status": "healthy",
@@ -11,53 +11,53 @@
     "model_version": "1.0"
   },
   "cold_start": {
-    "server_processing_ms": 53.41,
-    "end_to_end_ms": 55.88,
-    "network_overhead_ms": 2.47
+    "server_processing_ms": 52.37,
+    "end_to_end_ms": 54.98,
+    "network_overhead_ms": 2.61
   },
   "single_request": {
-    "total_requests": 100,
-    "successful_requests": 100,
+    "total_requests": 500,
+    "successful_requests": 500,
     "success_rate": 100.0,
     "server_processing": {
-      "mean_ms": 30.53,
-      "median_ms": 30.23,
-      "p95_ms": 46.32,
-      "p99_ms": 60.71,
-      "min_ms": 18.44,
-      "max_ms": 60.71
+      "mean_ms": 19.94,
+      "median_ms": 18.51,
+      "p95_ms": 33.84,
+      "p99_ms": 39.54,
+      "min_ms": 17.65,
+      "max_ms": 45.52
     },
     "end_to_end": {
-      "mean_ms": 33.96,
-      "median_ms": 32.99,
-      "p95_ms": 53.04,
-      "p99_ms": 70.7,
-      "min_ms": 20.91,
-      "max_ms": 70.7
+      "mean_ms": 22.35,
+      "median_ms": 20.73,
+      "p95_ms": 37.13,
+      "p99_ms": 44.36,
+      "min_ms": 19.7,
+      "max_ms": 49.48
     },
     "network_overhead": {
-      "mean_ms": 3.43,
-      "median_ms": 2.75
+      "mean_ms": 2.41,
+      "median_ms": 2.1
     }
   },
   "concurrent_requests": {
-    "concurrent_users": 10,
-    "total_requests": 100,
-    "successful_requests": 100,
+    "concurrent_users": 20,
+    "total_requests": 500,
+    "successful_requests": 500,
     "success_rate": 100.0,
-    "total_time_seconds": 3.16,
-    "throughput_rps": 31.62,
+    "total_time_seconds": 10.38,
+    "throughput_rps": 48.16,
     "server_processing": {
-      "mean_ms": 30.11,
-      "median_ms": 28.72,
-      "p95_ms": 47.25,
-      "p99_ms": 59.0
+      "mean_ms": 19.75,
+      "median_ms": 18.52,
+      "p95_ms": 32.16,
+      "p99_ms": 37.1
     },
     "end_to_end": {
-      "mean_ms": 302.45,
-      "median_ms": 318.44,
-      "p95_ms": 366.83,
-      "p99_ms": 385.01
+      "mean_ms": 407.23,
+      "median_ms": 397.15,
+      "p95_ms": 557.64,
+      "p99_ms": 603.04
     }
   }
 }
