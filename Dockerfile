@@ -26,8 +26,7 @@ FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8000
+    PYTHONDONTWRITEBYTECODE=1
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
@@ -55,12 +54,12 @@ COPY --chown=appuser:appuser models/*.joblib models/
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8000
+# Expose port (Cloud Run will set PORT env var, defaults to 8080)
+EXPOSE 8080
 
-# Health check
+# Health check - uses PORT environment variable
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health').raise_for_status()" || exit 1
+    CMD python -c "import os; import requests; port = os.getenv('PORT', '8000'); requests.get(f'http://localhost:{port}/health').raise_for_status()" || exit 1
 
-# Run the FastAPI application
-CMD ["uvicorn", "predict:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the FastAPI application using predict.py (reads PORT from environment)
+CMD ["python", "predict.py"]
