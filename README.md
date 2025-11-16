@@ -617,11 +617,12 @@ cd /path/to/e-commerce-fraud-detection
 ls -lh models/*.json models/*.joblib
 
 # Expected files:
-# - models/xgb_fraud_detector.joblib
-# - models/transformer_config.json
-# - models/threshold_config.json
-# - models/model_metadata.json
-# - models/feature_lists.json
+# - models/xgb_fraud_detector.joblib (trained model - ~156KB)
+# - models/transformer_config.json (feature engineering config - used by API)
+# - models/feature_config.json (duplicate of transformer_config.json)
+# - models/threshold_config.json (prediction thresholds)
+# - models/model_metadata.json (model version and metrics)
+# - models/feature_lists.json (feature names and categories)
 ```
 
 ---
