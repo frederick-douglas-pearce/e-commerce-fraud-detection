@@ -2,6 +2,56 @@
 
 A machine learning project to detect fraudulent e-commerce transactions using classification models. The goal is to develop, optimize, and deploy a production-ready fraud detection system.
 
+## Table of Contents
+
+### Introduction
+- [Project Overview](#project-overview)
+- [About This Project](#about-this-project)
+- [Dataset](#dataset)
+- [Technology Stack](#technology-stack)
+
+### Setup
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Project Structure](#project-structure)
+
+### Development
+- [Development Guide](#development-guide)
+  - [Virtual Environment & Package Management](#virtual-environment-and-package-management)
+  - [Exploratory Data Analysis](#exploratory-data-analysis)
+  - [Feature Engineering Development](#feature-engineering-development)
+  - [Model Training & Hyperparameter Tuning](#model-training--hyperparameter-tuning)
+
+### Production
+- [Production Pipeline](#production-pipeline)
+  - [Feature Engineering Pipeline](#feature-engineering-pipeline)
+  - [Feature Engineering Summary](#feature-engineering-summary)
+  - [Model Training Script](#model-training-script)
+  - [Model Performance](#model-performance)
+
+### Deployment
+- [Deployment](#deployment)
+  - [Deployment Plan](#deployment-plan)
+  - [API Deployment Options](#api-deployment-options)
+    - [Option 1: Local Development](#option-1-local-development-fastapi--uvicorn-)
+    - [Option 2: Docker](#option-2-docker-deployment-recommended-for-production-)
+    - [Option 3: Cloud](#option-3-cloud-deployment-)
+  - [API Usage Examples](#api-usage-examples)
+
+### Testing & Performance
+- [Testing](#testing)
+- [Performance Benchmarking](#performance-benchmarking)
+
+### Additional Information
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Contact](#contact)
+- [Resources](#resources)
+
+---
+
 ## Project Overview
 
 This project builds and deploys a classification model to identify fraudulent e-commerce transactions in real-time. Using a realistic synthetic dataset that models actual fraud patterns observed in 2024, the system aims to help e-commerce platforms prevent fraudulent activity while minimizing false positives that could impact legitimate customers.
@@ -155,7 +205,9 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    - Open `fraud_detection_modeling.ipynb` for model training (after EDA is complete)
    - Run cells sequentially
 
-## Development Workflow
+## Development Guide
+
+This section covers the development process for exploring the data, engineering features, and training models using Jupyter notebooks.
 
 ### Virtual Environment and Package Management
 
@@ -170,7 +222,8 @@ uv sync
 uv run --with jupyter jupyter lab
 ```
 
-### Data Analysis & Feature Engineering
+### Exploratory Data Analysis
+
 The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
 1. **Data Loading**: Automated Kaggle dataset download with caching
 2. **Preprocessing**: Data cleaning, type conversion, train/val/test splits (60/20/20, stratified)
@@ -180,25 +233,30 @@ The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
    - Categorical feature fraud rates and mutual information
    - Temporal pattern analysis
    - Multicollinearity detection (VIF)
-4. **Feature Engineering**: Created 32 engineered features
-   - **Temporal**: UTC and local timezone features (hour, day_of_week, is_late_night, etc.)
-   - **Amount**: Deviation, ratios, micro/large transaction flags
-   - **User Behavior**: Transaction velocity, new account flags, frequency indicators
-   - **Geographic**: Country mismatch, high-risk distance, zero distance
-   - **Security**: Composite security score from verification flags
-   - **Interaction**: Fraud scenario-specific combinations (e.g., new_account_with_promo)
-5. **Feature Selection**: Final selection of **30 features** from 45 available
-   - Removed redundant features (UTC features, duplicate country fields)
-   - Excluded low-signal features (merchant_category)
-   - Prioritized interpretability and fraud scenario alignment
-6. **Production Configuration**: Generates `FraudFeatureTransformer` configuration for deployment
-   - Automatically creates `transformer_config.json` from training data
-   - Stores quantile thresholds (95th/75th percentiles) for feature engineering
-   - Saves 30 selected feature names with categorical groupings
-   - Includes timezone mappings for 10 countries
-   - Ensures consistent feature engineering between training and inference
 
-### Model Training & Evaluation
+### Feature Engineering Development
+
+During the exploratory phase, 32 engineered features were created and evaluated:
+- **Temporal**: UTC and local timezone features (hour, day_of_week, is_late_night, etc.)
+- **Amount**: Deviation, ratios, micro/large transaction flags
+- **User Behavior**: Transaction velocity, new account flags, frequency indicators
+- **Geographic**: Country mismatch, high-risk distance, zero distance
+- **Security**: Composite security score from verification flags
+- **Interaction**: Fraud scenario-specific combinations (e.g., new_account_with_promo)
+
+**Feature Selection**: Final selection of **30 features** from 45 available
+- Removed redundant features (UTC features, duplicate country fields)
+- Excluded low-signal features (merchant_category)
+- Prioritized interpretability and fraud scenario alignment
+
+**Production Configuration**: Generates `FraudFeatureTransformer` configuration for deployment
+- Automatically creates `transformer_config.json` from training data
+- Stores quantile thresholds (95th/75th percentiles) for feature engineering
+- Saves 30 selected feature names with categorical groupings
+- Includes timezone mappings for 10 countries
+- Ensures consistent feature engineering between training and inference
+
+### Model Training & Hyperparameter Tuning
 The modeling notebook (`fraud_detection_modeling.ipynb`) contains:
 1. **Data Loading**: Loads raw transaction data and applies `FraudFeatureTransformer` pipeline
    - Applies production feature engineering consistently across train/val/test splits
@@ -224,7 +282,8 @@ Given the 44:1 class imbalance, the project employs:
 - **Threshold tuning** to optimize precision/recall trade-offs
 - **4-fold Stratified CV** for hyperparameter optimization
 
-### Hyperparameter Tuning Features
+**Hyperparameter Tuning Features**
+
 The modeling pipeline includes production-ready tuning capabilities:
 
 **Two-Stage Tuning Approach:**
@@ -260,11 +319,17 @@ The modeling pipeline includes production-ready tuning capabilities:
 - Focus on PR-AUC and stability for model selection
 - Production API latency testing provides definitive performance numbers
 
-## Production Feature Engineering Pipeline
+---
+
+## Production Pipeline
+
+This section covers the production-ready components: the feature engineering transformer, model training script, and performance metrics.
+
+### Feature Engineering Pipeline
 
 The project includes a production-ready feature engineering pipeline (`src/preprocessing/`) designed for deployment. This sklearn-compatible transformer ensures consistent feature engineering between training and inference.
 
-### Architecture Overview
+**Architecture Overview**
 
 **Design Pattern**: Hybrid Class + Config (sklearn-compatible transformer with JSON configuration)
 
@@ -285,9 +350,9 @@ The project includes a production-ready feature engineering pipeline (`src/prepr
    - Temporal, amount, behavior, geographic, security features
    - Fraud scenario-specific interaction features
 
-### Usage
+**Usage**
 
-**Training Workflow**:
+Training Workflow:
 ```python
 from src.preprocessing import FraudFeatureTransformer
 
@@ -300,14 +365,14 @@ X_train = transformer.transform(train_df)
 transformer.save("models/transformer_config.json")
 ```
 
-**Inference Workflow**:
+Inference Workflow:
 ```python
 # Load transformer with saved configuration
 transformer = FraudFeatureTransformer.load("models/transformer_config.json")
 X_new = transformer.transform(new_df)
 ```
 
-**Sklearn Pipeline Integration**:
+Sklearn Pipeline Integration:
 ```python
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
@@ -320,7 +385,7 @@ pipeline.fit(train_df, y_train)
 predictions = pipeline.predict(test_df)
 ```
 
-### Benefits
+**Benefits**
 
 ✅ **Sklearn Pipeline compatible** - Standard fit/transform API
 ✅ **Lightweight** - JSON config (not pickled Python objects)
@@ -329,7 +394,7 @@ predictions = pipeline.predict(test_df)
 ✅ **Fully tested** - 41 passing tests with edge case coverage
 ✅ **Production-ready** - Industry standard pattern
 
-### Configuration File
+**Configuration File**
 
 The `transform_config.json` file stores:
 ```json
@@ -344,11 +409,11 @@ The `transform_config.json` file stores:
 }
 ```
 
-## Feature Engineering Summary
+### Feature Engineering Summary
 
-The project implements comprehensive feature engineering targeting the three specific fraud scenarios:
+This section provides a detailed breakdown of the 30 final features used in production, targeting the three specific fraud scenarios:
 
-### Engineered Features (30 selected from 32 created)
+**Engineered Features (30 selected from 32 created)**
 
 **1. Temporal Features (6) - Local Timezone**
 - `hour_local`, `day_of_week_local`, `month_local`
@@ -385,17 +450,17 @@ The project implements comprehensive feature engineering targeting the three spe
 
 **Total: 30 features + 1 target = 31 columns**
 
-## Model Training
+### Model Training Script
 
 Train the fraud detection model using the provided training script.
 
-### Prerequisites
+**Prerequisites**
 1. Raw transaction data must exist in `data/` directory:
    - `transactions.csv` (download from Kaggle)
 
 **Note:** The training script uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. All feature engineering is performed on-the-fly using the same transformer configuration deployed in the API.
 
-### Training the Model
+**Training the Model**
 
 ```bash
 # Basic training (uses optimal hyperparameters, skips tuning for speed)
@@ -420,9 +485,9 @@ uv run python train.py \
 - `feature_lists.json` - Feature categorization
 - `training_report.txt` - Detailed training summary
 
-## Model Performance
+### Model Performance
 
-### Target Metrics (Production Deployment)
+**Target Metrics (Production Deployment)**
 - **PR-AUC**: > 0.85
 - **ROC-AUC**: > 0.95
 - **F1 Score**: > 0.75
@@ -430,7 +495,7 @@ uv run python train.py \
 - **Precision**: > 0.70 (minimize false positives)
 - **Inference Time**: < 100ms per prediction
 
-### Achieved Results (XGBoost Tuned - Validation Set)
+**Achieved Results (XGBoost Tuned - Validation Set)**
 - **PR-AUC**: 0.8679 ✅ (Target: > 0.85)
 - **ROC-AUC**: 0.9790 ✅ (Target: > 0.95)
 - **F1 Score**: 0.7756 ✅ (Target: > 0.75)
@@ -445,9 +510,15 @@ uv run python train.py \
 - Excellent precision-recall balance for fraud detection
 - Significant improvement over baseline (+31.5% precision, +2.5% PR-AUC)
 
-## Deployment Plan
+---
 
-### Phase 1: Model Development & Feature Engineering ✅ (100% Complete)
+## Deployment
+
+This section covers deployment options, the deployment roadmap, and API usage examples.
+
+### Deployment Plan
+
+**Phase 1: Model Development & Feature Engineering ✅ (100% Complete)**
 - [x] Dataset acquisition and exploration
 - [x] Initial EDA and data quality checks
 - [x] Preprocessing pipeline setup (stratified splits, type conversion)
@@ -467,7 +538,7 @@ uv run python train.py \
 - [x] **Threshold optimization** (Multiple recall targets: 80%, 85%, 90%)
 - [x] **Model persistence and deployment package** (Model, metadata, thresholds, model card)
 
-### Phase 2: API Development ✅ (100% Complete)
+**Phase 2: API Development ✅ (100% Complete)**
 - [x] Create FastAPI application structure
 - [x] Implement prediction endpoint with Pydantic validation
 - [x] Add input validation and comprehensive error handling
@@ -477,7 +548,7 @@ uv run python train.py \
 - [x] Request logging and structured error responses
 - [x] Comprehensive API integration tests (41 test cases)
 
-### Phase 3: Containerization ✅ (100% Complete)
+**Phase 3: Containerization ✅ (100% Complete)**
 - [x] Create Dockerfile with multi-stage build
 - [x] Optimize container image size (<500MB target)
 - [x] Add docker compose for local development
@@ -485,25 +556,25 @@ uv run python train.py \
 - [x] Security hardening (non-root user, health checks)
 - [x] Build context optimization (.dockerignore)
 
-### Phase 4: Production Deployment ✅ (100% Complete)
+**Phase 4: Production Deployment ✅ (100% Complete)**
 - [x] Implement logging and monitoring endpoints
 - [x] Model artifact management and versioning
 - [x] Automated testing (pytest integration)
 - [x] Deploy to cloud platform (Google Cloud Run/AWS/Azure)
 
-### Phase 5: Deployment Automation/Monitoring (Future Work)
+**Phase 5: Deployment Automation/Monitoring (Future Work)**
 - [ ] Set up CI/CD pipeline (GitHub Actions)
 - [ ] Production monitoring dashboard
 - [ ] Model performance tracking and alerting
 - [ ] Model drift detection
 
-## API Deployment
+### API Deployment Options
 
 Deploy the fraud detection model as a production REST API.
 
-### Option 1: Local Development (FastAPI + Uvicorn) ✅
+#### Option 1: Local Development (FastAPI + Uvicorn) ✅
 
-#### 1. Install Dependencies
+**1. Install Dependencies**
 ```bash
 # Using uv (recommended)
 uv sync
@@ -512,12 +583,12 @@ uv sync
 pip install -r requirements.txt
 ```
 
-#### 2. Train Model (if not already trained)
+**2. Train Model (if not already trained)**
 ```bash
 uv run python train.py --skip-tuning
 ```
 
-#### 3. Start API Server
+**3. Start API Server**
 ```bash
 # Development mode with auto-reload
 uv run uvicorn predict:app --reload --host 0.0.0.0 --port 8000
@@ -526,15 +597,15 @@ uv run uvicorn predict:app --reload --host 0.0.0.0 --port 8000
 uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-#### 4. Access API
+**4. Access API**
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
 - **Health Check**: http://localhost:8000/health
-- See the **API Usage (Local Deployment)** section below for additional test commands
+- See the **API Usage Examples** section below for additional test commands
 
-### Option 2: Docker Deployment (Recommended for Production) ✅
+#### Option 2: Docker Deployment (Recommended for Production) ✅
 
-#### 1. Build Docker Image
+**1. Build Docker Image**
 ```bash
 # Build the image (1.5 - 2 minutes)
 docker build -t fraud-detection-api .
@@ -543,7 +614,7 @@ docker build -t fraud-detection-api .
 docker images fraud-detection-api
 ```
 
-#### 2. Run Container
+**2. Run Container**
 ```bash
 # Run with docker
 docker run -d \
@@ -555,8 +626,9 @@ docker run -d \
 docker compose up -d
 ```
 
-#### 3. Verify Deployment
-See the **API Usage (Local Deployment)** section for additional test commands
+**3. Verify Deployment**
+
+See the **API Usage Examples** section for additional test commands
 ```bash
 # Check health
 curl http://localhost:8000/health
@@ -568,9 +640,9 @@ docker logs fraud-detection-api
 docker compose down
 ```
 
-### Option 3: Cloud Deployment ✅
+#### Option 3: Cloud Deployment ✅
 
-#### Google Cloud Run (Serverless, Auto-scaling)
+**Google Cloud Run (Serverless, Auto-scaling)**
 
 **Why Cloud Run?**
 - Serverless architecture with no infrastructure management
@@ -588,7 +660,7 @@ docker compose down
 - Troubleshooting and maintenance
 - Cost estimation
 
-#### Testing the Cloud Deployed API
+**Testing the Cloud Deployed API**
 
 The API is deployed for review, and it can optionally be tested using the commands described below. I've included a few snapshots of the API's docs page to prove that the cloud-hosted API is available and working correctly. The url to the cloud hosted API is required for testing, but it has not been commited to the repo directly. Instead, it is available in the provided snapshots. Just fill in the SERVICE_URL below with the relevant details from the url in the snapshots, then run the commands for testing the API.
 
@@ -663,9 +735,11 @@ uv run curl -X POST "$SERVICE_URL/predict" \
 open "$SERVICE_URL/docs"
 ```
 
-## API Usage (Local Deployment)
+### API Usage Examples
 
-### Prediction Endpoint
+These examples work for both local and cloud deployments. For cloud deployments, replace `http://localhost:8000` with your cloud service URL.
+
+#### Prediction Endpoint
 
 Make fraud predictions for transactions using the `/predict` endpoint.
 
@@ -716,7 +790,7 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_re
 }
 ```
 
-### Threshold Strategies
+#### Threshold Strategies
 
 Choose different risk tolerance levels:
 
@@ -733,7 +807,7 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=conservative_90pc
   -d @transaction.json
 ```
 
-### Health Check
+#### Health Check
 ```bash
 curl http://localhost:8000/health
 ```
@@ -749,7 +823,7 @@ curl http://localhost:8000/health
 }
 ```
 
-### Model Information
+#### Model Information
 ```bash
 curl http://localhost:8000/model/info
 ```
@@ -783,6 +857,8 @@ curl http://localhost:8000/model/info
   "engineered_features_count": 30
 }
 ```
+
+---
 
 ## Testing
 
@@ -825,6 +901,8 @@ uv run pytest tests/ -x  # Stop on first failure
 - Error handling scenarios
 - Threshold strategies
 - Performance validation
+
+---
 
 ## Performance Benchmarking
 
@@ -941,6 +1019,8 @@ uv run locust -f locustfile.py \
 | Server P99 < 100ms | 39.54 ms | ✅ Pass (60% better) |
 | Throughput > 20 RPS | 48.16 RPS | ✅ Pass (140% of target) |
 | Success Rate 100% | 100% | ✅ Pass |
+
+---
 
 ## Contributing
 
