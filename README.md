@@ -66,7 +66,7 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ```
 .
 ├── fraud_detection_EDA_FE.ipynb        # EDA & feature engineering notebook
-├── fraud_detection_modeling.ipynb     # Model training & evaluation notebook
+├── fraud_detection_modeling.ipynb      # Model training & evaluation notebook
 ├── data/                               # Dataset directory (gitignored)
 │   └── transactions.csv                # Raw transaction data from Kaggle
 ├── src/                                # Production source code
@@ -586,9 +586,12 @@ docker compose down
 - Troubleshooting and maintenance
 - Cost estimation
 
-#### Testing the Deployed API
+#### Testing the Cloud Deployed API
 
-Once deployed, you can test the API using the following commands:
+Once deployed, you can test the API using the commands described below. I've included a few snapshots
+of the docs page for the api, which include the url that is required to run the commands.
+
+
 
 ```bash
 # Set the service URL (replace with your actual Cloud Run URL)
