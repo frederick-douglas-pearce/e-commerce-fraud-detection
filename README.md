@@ -284,13 +284,13 @@ transformer.fit(train_df)  # Calculates quantile thresholds
 X_train = transformer.transform(train_df)
 
 # Save configuration for deployment
-transformer.save("models/feature_config.json")
+transformer.save("models/transformer_config.json")
 ```
 
 **Inference Workflow**:
 ```python
 # Load transformer with saved configuration
-transformer = FraudFeatureTransformer.load("models/feature_config.json")
+transformer = FraudFeatureTransformer.load("models/transformer_config.json")
 X_new = transformer.transform(new_df)
 ```
 
@@ -318,7 +318,7 @@ predictions = pipeline.predict(test_df)
 
 ### Configuration File
 
-The `feature_config.json` file stores:
+The `transform_config.json` file stores:
 ```json
 {
   "amount_95th_percentile": 595.97,
