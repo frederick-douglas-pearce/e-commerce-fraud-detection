@@ -468,11 +468,13 @@ The project implements comprehensive feature engineering targeting the three spe
 - [x] Security hardening (non-root user, health checks)
 - [x] Build context optimization (.dockerignore)
 
-### Phase 4: Production Deployment 🚧 (In Progress)
+### Phase 4: Production Deployment ✅ (100% Complete)
 - [x] Implement logging and monitoring endpoints
 - [x] Model artifact management and versioning
 - [x] Automated testing (pytest integration)
-- [ ] Deploy to cloud platform (Google Cloud Run/AWS/Azure)
+- [x] Deploy to cloud platform (Google Cloud Run/AWS/Azure)
+
+### Phase 5: Deployment Automation/Monitoring (Future Work)
 - [ ] Set up CI/CD pipeline (GitHub Actions)
 - [ ] Production monitoring dashboard
 - [ ] Model performance tracking and alerting
@@ -546,6 +548,7 @@ uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --workers 4
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
 - **Health Check**: http://localhost:8000/health
+- See the **API Usage (Local Deployment)** section below for additional test commands
 
 ### Option 2: Docker Deployment (Recommended for Production)
 
@@ -562,7 +565,7 @@ docker images fraud-detection-api
 ```bash
 # Run with docker
 docker run -d \
-  --name fraud-api \
+  --name fraud-detection-api \
   -p 8000:8000 \
   fraud-detection-api
 
@@ -571,12 +574,13 @@ docker compose up -d
 ```
 
 #### 3. Verify Deployment
+See the **API Usage (Local Deployment)** section for additional test commands
 ```bash
 # Check health
 curl http://localhost:8000/health
 
 # View logs
-docker logs fraud-api
+docker logs fraud-detection-api
 
 # Stop container
 docker compose down
@@ -604,8 +608,7 @@ docker compose down
 
 #### Testing the Cloud Deployed API
 
-Once deployed, the API can be tested using the commands described below. The url to the cloud hosted API is required to run the commands, and I've chosen not to commit it to the repo directly. Instead, I've included a few snapshots
-of the docs page for the api that provide proof that the API is working correctly in the cloud, and the images also show the API's url. Fill in the SERVICE_URL below with the relevant details, and then the commands for testing the API should work.
+The API is deployed for review, and it can optionally be tested using the commands described below. I've included a few snapshots of the API's docs page to prove that the cloud-hosted API is available and working correctly. The url to the cloud hosted API is required for testing, but it has not been commited to the repo directly. Instead, it is available in the provided snapshots. Just fill in the SERVICE_URL below with the relevant details from the url in the snapshots, then run the commands for testing the API.
 
 ![API Documentation Overview](images/E-Commerce-Fraud-Detection-API-docs.png)
 *API Documentation - Interactive Swagger UI showing available endpoints*
@@ -617,7 +620,7 @@ of the docs page for the api that provide proof that the API is working correctl
 *Predict Endpoint - Example response with fraud prediction*
 
 ```bash
-# Set the service URL (replace with your actual Cloud Run URL)
+# Set the service URL (replace x values with actual Cloud Run URL ID from snapshots)
 export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uw.a.run.app"
 
 # Test health endpoint
@@ -678,7 +681,7 @@ uv run curl -X POST "$SERVICE_URL/predict" \
 open "$SERVICE_URL/docs"
 ```
 
-## API Usage (Local)
+## API Usage (Local Deployment)
 
 ### Prediction Endpoint
 

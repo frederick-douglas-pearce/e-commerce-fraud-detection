@@ -1,12 +1,10 @@
 {
   "model_info": {
-    "model_name": "XGBoost Fraud Detector",
-    "model_type": "XGBClassifier",
+    "name": "XGBoost Fraud Detector",
     "version": "1.0",
-    "training_date": "2025-11-16",
-    "framework": "xgboost + scikit-learn",
-    "python_version": "3.12+",
-    "note": "Final production model trained on train+val combined, evaluated on test set"
+    "training_date": "2025-11-16T23:55:44.542625",
+    "algorithm": "XGBoost Gradient Boosting",
+    "training_methodology": "GridSearchCV tuning on train \u2192 Retrain on train+val \u2192 Evaluate on test"
   },
   "hyperparameters": {
     "n_estimators": 100,
@@ -18,105 +16,79 @@
     "gamma": 0.6,
     "scale_pos_weight": 8,
     "eval_metric": "aucpr",
-    "random_state": 1
-  },
-  "dataset_info": {
-    "training_samples": 239756,
-    "training_sources": {
-      "original_train": 179817,
-      "original_val": 59939,
-      "combined_total": 239756
-    },
-    "test_samples": 59939,
-    "num_features": 30,
-    "fraud_rate_train_val": 0.02206409850014181,
-    "fraud_rate_test": 0.022055756685964063,
-    "class_imbalance_ratio": 44.32249527410208
+    "random_state": 1,
+    "n_jobs": -1
   },
   "performance": {
-    "validation_set_during_tuning": {
-      "note": "Performance from model trained on train set only (for comparison)",
-      "roc_auc": 0.9789374502056558,
-      "pr_auc": 0.8672345650562535,
-      "f1_score": 0.7769936485532816,
-      "precision": 0.728656518861681,
-      "recall": 0.8321995464852607,
-      "accuracy": 0.9894559468793274
-    },
-    "test_set_final": {
-      "note": "Final performance from model trained on train+val combined",
-      "roc_auc": 0.9765665341027476,
+    "test_set": {
       "pr_auc": 0.8658131748834137,
-      "f1_score": 0.7773826458036984,
+      "roc_auc": 0.9765665341027476,
       "precision": 0.7335570469798658,
       "recall": 0.8267776096822995,
-      "accuracy": 0.9895560486494602
-    },
-    "cross_validation": {
-      "cv_folds": 4,
-      "cv_strategy": "StratifiedKFold",
-      "best_cv_pr_auc": 0.8674635282326,
-      "note": "CV performed on training set only for hyperparameter selection"
+      "f1": 0.7773826458036984
     }
   },
-  "features": {
-    "continuous_numeric": [
-      "account_age_days",
-      "total_transactions_user",
-      "avg_amount_user",
-      "amount",
-      "shipping_distance_km",
-      "hour_local",
-      "day_of_week_local",
-      "month_local",
-      "amount_deviation",
-      "amount_vs_avg_ratio",
-      "transaction_velocity",
-      "security_score"
-    ],
-    "categorical": [
-      "channel",
-      "promo_used",
-      "avs_match",
-      "cvv_result",
-      "three_ds_flag"
-    ],
-    "binary": [
-      "is_weekend_local",
-      "is_late_night_local",
-      "is_business_hours_local",
-      "is_micro_transaction",
-      "is_large_transaction",
-      "is_new_account",
-      "is_high_frequency_user",
-      "country_mismatch",
-      "high_risk_distance",
-      "zero_distance",
-      "new_account_with_promo",
-      "late_night_micro_transaction",
-      "high_value_long_distance"
-    ],
-    "total_count": 30
+  "feature_importance_top10": [
+    {
+      "feature": "account_age_days",
+      "importance": 0.20520181953907013
+    },
+    {
+      "feature": "avs_match",
+      "importance": 0.18137945234775543
+    },
+    {
+      "feature": "security_score",
+      "importance": 0.12754403054714203
+    },
+    {
+      "feature": "shipping_distance_km",
+      "importance": 0.08928526937961578
+    },
+    {
+      "feature": "high_risk_distance",
+      "importance": 0.05694116652011871
+    },
+    {
+      "feature": "amount",
+      "importance": 0.055597491562366486
+    },
+    {
+      "feature": "transaction_velocity",
+      "importance": 0.050256021320819855
+    },
+    {
+      "feature": "amount_deviation",
+      "importance": 0.04394136369228363
+    },
+    {
+      "feature": "country_mismatch",
+      "importance": 0.039319127798080444
+    },
+    {
+      "feature": "amount_vs_avg_ratio",
+      "importance": 0.038832664489746094
+    }
+  ],
+  "threshold_strategies": {
+    "conservative_90pct_recall": {
+      "threshold": 0.26238957047462463,
+      "precision": 0.4554493307839388,
+      "recall": 0.9002267573696145,
+      "target_recall": 0.9
+    },
+    "balanced_85pct_recall": {
+      "threshold": 0.4461546242237091,
+      "precision": 0.6889161053276179,
+      "recall": 0.8503401360544217,
+      "target_recall": 0.85
+    },
+    "aggressive_80pct_recall": {
+      "threshold": 0.7291278839111328,
+      "precision": 0.8552950687146321,
+      "recall": 0.799697656840514,
+      "target_recall": 0.8
+    }
   },
-  "preprocessing": {
-    "categorical_encoding": "OrdinalEncoder (handle_unknown=use_encoded_value)",
-    "numeric_scaling": "None (tree-based model)",
-    "binary_features": "Passthrough (no transformation)"
-  },
-  "optimization": {
-    "optimization_metric": "PR-AUC (Precision-Recall Area Under Curve)",
-    "search_method": "GridSearchCV",
-    "num_combinations_tested": 108,
-    "tuned_parameters": [
-      "classifier__colsample_bytree",
-      "classifier__gamma",
-      "classifier__learning_rate",
-      "classifier__max_depth",
-      "classifier__min_child_weight",
-      "classifier__n_estimators",
-      "classifier__scale_pos_weight",
-      "classifier__subsample"
-    ],
-    "final_model_training": "Retrained on train+val combined with optimal hyperparameters"
-  }
+  "random_seed": 1
 }
