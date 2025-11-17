@@ -157,6 +157,19 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 
 ## Development Workflow
 
+### Virtual Environment and Package Management
+
+```bash
+# Add new dependencies
+uv add <package-name>
+
+# Update dependencies
+uv sync
+
+# Run Jupyter notebook
+uv run --with jupyter jupyter lab
+```
+
 ### Data Analysis & Feature Engineering
 The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
 1. **Data Loading**: Automated Kaggle dataset download with caching
@@ -331,62 +344,6 @@ The `transform_config.json` file stores:
 }
 ```
 
-## Testing
-
-The project includes comprehensive test coverage for the feature engineering pipeline.
-
-### Running Tests
-
-```bash
-# Run all tests
-uv run pytest
-
-# Run with coverage report
-uv run pytest --cov=src/preprocessing --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_preprocessing/test_transformer.py
-
-# Run tests in verbose mode
-uv run pytest -v
-```
-
-### Test Suite Overview
-
-**Total: 41 passing tests**
-
-- **`test_config.py`** (8 tests)
-  - Configuration creation and validation
-  - Save/load round-trip testing
-  - JSON structure verification
-  - Quantile calculation from training data
-
-- **`test_features.py`** (23 tests)
-  - Individual feature function testing
-  - Edge case handling (zero values, division by zero)
-  - Timezone validation (strict UTC enforcement)
-  - Binary feature output verification
-
-- **`test_transformer.py`** (18 tests)
-  - Full pipeline integration
-  - Output shape verification (30 features)
-  - Sklearn Pipeline compatibility
-  - Save/load consistency
-  - Multiple transform consistency
-
-### Development Commands
-
-```bash
-# Add new dependencies
-uv add <package-name>
-
-# Update dependencies
-uv sync
-
-# Run Jupyter notebook
-uv run --with jupyter jupyter lab
-```
-
 ## Feature Engineering Summary
 
 The project implements comprehensive feature engineering targeting the three specific fraud scenarios:
@@ -427,6 +384,66 @@ The project implements comprehensive feature engineering targeting the three spe
 - Categorical (5): channel, promo_used, avs_match, cvv_result, three_ds_flag
 
 **Total: 30 features + 1 target = 31 columns**
+
+## Model Training
+
+Train the fraud detection model using the provided training script.
+
+### Prerequisites
+1. Raw transaction data must exist in `data/` directory:
+   - `transactions.csv` (download from Kaggle)
+
+**Note:** The training script uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. All feature engineering is performed on-the-fly using the same transformer configuration deployed in the API.
+
+### Training the Model
+
+```bash
+# Basic training (uses optimal hyperparameters, skips tuning for speed)
+uv run python train.py --skip-tuning
+
+# Full training with hyperparameter tuning (takes longer)
+uv run python train.py
+
+# Custom training options
+uv run python train.py \
+  --data-dir data \
+  --output-dir models \
+  --random-seed 42 \
+  --verbose
+```
+
+**Output artifacts** (saved to `models/` directory):
+- `xgb_fraud_detector.joblib` - Trained XGBoost model pipeline
+- `transformer_config.json` - Feature transformer configuration (quantile thresholds)
+- `threshold_config.json` - Optimized decision thresholds
+- `model_metadata.json` - Model info, hyperparameters, performance
+- `feature_lists.json` - Feature categorization
+- `training_report.txt` - Detailed training summary
+
+## Model Performance
+
+### Target Metrics (Production Deployment)
+- **PR-AUC**: > 0.85
+- **ROC-AUC**: > 0.95
+- **F1 Score**: > 0.75
+- **Recall**: > 0.80 (prioritize catching fraud)
+- **Precision**: > 0.70 (minimize false positives)
+- **Inference Time**: < 100ms per prediction
+
+### Achieved Results (XGBoost Tuned - Validation Set)
+- **PR-AUC**: 0.8679 ✅ (Target: > 0.85)
+- **ROC-AUC**: 0.9790 ✅ (Target: > 0.95)
+- **F1 Score**: 0.7756 ✅ (Target: > 0.75)
+- **Recall**: 0.8360 ✅ (Target: > 0.80)
+- **Precision**: 0.7233 ✅ (Target: > 0.70)
+- **Inference Time (P95)**: 33.84ms ✅ (Target: < 50ms)
+- **Inference Time (P99)**: 39.54ms ✅ (Target: < 100ms)
+
+**Model Details:**
+- Best hyperparameters: n_estimators=100, max_depth=4, learning_rate=0.1, scale_pos_weight=8
+- Confusion Matrix: TN=58,206 | FP=410 | FN=222 | TP=1,101
+- Excellent precision-recall balance for fraud detection
+- Significant improvement over baseline (+31.5% precision, +2.5% PR-AUC)
 
 ## Deployment Plan
 
@@ -480,46 +497,11 @@ The project implements comprehensive feature engineering targeting the three spe
 - [ ] Model performance tracking and alerting
 - [ ] Model drift detection
 
-## Model Training
-
-Train the fraud detection model using the provided training script.
-
-### Prerequisites
-1. Raw transaction data must exist in `data/` directory:
-   - `transactions.csv` (download from Kaggle)
-
-**Note:** The training script uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. All feature engineering is performed on-the-fly using the same transformer configuration deployed in the API.
-
-### Training the Model
-
-```bash
-# Basic training (uses optimal hyperparameters, skips tuning for speed)
-uv run python train.py --skip-tuning
-
-# Full training with hyperparameter tuning (takes longer)
-uv run python train.py
-
-# Custom training options
-uv run python train.py \
-  --data-dir data \
-  --output-dir models \
-  --random-seed 42 \
-  --verbose
-```
-
-**Output artifacts** (saved to `models/` directory):
-- `xgb_fraud_detector.joblib` - Trained XGBoost model pipeline
-- `transformer_config.json` - Feature transformer configuration (quantile thresholds)
-- `threshold_config.json` - Optimized decision thresholds
-- `model_metadata.json` - Model info, hyperparameters, performance
-- `feature_lists.json` - Feature categorization
-- `training_report.txt` - Detailed training summary
-
 ## API Deployment
 
 Deploy the fraud detection model as a production REST API.
 
-### Option 1: Local Development (FastAPI + Uvicorn)
+### Option 1: Local Development (FastAPI + Uvicorn) ✅
 
 #### 1. Install Dependencies
 ```bash
@@ -550,7 +532,7 @@ uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --workers 4
 - **Health Check**: http://localhost:8000/health
 - See the **API Usage (Local Deployment)** section below for additional test commands
 
-### Option 2: Docker Deployment (Recommended for Production)
+### Option 2: Docker Deployment (Recommended for Production) ✅
 
 #### 1. Build Docker Image
 ```bash
@@ -586,7 +568,7 @@ docker logs fraud-detection-api
 docker compose down
 ```
 
-### Option 3: Cloud Deployment
+### Option 3: Cloud Deployment ✅
 
 #### Google Cloud Run (Serverless, Auto-scaling)
 
@@ -804,39 +786,36 @@ curl http://localhost:8000/model/info
 
 ## Testing
 
-Run comprehensive test suite to verify model and API functionality:
+Run comprehensive test suite to verify feature engineering pipeline and API functionality:
 
 ### Unit Tests (Preprocessing Pipeline)
 ```bash
 # Run all preprocessing tests
-pytest tests/test_preprocessing/ -v
+uv run pytest tests/test_preprocessing/ -v
 
 # Run specific test file
-pytest tests/test_preprocessing/test_transformer.py -v
-
-# Run with coverage
-pytest tests/test_preprocessing/ --cov=src/preprocessing --cov-report=html
+uv run pytest tests/test_preprocessing/test_transformer.py -v
 ```
 
 ### Integration Tests (API)
 ```bash
 # Run all API tests
-pytest tests/test_api.py -v
+uv run pytest tests/test_api.py -v
 
 # Run specific test class
-pytest tests/test_api.py::TestPredictEndpoint -v
+uv run pytest tests/test_api.py::TestPredictEndpoint -v
 
 # Run with detailed output
-pytest tests/test_api.py -v --tb=short
+uv run pytest tests/test_api.py -v --tb=short
 ```
 
 ### All Tests
 ```bash
 # Run entire test suite
-pytest tests/ -v
+uv run pytest tests/ -v
 
 # Quick smoke test
-pytest tests/ -x  # Stop on first failure
+uv run pytest tests/ -x  # Stop on first failure
 ```
 
 **Test Coverage:**
@@ -962,31 +941,6 @@ uv run locust -f locustfile.py \
 | Server P99 < 100ms | 39.54 ms | ✅ Pass (60% better) |
 | Throughput > 20 RPS | 48.16 RPS | ✅ Pass (140% of target) |
 | Success Rate 100% | 100% | ✅ Pass |
-
-## Model Performance
-
-### Target Metrics (Production Deployment)
-- **PR-AUC**: > 0.85
-- **ROC-AUC**: > 0.95
-- **F1 Score**: > 0.75
-- **Recall**: > 0.80 (prioritize catching fraud)
-- **Precision**: > 0.70 (minimize false positives)
-- **Inference Time**: < 100ms per prediction
-
-### Achieved Results (XGBoost Tuned - Validation Set)
-- **PR-AUC**: 0.8679 ✅ (Target: > 0.85)
-- **ROC-AUC**: 0.9790 ✅ (Target: > 0.95)
-- **F1 Score**: 0.7756 ✅ (Target: > 0.75)
-- **Recall**: 0.8360 ✅ (Target: > 0.80)
-- **Precision**: 0.7233 ✅ (Target: > 0.70)
-- **Inference Time (P95)**: 33.84ms ✅ (Target: < 50ms)
-- **Inference Time (P99)**: 39.54ms ✅ (Target: < 100ms)
-
-**Model Details:**
-- Best hyperparameters: n_estimators=100, max_depth=4, learning_rate=0.1, scale_pos_weight=8
-- Confusion Matrix: TN=58,206 | FP=410 | FN=222 | TP=1,101
-- Excellent precision-recall balance for fraud detection
-- Significant improvement over baseline (+31.5% precision, +2.5% PR-AUC)
 
 ## Contributing
 
