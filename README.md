@@ -736,7 +736,7 @@ curl $SERVICE_URL/health | python -m json.tool
 #   "timestamp": "2025-11-16T..."
 # }
 
-# Test prediction endpoint
+# Test prediction endpoint: "is_fraud": false
 curl -X POST "$SERVICE_URL/predict" \
   -H "Content-Type: application/json" \
   -d '{
@@ -754,6 +754,27 @@ curl -X POST "$SERVICE_URL/predict" \
     "cvv_result": 1,
     "three_ds_flag": 1,
     "shipping_distance_km": 12.5,
+    "transaction_time": "2024-01-15 14:30:00"
+  }' | python -m json.tool
+
+# Test prediction endpoint: "is_fraud": true
+curl -X POST "$SERVICE_URL/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 12345,
+    "account_age_days": 180,
+    "total_transactions_user": 25,
+    "avg_amount_user": 250.50,
+    "amount": 850.75,
+    "country": "US",
+    "bin_country": "US",
+    "channel": "web",
+    "merchant_category": "retail",
+    "promo_used": 0,
+    "avs_match": 0,
+    "cvv_result": 0,
+    "three_ds_flag": 0,
+    "shipping_distance_km": 1222.5,
     "transaction_time": "2024-01-15 14:30:00"
   }' | python -m json.tool
 
@@ -845,9 +866,15 @@ gcloud run services describe fraud-detection-api \
   sed 's|https://||' | \
   xargs -I {} open "https://console.cloud.google.com/run/detail/us-west1/fraud-detection-api/metrics?project=$PROJECT_ID"
 
-# Or view in terminal
-gcloud monitoring time-series list \
-  --filter 'metric.type="run.googleapis.com/request_count"'
+# Or view service details in terminal (includes basic metrics)
+gcloud run services describe fraud-detection-api \
+  --region us-west1 \
+  --format yaml
+
+# View recent request logs with activity information
+gcloud run services logs read fraud-detection-api \
+  --region us-west1 \
+  --limit 50
 ```
 
 **Update Deployment:**
