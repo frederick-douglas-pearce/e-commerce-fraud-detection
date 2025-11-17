@@ -301,12 +301,12 @@ async def get_model_info():
     ]
 
     return ModelInfoResponse(
-        model_name=model_metadata["model_info"]["model_name"],
+        model_name=model_metadata["model_info"]["name"],
         version=model_metadata["model_info"]["version"],
         training_date=model_metadata["model_info"]["training_date"],
-        algorithm=model_metadata["model_info"]["model_type"],
-        performance=model_metadata["performance"]["test_set_final"],
-        threshold_strategies=threshold_config["optimized_thresholds"],
+        algorithm=model_metadata["model_info"]["algorithm"],
+        performance=model_metadata["performance"]["test_set"],
+        threshold_strategies=threshold_config,
         raw_features_required=raw_features,
         engineered_features_count=len(feature_lists["all_features"]),
     )
@@ -360,7 +360,7 @@ async def predict_fraud(
         fraud_probability = float(model.predict_proba(engineered_features)[0, 1])
 
         # Apply threshold strategy
-        threshold_info = threshold_config["optimized_thresholds"][threshold_strategy]
+        threshold_info = threshold_config[threshold_strategy]
         threshold_value = threshold_info["threshold"]
         is_fraud = fraud_probability >= threshold_value
 
