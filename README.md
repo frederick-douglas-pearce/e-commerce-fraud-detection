@@ -591,7 +591,14 @@ docker compose down
 Once deployed, you can test the API using the commands described below. I've included a few snapshots
 of the docs page for the api, which include the url that is required to run the commands.
 
+![API Documentation Overview](images/E-Commerce-Fraud-Detection-API-docs.png)
+*API Documentation - Interactive Swagger UI showing available endpoints*
 
+![Predict Endpoint Request](images/E-Commerce-Fraud-Prediction-API-docs-predict.png)
+*Predict Endpoint - Example request with transaction data*
+
+![Predict Endpoint Response](images/E-Commerce-Fraud-Prediction-API-docs-response.png)
+*Predict Endpoint - Example response with fraud prediction*
 
 ```bash
 # Set the service URL (replace with your actual Cloud Run URL)
