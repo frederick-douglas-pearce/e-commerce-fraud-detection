@@ -67,6 +67,8 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 .
 ├── fraud_detection_EDA_FE.ipynb        # EDA & feature engineering notebook
 ├── fraud_detection_modeling.ipynb      # Model training & evaluation notebook
+├── train.py                            # Model training script
+├── predict.py                          # FastAPI prediction service
 ├── data/                               # Dataset directory (gitignored)
 │   └── transactions.csv                # Raw transaction data from Kaggle
 ├── src/                                # Production source code
@@ -77,19 +79,33 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │       └── __init__.py                 # Package exports
 ├── tests/                              # Test suite (41 passing tests)
 │   ├── conftest.py                     # Shared pytest fixtures
+│   ├── test_api.py                     # API integration tests
 │   └── test_preprocessing/             # Preprocessing tests
 │       ├── test_config.py              # FeatureConfig tests (8 tests)
 │       ├── test_features.py            # Feature function tests (23 tests)
 │       └── test_transformer.py         # Transformer integration tests (18 tests)
-│   ├── test_api.py                     # Integration tests for Fraud Detection API.
-├── models/                             # Model artifacts
-│   └── feature_config.json             # Training-time configuration (tracked in git)
+├── models/                             # Model artifacts (tracked in git)
+│   ├── xgb_fraud_detector.joblib       # Trained XGBoost model (~156KB)
+│   ├── transformer_config.json         # Feature engineering configuration
+│   ├── model_metadata.json             # Model version, hyperparameters, metrics
+│   ├── threshold_config.json           # Optimized decision thresholds
+│   ├── feature_lists.json              # Feature names and categorization
+│   ├── training_report.txt             # Training summary and results
+│   └── logs/                           # Hyperparameter tuning logs
+│       ├── *.csv                       # Cross-validation results
+│       └── *.log                       # Tuning summaries
+├── images/                             # Screenshots and documentation images
+│   └── *.png                           # API documentation screenshots
 ├── benchmark.py                        # Performance benchmarking script
 ├── locustfile.py                       # Load testing configuration (Locust)
-├── pyproject.toml                      # Python dependencies
+├── Dockerfile                          # Container image definition
+├── docker-compose.yml                  # Local Docker deployment
+├── requirements.txt                    # Python dependencies (pip format)
+├── pyproject.toml                      # Python dependencies (uv format)
 ├── uv.lock                             # Locked dependency versions
 ├── .gitignore                          # Git exclusions
 ├── claude.md                           # Project context for Claude Code
+├── GCP_DEPLOYMENT.md                   # Google Cloud Run deployment guide
 └── README.md                           # This file
 ```
 
@@ -588,8 +604,8 @@ docker compose down
 
 #### Testing the Cloud Deployed API
 
-Once deployed, you can test the API using the commands described below. I've included a few snapshots
-of the docs page for the api, which include the url that is required to run the commands.
+Once deployed, the API can be tested using the commands described below. The url to the cloud hosted API is required to run the commands, and I've chosen not to commit it to the repo directly. Instead, I've included a few snapshots
+of the docs page for the api that provide proof that the API is working correctly in the cloud, and the images also show the API's url. Fill in the SERVICE_URL below with the relevant details, and then the commands for testing the API should work.
 
 ![API Documentation Overview](images/E-Commerce-Fraud-Detection-API-docs.png)
 *API Documentation - Interactive Swagger UI showing available endpoints*
@@ -602,10 +618,10 @@ of the docs page for the api, which include the url that is required to run the 
 
 ```bash
 # Set the service URL (replace with your actual Cloud Run URL)
-export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uc.a.run.app"
+export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uw.a.run.app"
 
 # Test health endpoint
-curl $SERVICE_URL/health | python -m json.tool
+uv run curl $SERVICE_URL/health | python -m json.tool
 
 # Expected response:
 # {
@@ -617,7 +633,7 @@ curl $SERVICE_URL/health | python -m json.tool
 # }
 
 # Test prediction endpoint - Normal transaction
-curl -X POST "$SERVICE_URL/predict" \
+uv run curl -X POST "$SERVICE_URL/predict" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 12345,
@@ -638,7 +654,7 @@ curl -X POST "$SERVICE_URL/predict" \
   }' | python -m json.tool
 
 # Test prediction endpoint - Suspicious transaction
-curl -X POST "$SERVICE_URL/predict" \
+uv run curl -X POST "$SERVICE_URL/predict" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 12345,
