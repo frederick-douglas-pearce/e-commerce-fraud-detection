@@ -12,7 +12,7 @@ from src.preprocessing.features import get_country_timezone_mapping, get_final_f
 def test_feature_config_creation(sample_config):
     """Test that FeatureConfig can be created with all required fields."""
     assert sample_config.amount_95th_percentile == 180.0
-    assert sample_config.total_transactions_75th_percentile == 75.0
+    assert sample_config.total_transactions_75th_percentile == 75
     assert sample_config.shipping_distance_75th_percentile == 500.0
     assert sample_config.date_col == 'transaction_time'
     assert sample_config.country_col == 'country'
@@ -27,7 +27,7 @@ def test_feature_config_from_training_data(sample_raw_df_utc):
 
     # Check that quantiles are calculated
     assert isinstance(config.amount_95th_percentile, float)
-    assert isinstance(config.total_transactions_75th_percentile, float)
+    assert isinstance(config.total_transactions_75th_percentile, int)
     assert isinstance(config.shipping_distance_75th_percentile, float)
 
     # Check that quantiles are reasonable

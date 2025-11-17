@@ -71,7 +71,7 @@ def sample_config():
     """
     return FeatureConfig(
         amount_95th_percentile=180.0,
-        total_transactions_75th_percentile=75.0,
+        total_transactions_75th_percentile=75,
         shipping_distance_75th_percentile=500.0,
         timezone_mapping=get_country_timezone_mapping(),
         final_features=get_final_feature_names(),
