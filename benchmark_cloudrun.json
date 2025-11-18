@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "timestamp": "2025-11-17T23:57:33.649350",
+    "base_url": "https://fraud-detection-api-mii4iqwrcq-uw.a.run.app",
+    "iterations": 500,
+    "concurrent_users": 20
+  },
+  "health_check": {
+    "status": "healthy",
+    "model_loaded": true,
+    "model_version": "1.0"
+  },
+  "cold_start": {
+    "server_processing_ms": 210.89,
+    "end_to_end_ms": 470.76,
+    "network_overhead_ms": 259.87
+  },
+  "single_request": {
+    "total_requests": 500,
+    "successful_requests": 500,
+    "success_rate": 100.0,
+    "server_processing": {
+      "mean_ms": 32.31,
+      "median_ms": 31.59,
+      "p95_ms": 36.4,
+      "p99_ms": 40.52,
+      "min_ms": 29.02,
+      "max_ms": 90.95
+    },
+    "end_to_end": {
+      "mean_ms": 162.49,
+      "median_ms": 154.49,
+      "p95_ms": 226.87,
+      "p99_ms": 252.56,
+      "min_ms": 108.72,
+      "max_ms": 261.26
+    },
+    "network_overhead": {
+      "mean_ms": 130.18,
+      "median_ms": 121.97
+    }
+  },
+  "concurrent_requests": {
+    "concurrent_users": 20,
+    "total_requests": 500,
+    "successful_requests": 500,
+    "success_rate": 100.0,
+    "total_time_seconds": 20.34,
+    "throughput_rps": 24.58,
+    "server_processing": {
+      "mean_ms": 37.8,
+      "median_ms": 33.1,
+      "p95_ms": 53.52,
+      "p99_ms": 56.61
+    },
+    "end_to_end": {
+      "mean_ms": 797.53,
+      "median_ms": 796.51,
+      "p95_ms": 853.28,
+      "p99_ms": 1001.01
+    }
+  }
+}
