@@ -179,7 +179,7 @@ echo "Service deployed at: $SERVICE_URL"
 
 ```bash
 # Test health endpoint
-curl $SERVICE_URL/health | python -m json.tool
+uv run curl $SERVICE_URL/health | python -m json.tool
 
 # Expected response:
 # {
@@ -191,7 +191,7 @@ curl $SERVICE_URL/health | python -m json.tool
 # }
 
 # Test prediction endpoint: "is_fraud": false
-curl -X POST "$SERVICE_URL/predict" \
+uv run curl -X POST "$SERVICE_URL/predict" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 12345,
@@ -212,7 +212,7 @@ curl -X POST "$SERVICE_URL/predict" \
   }' | python -m json.tool
 
 # Test prediction endpoint: "is_fraud": true
-curl -X POST "$SERVICE_URL/predict" \
+uv run curl -X POST "$SERVICE_URL/predict" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 12345,
@@ -265,7 +265,7 @@ gcloud run services add-iam-policy-binding fraud-detection-api \
 gcloud auth print-identity-token
 
 # Use token in requests
-curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+uv run curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
   $SERVICE_URL/health
 ```
 
