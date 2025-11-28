@@ -1,0 +1,44 @@
+================================================================================
+BIAS-VARIANCE DIAGNOSTIC REPORT
+E-Commerce Fraud Detection Models
+================================================================================
+
+Logistic Regression
+-------------------
+Training PR-AUC:     0.6433
+Validation PR-AUC:   0.6530
+Train-Val Gap:       -0.0097 (-1.5%)
+Diagnosis:           ✓ Good fit
+
+Recommendations:
+  • Good bias-variance tradeoff
+
+Random Forest
+-------------
+Training PR-AUC:     0.9752
+Validation PR-AUC:   0.8552
+Train-Val Gap:       0.1200 (12.3%)
+Diagnosis:           ⚠️  HIGH VARIANCE (Moderate Overfitting)
+
+Recommendations:
+  • Model is overfitting
+  • Consider: stronger regularization, early stopping, more data
+
+XGBoost
+-------
+Training PR-AUC:     0.8788
+Validation PR-AUC:   0.8680
+Train-Val Gap:       0.0108 (1.2%)
+Diagnosis:           ✓ Good fit
+
+Recommendations:
+  • Good bias-variance tradeoff
+
+XGBoost Iteration Analysis:
+  • Optimal stopping point: ~143 iterations
+  • Current n_estimators in tuned model may need adjustment
+
+================================================================================
+
+OVERALL: Best model is XGBoost
+================================================================================

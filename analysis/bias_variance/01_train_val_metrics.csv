@@ -1,0 +1,7 @@
+model,dataset,pr_auc
+Logistic Regression,Train,0.6433011828846387
+Logistic Regression,Validation,0.6529997798987466
+Random Forest,Train,0.9752208534136677
+Random Forest,Validation,0.8552052183225686
+XGBoost,Train,0.8788365848884623
+XGBoost,Validation,0.8680025978377593
