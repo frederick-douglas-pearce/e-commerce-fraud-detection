@@ -228,16 +228,26 @@ def load_best_params_from_cv():
 
 def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_params=True):
     """
-    Compare training vs validation performance.
+    Compare training vs validation performance using cross-validation.
+    Uses 4-fold stratified CV to match GridSearchCV methodology.
     If use_tuned_params=True, loads best params from CV results.
     Otherwise uses baseline parameters.
     """
     print("\n" + "="*80)
-    print("1. TRAIN-VALIDATION GAP ANALYSIS")
+    print("1. TRAIN-VALIDATION GAP ANALYSIS (4-FOLD CV)")
     print("="*80)
+    print("NOTE: Using cross-validation (not single split) for robust gap estimates")
+    print("      matching GridSearchCV methodology")
 
     logistic_preprocessor, tree_preprocessor = create_preprocessors()
-    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
+
+    # Combine train and val for CV (to match GridSearchCV data)
+    X_train_val = pd.concat([X_train, X_val])
+    y_train_val = pd.concat([y_train, y_val])
+    scale_pos_weight = (y_train_val == 0).sum() / (y_train_val == 1).sum()
+
+    # Use same CV strategy as GridSearchCV
+    cv_strategy = StratifiedKFold(n_splits=4, shuffle=True, random_state=RANDOM_SEED)
 
     # Load tuned parameters if requested
     tuned_params = None
@@ -248,22 +258,50 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
         print("\nUsing baseline hyperparameters (no tuning)")
 
     results = []
+    fold_details = []
 
     # Logistic Regression (no tuning - always baseline)
-    print("\nTraining Logistic Regression...")
+    print("\nTraining Logistic Regression with 4-fold CV...")
     lr = Pipeline([
         ('preprocessor', logistic_preprocessor),
         ('classifier', LogisticRegression(class_weight='balanced', max_iter=1000, random_state=RANDOM_SEED))
     ])
-    lr.fit(X_train, y_train)
 
-    lr_train_pr = average_precision_score(y_train, lr.predict_proba(X_train)[:, 1])
-    lr_val_pr = average_precision_score(y_val, lr.predict_proba(X_val)[:, 1])
-    results.append({'model': 'Logistic Regression', 'dataset': 'Train', 'pr_auc': lr_train_pr})
-    results.append({'model': 'Logistic Regression', 'dataset': 'Validation', 'pr_auc': lr_val_pr})
+    # Perform CV to get train and val scores for each fold
+    lr_train_scores = []
+    lr_val_scores = []
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        lr.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, lr.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, lr.predict_proba(X_fold_val)[:, 1])
+        lr_train_scores.append(train_score)
+        lr_val_scores.append(val_score)
+
+        fold_details.append({
+            'model': 'Logistic Regression',
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+    lr_train_pr = np.mean(lr_train_scores)
+    lr_val_pr = np.mean(lr_val_scores)
+    lr_train_std = np.std(lr_train_scores)
+    lr_val_std = np.std(lr_val_scores)
+
+    results.append({'model': 'Logistic Regression', 'dataset': 'Train', 'pr_auc': lr_train_pr, 'std': lr_train_std})
+    results.append({'model': 'Logistic Regression', 'dataset': 'Validation', 'pr_auc': lr_val_pr, 'std': lr_val_std})
+    print(f"  Train PR-AUC: {lr_train_pr:.4f} ± {lr_train_std:.4f}")
+    print(f"  Val PR-AUC:   {lr_val_pr:.4f} ± {lr_val_std:.4f}")
 
     # Random Forest - use tuned params if available
-    print("Training Random Forest...")
+    print("\nTraining Random Forest with 4-fold CV...")
     if tuned_params and tuned_params['rf']:
         rf_params = tuned_params['rf']
         print(f"  Using tuned params: n_estimators={rf_params['n_estimators']}, max_depth={rf_params['max_depth']}, "
@@ -289,15 +327,42 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
                 n_estimators=100, class_weight='balanced', random_state=RANDOM_SEED, n_jobs=-1
             ))
         ])
-    rf.fit(X_train, y_train)
 
-    rf_train_pr = average_precision_score(y_train, rf.predict_proba(X_train)[:, 1])
-    rf_val_pr = average_precision_score(y_val, rf.predict_proba(X_val)[:, 1])
-    results.append({'model': 'Random Forest', 'dataset': 'Train', 'pr_auc': rf_train_pr})
-    results.append({'model': 'Random Forest', 'dataset': 'Validation', 'pr_auc': rf_val_pr})
+    # Perform CV
+    rf_train_scores = []
+    rf_val_scores = []
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        rf.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, rf.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, rf.predict_proba(X_fold_val)[:, 1])
+        rf_train_scores.append(train_score)
+        rf_val_scores.append(val_score)
+
+        fold_details.append({
+            'model': 'Random Forest',
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+    rf_train_pr = np.mean(rf_train_scores)
+    rf_val_pr = np.mean(rf_val_scores)
+    rf_train_std = np.std(rf_train_scores)
+    rf_val_std = np.std(rf_val_scores)
+
+    results.append({'model': 'Random Forest', 'dataset': 'Train', 'pr_auc': rf_train_pr, 'std': rf_train_std})
+    results.append({'model': 'Random Forest', 'dataset': 'Validation', 'pr_auc': rf_val_pr, 'std': rf_val_std})
+    print(f"  Train PR-AUC: {rf_train_pr:.4f} ± {rf_train_std:.4f}")
+    print(f"  Val PR-AUC:   {rf_val_pr:.4f} ± {rf_val_std:.4f}")
 
     # XGBoost - use tuned params if available
-    print("Training XGBoost...")
+    print("\nTraining XGBoost with 4-fold CV...")
     if tuned_params and tuned_params['xgb']:
         xgb_params = tuned_params['xgb']
         print(f"  Using tuned params: n_estimators={xgb_params['n_estimators']}, max_depth={xgb_params['max_depth']}, "
@@ -321,7 +386,7 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
                 scale_pos_weight=xgb_params['scale_pos_weight'],
                 random_state=RANDOM_SEED,
                 n_jobs=-1,
-                eval_metric='logloss'
+                eval_metric='aucpr'
             ))
         ])
     else:
@@ -330,38 +395,77 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
             ('preprocessor', tree_preprocessor),
             ('classifier', xgb.XGBClassifier(
                 n_estimators=100, scale_pos_weight=scale_pos_weight,
-                random_state=RANDOM_SEED, n_jobs=-1, eval_metric='logloss'
+                random_state=RANDOM_SEED, n_jobs=-1, eval_metric='aucpr'
             ))
         ])
-    xgb_model.fit(X_train, y_train)
 
-    xgb_train_pr = average_precision_score(y_train, xgb_model.predict_proba(X_train)[:, 1])
-    xgb_val_pr = average_precision_score(y_val, xgb_model.predict_proba(X_val)[:, 1])
-    results.append({'model': 'XGBoost', 'dataset': 'Train', 'pr_auc': xgb_train_pr})
-    results.append({'model': 'XGBoost', 'dataset': 'Validation', 'pr_auc': xgb_val_pr})
+    # Perform CV
+    xgb_train_scores = []
+    xgb_val_scores = []
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        xgb_model.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, xgb_model.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, xgb_model.predict_proba(X_fold_val)[:, 1])
+        xgb_train_scores.append(train_score)
+        xgb_val_scores.append(val_score)
+
+        fold_details.append({
+            'model': 'XGBoost',
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+    xgb_train_pr = np.mean(xgb_train_scores)
+    xgb_val_pr = np.mean(xgb_val_scores)
+    xgb_train_std = np.std(xgb_train_scores)
+    xgb_val_std = np.std(xgb_val_scores)
+
+    results.append({'model': 'XGBoost', 'dataset': 'Train', 'pr_auc': xgb_train_pr, 'std': xgb_train_std})
+    results.append({'model': 'XGBoost', 'dataset': 'Validation', 'pr_auc': xgb_val_pr, 'std': xgb_val_std})
+    print(f"  Train PR-AUC: {xgb_train_pr:.4f} ± {xgb_train_std:.4f}")
+    print(f"  Val PR-AUC:   {xgb_val_pr:.4f} ± {xgb_val_std:.4f}")
 
     # Analyze gaps
     df_results = pd.DataFrame(results)
+    df_fold_details = pd.DataFrame(fold_details)
 
     print("\n" + "-"*80)
-    print("Train vs Validation Performance (PR-AUC)")
+    print("Train vs Validation Performance (PR-AUC) - 4-FOLD CV AVERAGE")
     print("-"*80)
+    print("NOTE: These gaps are averaged across 4 folds, matching GridSearchCV methodology")
 
     gap_summary = []
     for model_name in ['Logistic Regression', 'Random Forest', 'XGBoost']:
-        train_score = df_results[(df_results['model'] == model_name) & (df_results['dataset'] == 'Train')]['pr_auc'].values[0]
-        val_score = df_results[(df_results['model'] == model_name) & (df_results['dataset'] == 'Validation')]['pr_auc'].values[0]
+        train_row = df_results[(df_results['model'] == model_name) & (df_results['dataset'] == 'Train')].iloc[0]
+        val_row = df_results[(df_results['model'] == model_name) & (df_results['dataset'] == 'Validation')].iloc[0]
+
+        train_score = train_row['pr_auc']
+        val_score = val_row['pr_auc']
+        train_std = train_row['std']
+        val_std = val_row['std']
+
         gap = train_score - val_score
         gap_pct = (gap / train_score) * 100
 
         print(f"\n{model_name}:")
-        print(f"  Train PR-AUC:      {train_score:.4f}")
-        print(f"  Validation PR-AUC: {val_score:.4f}")
+        print(f"  Train PR-AUC:      {train_score:.4f} ± {train_std:.4f}")
+        print(f"  Validation PR-AUC: {val_score:.4f} ± {val_std:.4f}")
         print(f"  Gap:               {gap:.4f} ({gap_pct:.1f}%)")
 
-        if gap > 0.15:
+        # Calculate gap across folds for more robust diagnosis
+        fold_gaps = df_fold_details[df_fold_details['model'] == model_name]['gap'].values
+        avg_fold_gap = np.mean(fold_gaps)
+
+        if avg_fold_gap > 0.15:
             diagnosis = "⚠️  HIGH VARIANCE (Severe Overfitting)"
-        elif gap > 0.10:
+        elif avg_fold_gap > 0.10:
             diagnosis = "⚠️  HIGH VARIANCE (Moderate Overfitting)"
         elif train_score < 0.3 and val_score < 0.3:
             diagnosis = "⚠️  HIGH BIAS (Underfitting)"
@@ -372,7 +476,9 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
         gap_summary.append({
             'model': model_name,
             'train_pr_auc': train_score,
+            'train_std': train_std,
             'val_pr_auc': val_score,
+            'val_std': val_std,
             'gap': gap,
             'gap_pct': gap_pct,
             'diagnosis': diagnosis
@@ -415,6 +521,8 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 
     df_results.to_csv(OUTPUT_DIR / '01_train_val_metrics.csv', index=False)
     df_gap.to_csv(OUTPUT_DIR / '01_gap_summary.csv', index=False)
+    df_fold_details.to_csv(OUTPUT_DIR / '01_fold_details.csv', index=False)
+    print(f"\n✓ Saved fold-by-fold details: {OUTPUT_DIR / '01_fold_details.csv'}")
 
     return df_gap
 
@@ -651,8 +759,10 @@ def generate_summary(gap_df, best_iter):
 
     if best_iter:
         report.append(f"\nXGBoost Iteration Analysis:")
-        report.append(f"  • Optimal stopping point: ~{best_iter} iterations")
-        report.append(f"  • Current n_estimators in tuned model may need adjustment")
+        report.append(f"  • Single-split validation peaks at iteration {best_iter}")
+        report.append(f"  • However, GridSearchCV's 4-fold average is more reliable")
+        report.append(f"  • Recommendation: Trust GridSearchCV's n_estimators from tuning")
+        report.append(f"  • Single-split peaks can vary due to random data split")
 
     report.append("\n" + "="*80)
     best_model = gap_df.loc[gap_df['val_pr_auc'].idxmax(), 'model']
