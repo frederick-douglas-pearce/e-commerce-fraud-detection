@@ -90,16 +90,18 @@ class ModelConfig:
         "learning_rate": 0.1,
         "subsample": 0.9,
         "colsample_bytree": 0.9,
-        "min_child_weight": 5,
-        "gamma": 0.6,
+        "min_child_weight": 7,
+        "gamma": 0.7,
+        'reg_alpha': 0.0,
+        'reg_lambda': 1.0,
         "scale_pos_weight": 8,
         "eval_metric": "aucpr",
     }
 
     FALLBACK_RANDOM_FOREST_PARAMS = {
-        "n_estimators": 500,
+        "n_estimators": 400,
         "max_depth": 20,
-        "min_samples_split": 5,
+        "min_samples_split": 10,
         "min_samples_leaf": 5,
         "max_features": "sqrt",
         "class_weight": "balanced_subsample"
@@ -120,11 +122,11 @@ class ModelConfig:
     }
 
     DEFAULT_RANDOM_FOREST_PARAM_GRID = {
-        'classifier__n_estimators': [300, 500, 700],
-        'classifier__max_depth': [15, 20, 25],
-        'classifier__min_samples_split': [5, 10],
-        'classifier__min_samples_leaf': [2, 5],
-        'classifier__max_features': ['sqrt', 'log2'],
+        'classifier__n_estimators': [350, 400, 450],
+        'classifier__max_depth': [15, 20],
+        'classifier__min_samples_split': [10],
+        'classifier__min_samples_leaf': [5],
+        'classifier__max_features': ['sqrt'],
         'classifier__class_weight': ['balanced_subsample']
     }
 

@@ -1,19 +1,19 @@
 {
   "conservative_90pct_recall": {
-    "threshold": 0.26319262385368347,
-    "precision": 0.45614707008808886,
+    "threshold": 0.2624581754207611,
+    "precision": 0.46127033307513554,
     "recall": 0.9002267573696145,
     "target_recall": 0.9
   },
   "balanced_85pct_recall": {
-    "threshold": 0.4484029710292816,
-    "precision": 0.6914566687154272,
+    "threshold": 0.439964234828949,
+    "precision": 0.6923076923076923,
     "recall": 0.8503401360544217,
     "target_recall": 0.85
   },
   "aggressive_80pct_recall": {
-    "threshold": 0.7248339653015137,
-    "precision": 0.8443735035913806,
+    "threshold": 0.725890576839447,
+    "precision": 0.8491171749598716,
     "recall": 0.799697656840514,
     "target_recall": 0.8
   }
