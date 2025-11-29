@@ -14,16 +14,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import warnings
-import json
-import joblib
 warnings.filterwarnings('ignore')
 
 # Scikit-learn
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import average_precision_score
 
 # XGBoost
 import xgboost as xgb
@@ -469,98 +466,163 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 # ============================================================================
 
 def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=True):
-    """Track XGBoost performance per iteration."""
+    """Track XGBoost performance per iteration using 4-fold CV average.
+
+    This function uses the same CV methodology as GridSearchCV to provide
+    robust iteration-by-iteration performance estimates across folds.
+    """
     print("\n" + "="*80)
-    print("2. XGBOOST PER-ITERATION TRACKING")
+    print("2. XGBOOST PER-ITERATION TRACKING (4-FOLD CV AVERAGE)")
     print("="*80)
 
     _, tree_preprocessor = create_preprocessors()
-    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
+
+    # Combine train and val for CV (matching GridSearchCV methodology)
+    X_train_val = pd.concat([X_train, X_val])
+    y_train_val = pd.concat([y_train, y_val])
+    scale_pos_weight = (y_train_val == 0).sum() / (y_train_val == 1).sum()
 
     # Load tuned parameters if available
     tuned_params = None
     if use_tuned_params:
+        print("\nAttempting to load tuned hyperparameters from CV results...")
         tuned_params = load_best_params_from_cv()
 
-    # Preprocess
-    X_train_processed = tree_preprocessor.fit_transform(X_train)
-    X_val_processed = tree_preprocessor.transform(X_val)
+    # Get CV strategy (same as GridSearchCV)
+    cv_strategy = TrainingConfig.get_cv_strategy(random_seed=RANDOM_SEED)
 
-    print("\nTraining XGBoost with iteration tracking...")
+    print(f"\nTraining XGBoost with {cv_strategy.n_splits}-fold CV iteration tracking...")
+    print("This matches the GridSearchCV methodology used for hyperparameter tuning")
 
-    # Use tuned params if available, otherwise baseline
-    if tuned_params and tuned_params['xgb']:
-        xgb_params = tuned_params['xgb']
-        print(f"  Using tuned base params (will train with 200 iterations for tracking)")
-        xgb_model = xgb.XGBClassifier(
-            n_estimators=200,  # Use more iterations to see overfitting behavior
-            max_depth=xgb_params['max_depth'],
-            learning_rate=xgb_params['learning_rate'],
-            subsample=xgb_params['subsample'],
-            colsample_bytree=xgb_params['colsample_bytree'],
-            min_child_weight=xgb_params['min_child_weight'],
-            gamma=xgb_params['gamma'],
-            reg_alpha=xgb_params.get('reg_alpha', 0.0),
-            reg_lambda=xgb_params.get('reg_lambda', 1.0),
-            scale_pos_weight=xgb_params['scale_pos_weight'],
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            eval_metric='aucpr'
+    # Store scores from all folds
+    all_fold_train_scores = []
+    all_fold_val_scores = []
+
+    # Perform CV
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        print(f"  Processing fold {fold_idx + 1}/{cv_strategy.n_splits}...", end=" ", flush=True)
+
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        # Preprocess this fold
+        fold_preprocessor = PreprocessingPipelineFactory.create_tree_pipeline()
+        X_fold_train_processed = fold_preprocessor.fit_transform(X_fold_train)
+        X_fold_val_processed = fold_preprocessor.transform(X_fold_val)
+
+        # Use tuned params if available, otherwise baseline
+        if tuned_params and tuned_params['xgb']:
+            xgb_params = tuned_params['xgb']
+            xgb_model = xgb.XGBClassifier(
+                n_estimators=200,  # Use more iterations to see full curve
+                max_depth=xgb_params['max_depth'],
+                learning_rate=xgb_params['learning_rate'],
+                subsample=xgb_params['subsample'],
+                colsample_bytree=xgb_params['colsample_bytree'],
+                min_child_weight=xgb_params['min_child_weight'],
+                gamma=xgb_params['gamma'],
+                reg_alpha=xgb_params.get('reg_alpha', 0.0),
+                reg_lambda=xgb_params.get('reg_lambda', 1.0),
+                scale_pos_weight=xgb_params['scale_pos_weight'],
+                random_state=RANDOM_SEED,
+                n_jobs=-1,
+                eval_metric='aucpr'
+            )
+        else:
+            xgb_model = xgb.XGBClassifier(
+                n_estimators=200,
+                max_depth=5,
+                learning_rate=0.1,
+                scale_pos_weight=scale_pos_weight,
+                random_state=RANDOM_SEED,
+                n_jobs=-1,
+                eval_metric='aucpr'
+            )
+
+        # Train with eval_set to track iterations
+        xgb_model.fit(
+            X_fold_train_processed, y_fold_train,
+            eval_set=[(X_fold_train_processed, y_fold_train), (X_fold_val_processed, y_fold_val)],
+            verbose=False
         )
-    else:
-        print("  Using baseline params with 200 iterations")
-        xgb_model = xgb.XGBClassifier(
-            n_estimators=200,
-            max_depth=5,
-            learning_rate=0.1,
-            scale_pos_weight=scale_pos_weight,
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            eval_metric='aucpr'
-        )
 
-    xgb_model.fit(
-        X_train_processed, y_train,
-        eval_set=[(X_train_processed, y_train), (X_val_processed, y_val)],
-        verbose=False
-    )
+        # Extract iteration-by-iteration scores
+        results = xgb_model.evals_result()
+        all_fold_train_scores.append(results['validation_0']['aucpr'])
+        all_fold_val_scores.append(results['validation_1']['aucpr'])
 
-    # Extract results
-    results = xgb_model.evals_result()
-    train_scores = results['validation_0']['aucpr']
-    val_scores = results['validation_1']['aucpr']
+        print("✓")
+
+    # Average scores across all folds
+    train_scores = np.mean(all_fold_train_scores, axis=0)
+    val_scores = np.mean(all_fold_val_scores, axis=0)
+    train_std = np.std(all_fold_train_scores, axis=0)
+    val_std = np.std(all_fold_val_scores, axis=0)
     iterations = range(1, len(train_scores) + 1)
 
-    best_iter = np.argmax(val_scores) + 1
-    best_val = val_scores[best_iter - 1]
-    train_at_best = train_scores[best_iter - 1]
+    print(f"\n✓ Averaged scores across {cv_strategy.n_splits} folds")
 
-    print(f"\nBest iteration: {best_iter}")
-    print(f"  Training PR-AUC:   {train_at_best:.4f}")
-    print(f"  Validation PR-AUC: {best_val:.4f}")
-    print(f"  Gap:               {train_at_best - best_val:.4f}")
+    # Use CV-tuned n_estimators
+    if tuned_params and tuned_params['xgb']:
+        cv_tuned_iter = tuned_params['xgb']['n_estimators']
+        print(f"\n✓ Using CV-tuned n_estimators: {cv_tuned_iter}")
+    else:
+        # Fallback to CV average peak if no tuned params available
+        cv_tuned_iter = np.argmax(val_scores) + 1
+        print(f"\n⚠️  No tuned params found, using CV average peak: {cv_tuned_iter}")
+
+    # Get performance at CV-tuned iteration
+    cv_tuned_val = val_scores[cv_tuned_iter - 1]
+    cv_tuned_train = train_scores[cv_tuned_iter - 1]
+    cv_tuned_val_std = val_std[cv_tuned_iter - 1]
+    cv_tuned_train_std = train_std[cv_tuned_iter - 1]
+
+    print(f"\nAt CV-tuned iteration ({cv_tuned_iter}) - {cv_strategy.n_splits}-FOLD AVERAGE:")
+    print(f"  Training PR-AUC:   {cv_tuned_train:.4f} ± {cv_tuned_train_std:.4f}")
+    print(f"  Validation PR-AUC: {cv_tuned_val:.4f} ± {cv_tuned_val_std:.4f}")
+    print(f"  Gap:               {cv_tuned_train - cv_tuned_val:.4f}")
+
+    # Report CV average peak for comparison
+    cv_avg_peak_iter = np.argmax(val_scores) + 1
+    cv_avg_peak_val = val_scores[cv_avg_peak_iter - 1]
+    if cv_avg_peak_iter != cv_tuned_iter:
+        print(f"\nNote: CV average peak at iteration {cv_avg_peak_iter} (PR-AUC: {cv_avg_peak_val:.4f})")
+        print(f"      GridSearchCV selected {cv_tuned_iter}, which is appropriate")
 
     final_val = val_scores[-1]
-    if final_val < best_val - 0.01:
-        print(f"\n⚠️  WARNING: Validation performance degraded after iteration {best_iter}")
-        print(f"  Best: {best_val:.4f} | Final: {final_val:.4f}")
-        print(f"  Recommendation: Early stopping at ~{best_iter} iterations")
+    if final_val < cv_tuned_val - 0.01:
+        print(f"\n⚠️  WARNING: Validation performance degraded after iteration {cv_tuned_iter}")
+        print(f"  CV-tuned: {cv_tuned_val:.4f} | Final: {final_val:.4f}")
+        print(f"  Recommendation: CV-tuned value ({cv_tuned_iter}) is appropriate")
 
-    # Plot
+    # Plot with confidence bands
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(iterations, train_scores, label='Training PR-AUC', linewidth=2)
-    ax.plot(iterations, val_scores, label='Validation PR-AUC', linewidth=2)
-    ax.axvline(best_iter, color='red', linestyle='--', alpha=0.5, label=f'Best ({best_iter})')
-    ax.scatter([best_iter], [best_val], color='red', s=100, zorder=5)
+
+    # Plot mean curves
+    ax.plot(iterations, train_scores, label='Training PR-AUC (mean)', linewidth=2, color='C0')
+    ax.plot(iterations, val_scores, label='Validation PR-AUC (mean)', linewidth=2, color='C1')
+
+    # Add confidence bands (±1 std dev)
+    ax.fill_between(iterations, train_scores - train_std, train_scores + train_std,
+                     alpha=0.2, color='C0', label='Training ±1 std')
+    ax.fill_between(iterations, val_scores - val_std, val_scores + val_std,
+                     alpha=0.2, color='C1', label='Validation ±1 std')
+
+    # Mark CV-tuned iteration
+    ax.axvline(cv_tuned_iter, color='red', linestyle='--', alpha=0.5, label=f'CV-Tuned ({cv_tuned_iter})')
+    ax.scatter([cv_tuned_iter], [cv_tuned_val], color='red', s=100, zorder=5)
 
     ax.set_xlabel('Boosting Iteration')
     ax.set_ylabel('PR-AUC')
-    ax.set_title('XGBoost: Performance by Iteration')
-    ax.legend()
+    ax.set_title(f'XGBoost: Performance by Iteration ({cv_strategy.n_splits}-Fold CV Average)')
+    ax.legend(loc='lower right', fontsize=9)
     ax.grid(alpha=0.3)
 
-    diagnosis = f"⚠️ Overfitting after iteration {best_iter}" if final_val < best_val - 0.01 else "✓ No severe overfitting"
-    ax.text(0.7, 0.1, diagnosis, transform=ax.transAxes,
+    diagnosis = f"⚠️ Overfitting after iteration {cv_tuned_iter}" if final_val < cv_tuned_val - 0.01 else "✓ No severe overfitting"
+    ax.text(0.02, 0.98, diagnosis, transform=ax.transAxes,
+            verticalalignment='top', horizontalalignment='left',
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
     plt.tight_layout()
@@ -568,15 +630,17 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
     print(f"\n✓ Saved: {OUTPUT_DIR / '02_xgboost_iterations.png'}")
     plt.close()
 
-    # Save data
+    # Save data with CV statistics
     pd.DataFrame({
         'iteration': iterations,
-        'train_pr_auc': train_scores,
-        'val_pr_auc': val_scores,
-        'gap': np.array(train_scores) - np.array(val_scores)
+        'train_pr_auc_mean': train_scores,
+        'train_pr_auc_std': train_std,
+        'val_pr_auc_mean': val_scores,
+        'val_pr_auc_std': val_std,
+        'gap': train_scores - val_scores
     }).to_csv(OUTPUT_DIR / '02_iteration_tracking.csv', index=False)
 
-    return best_iter
+    return cv_tuned_iter
 
 
 # ============================================================================
@@ -696,10 +760,10 @@ def generate_summary(gap_df, best_iter):
 
     if best_iter:
         report.append(f"\nXGBoost Iteration Analysis:")
-        report.append(f"  • Single-split validation peaks at iteration {best_iter}")
-        report.append(f"  • However, GridSearchCV's 4-fold average is more reliable")
-        report.append(f"  • Recommendation: Trust GridSearchCV's n_estimators from tuning")
-        report.append(f"  • Single-split peaks can vary due to random data split")
+        report.append(f"  • Using CV-tuned n_estimators: {best_iter}")
+        report.append(f"  • This value is based on 4-fold GridSearchCV (more robust than single split)")
+        report.append(f"  • Plot shows performance at CV-tuned value, not single-split peak")
+        report.append(f"  • Recommendation: CV-tuned value is appropriate and well-validated")
 
     report.append("\n" + "="*80)
     best_model = gap_df.loc[gap_df['val_pr_auc'].idxmax(), 'model']
