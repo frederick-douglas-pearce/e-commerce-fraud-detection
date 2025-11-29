@@ -40,7 +40,7 @@ def parse_args():
         "--data-dir",
         type=str,
         default="data",
-        help="Directory containing train/val/test pickle files",
+        help="Directory containing raw csv data file",
     )
     parser.add_argument(
         "--output-dir", type=str, default="models", help="Directory to save model artifacts"
@@ -191,6 +191,8 @@ def train_model(
         "feature_importance": feature_importance_df,
         "feature_names": feature_names,
         "categorical_features": categorical_features,
+        "continuous_numeric": continuous_numeric,
+        "binary": binary,
         "optimal_params": optimal_params,
     }
 
@@ -221,11 +223,10 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
 
     # 4. Save feature lists
     feature_lists = {
+        "categorical": results["categorical_features"],
+        "continuous_numeric": results["continuous_numeric"],
+        "binary": results["binary"],
         "all_features": results["feature_names"],
-        "categorical_features": results["categorical_features"],
-        "continuous_features": [
-            f for f in results["feature_names"] if f not in results["categorical_features"]
-        ],
     }
     feature_lists_path = output_dir / "feature_lists.json"
     with open(feature_lists_path, "w") as f:

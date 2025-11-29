@@ -19,67 +19,40 @@ class FeatureListsConfig:
 
     @classmethod
     def load(cls, source: str = "feature_lists.json") -> Dict[str, List[str]]:
-        """Load feature categorization from configuration file.
+        """Load feature categorization from feature_lists.json configuration file.
 
         Args:
-            source: Either "feature_lists.json" or "model_metadata.json"
+            source: Path to feature_lists.json file (default: "models/feature_lists.json")
 
         Returns:
-            Dictionary with keys: 'continuous_numeric', 'categorical', 'binary', 'all_features'
+            Dictionary with keys: 'categorical', 'continuous_numeric', 'binary', 'all_features'
 
         Raises:
             FileNotFoundError: If the specified configuration file doesn't exist
         """
         if source == "feature_lists.json":
             path = cls.DEFAULT_FEATURE_LISTS_PATH
-        elif source == "model_metadata.json":
-            path = cls.DEFAULT_METADATA_PATH
         else:
             path = Path(source)
 
         if not path.exists():
             raise FileNotFoundError(
                 f"Feature configuration file not found: {path}\n"
-                f"Expected either {cls.DEFAULT_FEATURE_LISTS_PATH} or {cls.DEFAULT_METADATA_PATH}"
+                f"Expected: {cls.DEFAULT_FEATURE_LISTS_PATH}"
             )
 
         with open(path, 'r') as f:
             data = json.load(f)
 
-        # Handle both formats
-        if source == "model_metadata.json":
-            # Extract features section from model metadata
-            if 'features' in data:
-                features = data['features']
-                return {
-                    'continuous_numeric': features.get('continuous_numeric', []),
-                    'categorical': features.get('categorical', []),
-                    'binary': features.get('binary', []),
-                    'all_features': (features.get('continuous_numeric', []) +
-                                   features.get('categorical', []) +
-                                   features.get('binary', []))
-                }
-
-        # Standard feature_lists.json format
-        # Support both old and new key names for backward compatibility
-        categorical = data.get('categorical') or data.get('categorical_features', [])
+        # Load feature categorization
+        categorical = data.get('categorical', [])
         continuous_numeric = data.get('continuous_numeric', [])
         binary = data.get('binary', [])
-
-        # If continuous_features exists but continuous_numeric doesn't, split it
-        if not continuous_numeric and 'continuous_features' in data:
-            # continuous_features contains both continuous_numeric and binary
-            # We need to separate them if possible, otherwise treat all as continuous
-            continuous_features = data['continuous_features']
-            # Binary features are typically boolean 0/1 flags
-            # For now, treat all continuous_features as continuous_numeric
-            continuous_numeric = continuous_features
-
         all_features = data.get('all_features', categorical + continuous_numeric + binary)
 
         return {
-            'continuous_numeric': continuous_numeric,
             'categorical': categorical,
+            'continuous_numeric': continuous_numeric,
             'binary': binary,
             'all_features': all_features
         }
