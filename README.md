@@ -119,13 +119,27 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ├── fraud_detection_modeling.ipynb      # Model training & evaluation notebook
 ├── train.py                            # Model training script
 ├── predict.py                          # FastAPI prediction service
+├── bias_variance_analysis.py           # Bias-variance diagnostics script
 ├── data/                               # Dataset directory (gitignored)
 │   └── transactions.csv                # Raw transaction data from Kaggle
 ├── src/                                # Production source code
-│   └── preprocessing/                  # Feature engineering pipeline
-│       ├── config.py                   # FeatureConfig dataclass (JSON serialization)
-│       ├── features.py                 # Feature engineering functions
-│       ├── transformer.py              # FraudFeatureTransformer (sklearn-compatible)
+│   ├── config/                         # Configuration management
+│   │   ├── data_config.py              # Data loading configuration
+│   │   ├── model_config.py             # Hyperparameters & feature lists
+│   │   ├── training_config.py          # CV strategy & thresholds
+│   │   └── __init__.py                 # Package exports
+│   ├── data/                           # Data loading utilities
+│   │   ├── loader.py                   # load_and_split_data()
+│   │   └── __init__.py                 # Package exports
+│   ├── preprocessing/                  # Feature engineering pipeline
+│   │   ├── config.py                   # FeatureConfig dataclass (JSON serialization)
+│   │   ├── features.py                 # Feature engineering functions
+│   │   ├── transformer.py              # FraudFeatureTransformer (sklearn-compatible)
+│   │   ├── pipelines.py                # PreprocessingPipelineFactory
+│   │   └── __init__.py                 # Package exports
+│   └── evaluation/                     # Model evaluation utilities
+│       ├── metrics.py                  # evaluate_model()
+│       ├── thresholds.py               # optimize_thresholds()
 │       └── __init__.py                 # Package exports
 ├── tests/                              # Test suite (41 passing tests)
 │   ├── conftest.py                     # Shared pytest fixtures

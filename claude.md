@@ -14,7 +14,9 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 .
 ├── fraud_detection_EDA_FE.ipynb    # EDA & feature engineering notebook
 ├── fraud_detection_modeling.ipynb  # Model training & evaluation notebook
+├── train.py                         # Model training script
 ├── predict.py                       # FastAPI web service for real-time fraud prediction
+├── bias_variance_analysis.py        # Bias-variance diagnostics script
 ├── Dockerfile                       # Multi-stage Docker image definition
 ├── docker-compose.yml               # Docker Compose configuration for local deployment
 ├── requirements.txt                 # Python dependencies for Docker
@@ -23,10 +25,23 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ├── data/                            # Data directory (gitignored)
 │   └── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
 ├── src/                             # Source code for production
-│   └── preprocessing/               # Feature engineering pipeline
-│       ├── config.py                # FeatureConfig dataclass
-│       ├── features.py              # Feature engineering functions
-│       ├── transformer.py           # FraudFeatureTransformer (sklearn-compatible)
+│   ├── config/                      # Configuration management
+│   │   ├── data_config.py           # Data loading configuration
+│   │   ├── model_config.py          # Hyperparameters & feature lists
+│   │   ├── training_config.py       # CV strategy & thresholds
+│   │   └── __init__.py              # Package exports
+│   ├── data/                        # Data loading utilities
+│   │   ├── loader.py                # load_and_split_data()
+│   │   └── __init__.py              # Package exports
+│   ├── preprocessing/               # Feature engineering pipeline
+│   │   ├── config.py                # FeatureConfig dataclass
+│   │   ├── features.py              # Feature engineering functions
+│   │   ├── transformer.py           # FraudFeatureTransformer (sklearn-compatible)
+│   │   ├── pipelines.py             # PreprocessingPipelineFactory
+│   │   └── __init__.py              # Package exports
+│   └── evaluation/                  # Model evaluation utilities
+│       ├── metrics.py               # evaluate_model()
+│       ├── thresholds.py            # optimize_thresholds()
 │       └── __init__.py              # Package exports
 ├── tests/                           # Test suite
 │   ├── conftest.py                  # Shared pytest fixtures
@@ -77,15 +92,18 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 - **Total Features**: 30 features + 1 target = 31 columns
 - **Splits**: 60% train, 20% validation, 20% test (stratified)
 - **Processing**: Applied on-the-fly using `FraudFeatureTransformer` pipeline
-- **Feature Categories**:
-  1. **Original Numeric (5)**: account_age_days, total_transactions_user, avg_amount_user, amount, shipping_distance_km
-  2. **Original Categorical (5)**: channel, promo_used, avs_match, cvv_result, three_ds_flag
-  3. **Temporal Local (6)**: hour_local, day_of_week_local, month_local, is_weekend_local, is_late_night_local, is_business_hours_local
-  4. **Amount Features (4)**: amount_deviation, amount_vs_avg_ratio, is_micro_transaction, is_large_transaction
-  5. **User Behavior (3)**: transaction_velocity, is_new_account, is_high_frequency_user
-  6. **Geographic (3)**: country_mismatch, high_risk_distance, zero_distance
-  7. **Security (1)**: security_score
-  8. **Interaction (3)**: new_account_with_promo, late_night_micro_transaction, high_value_long_distance
+- **Feature Type Classification** (stored in `models/feature_lists.json`):
+  - **Categorical (1)**: channel
+  - **Continuous Numeric (12)**: account_age_days, total_transactions_user, avg_amount_user, amount, shipping_distance_km, hour_local, day_of_week_local, month_local, amount_deviation, amount_vs_avg_ratio, transaction_velocity, security_score
+  - **Binary (17)**: promo_used, avs_match, cvv_result, three_ds_flag, is_weekend_local, is_late_night_local, is_business_hours_local, is_micro_transaction, is_large_transaction, is_new_account, is_high_frequency_user, country_mismatch, high_risk_distance, zero_distance, new_account_with_promo, late_night_micro_transaction, high_value_long_distance
+- **Feature Groupings** (by engineering type):
+  1. **Temporal Local (6)**: hour_local, day_of_week_local, month_local, is_weekend_local, is_late_night_local, is_business_hours_local
+  2. **Amount Features (4)**: amount_deviation, amount_vs_avg_ratio, is_micro_transaction, is_large_transaction
+  3. **User Behavior (3)**: transaction_velocity, is_new_account, is_high_frequency_user
+  4. **Geographic (3)**: country_mismatch, high_risk_distance, zero_distance
+  5. **Security (1)**: security_score
+  6. **Interaction (3)**: new_account_with_promo, late_night_micro_transaction, high_value_long_distance
+  7. **Original Features Retained (10)**: account_age_days, total_transactions_user, avg_amount_user, amount, shipping_distance_km, channel, promo_used, avs_match, cvv_result, three_ds_flag
 
 ### Feature Selection Decisions
 - **Excluded UTC temporal features** (6): Local time more meaningful for fraud patterns
@@ -124,6 +142,108 @@ uv add requests locust pytest
 
 # ❌ Wrong - does not update pyproject.toml
 uv pip install requests
+```
+
+## Shared Infrastructure & Code Organization
+
+### Overview
+The project uses a modular architecture with shared modules in `src/` to eliminate code duplication and ensure consistency across all scripts (`train.py`, `bias_variance_analysis.py`, notebooks). This refactoring creates a single source of truth for all common logic.
+
+### Module Structure
+
+#### 1. `src/config/` - Configuration Management
+Centralizes all configuration for data loading, model hyperparameters, and training strategies.
+
+**`src/config/data_config.py`**:
+- `DataConfig.DEFAULT_RANDOM_SEED`: Default random seed (1) for reproducibility
+- `DataConfig.TARGET_COLUMN`: Target column name ('is_fraud')
+- `DataConfig.DATA_DIR`: Default data directory path
+- Train/val/test split ratios (60/20/20)
+
+**`src/config/model_config.py`**:
+- `FeatureListsConfig.load()`: Loads feature categorization from `models/feature_lists.json`
+- `ModelConfig.load_hyperparameters()`: Loads hyperparameters from model metadata or CV results
+- `ModelConfig.get_param_grid()`: Returns parameter grid for GridSearchCV
+- Fallback hyperparameters for XGBoost and Random Forest
+- Supports loading from multiple sources: metadata, CV results, or custom JSON files
+
+**`src/config/training_config.py`**:
+- `TrainingConfig.get_cv_strategy()`: Returns StratifiedKFold(4) for cross-validation
+- `TrainingConfig.get_threshold_targets()`: Returns target recall values for threshold optimization (80%, 85%, 90%)
+
+#### 2. `src/data/` - Data Loading Utilities
+Provides unified data loading and splitting functionality.
+
+**`src/data/loader.py`**:
+- `load_and_split_data(data_path, random_seed, verbose)`: Loads raw CSV, performs stratified train/val/test splits, returns 3 DataFrames
+- Used by `train.py`, `bias_variance_analysis.py`, and can be used in notebooks
+- Ensures consistent data splitting across all scripts
+
+#### 3. `src/preprocessing/` - Feature Engineering Pipeline
+Production-ready feature engineering with sklearn compatibility.
+
+**`src/preprocessing/pipelines.py`**:
+- `PreprocessingPipelineFactory.create_logistic_pipeline()`: Creates pipeline with StandardScaler + OneHotEncoder
+- `PreprocessingPipelineFactory.create_tree_pipeline()`: Creates minimal pipeline (OrdinalEncoder only) for tree models
+- Used by `train.py` and `bias_variance_analysis.py` for consistent preprocessing
+
+**Other modules**: See "Production Feature Engineering Pipeline" section below for details on `config.py`, `features.py`, `transformer.py`.
+
+#### 4. `src/evaluation/` - Model Evaluation Utilities
+Provides standardized model evaluation and threshold optimization.
+
+**`src/evaluation/metrics.py`**:
+- `evaluate_model(model, X, y, model_name, dataset_name)`: Comprehensive evaluation with PR-AUC, ROC-AUC, F1, Precision, Recall
+- Prints formatted results with confusion matrix
+- Returns metrics dictionary
+- Used by `train.py` and `bias_variance_analysis.py`
+
+**`src/evaluation/thresholds.py`**:
+- `optimize_thresholds(model, X_val, y_val)`: Finds optimal thresholds for 80%, 85%, 90% recall targets
+- Returns threshold configuration dictionary
+- Used by `train.py` to generate `models/threshold_config.json`
+
+### Benefits of Shared Infrastructure
+✅ **Single Source of Truth**: Configuration, data loading, evaluation logic defined once
+✅ **Code Reduction**: Eliminated ~240 lines of duplicated code across scripts
+✅ **Consistency**: All scripts use same random seed, CV strategy, evaluation metrics
+✅ **Maintainability**: Changes to common logic only need to be made in one place
+✅ **Testability**: Shared modules can be unit tested independently
+✅ **Extensibility**: New analysis scripts can easily reuse existing infrastructure
+
+### Usage Example
+```python
+# Import shared modules
+from src.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
+from src.data import load_and_split_data
+from src.preprocessing import FraudFeatureTransformer, PreprocessingPipelineFactory
+from src.evaluation import evaluate_model, optimize_thresholds
+
+# Load data with consistent splitting
+train_df, val_df, test_df = load_and_split_data(random_seed=1)
+
+# Load feature configuration
+feature_config = FeatureListsConfig.load()
+categorical = feature_config['categorical']
+continuous_numeric = feature_config['continuous_numeric']
+binary = feature_config['binary']
+
+# Load hyperparameters
+params = ModelConfig.load_hyperparameters('xgboost', source='metadata')
+
+# Create preprocessing pipeline
+preprocessor = PreprocessingPipelineFactory.create_tree_pipeline(
+    categorical, continuous_numeric, binary
+)
+
+# Get CV strategy
+cv = TrainingConfig.get_cv_strategy(random_seed=1)
+
+# Evaluate model
+metrics = evaluate_model(model, X_test, y_test, "XGBoost", "Test")
+
+# Optimize thresholds
+threshold_config = optimize_thresholds(model, X_val, y_val)
 ```
 
 ## Production Feature Engineering Pipeline
