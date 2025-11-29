@@ -19,13 +19,13 @@ from pathlib import Path
 import joblib
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
 # Import production feature engineering pipeline and shared modules
 from src.preprocessing.transformer import FraudFeatureTransformer
 from src.preprocessing import PreprocessingPipelineFactory
-from src.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
+from src.config import FeatureListsConfig, ModelConfig, TrainingConfig
 from src.data import load_and_split_data
 from src.evaluation import evaluate_model, optimize_thresholds
 
@@ -60,45 +60,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_data(data_dir: Path, random_seed: int = 1):
-    """Load raw transaction data and split into train/val/test sets."""
-    print("Loading raw transaction data...")
-    print(f"  Data directory: {data_dir}")
-
-    csv_path = data_dir / "transactions.csv"
-
-    if not csv_path.exists():
-        raise FileNotFoundError(
-            f"Raw data file not found: {csv_path}\n"
-            "Please ensure data/transactions.csv exists.\n"
-            "Download from Kaggle: umuttuygurr/e-commerce-fraud-detection-dataset"
-        )
-
-    # Load raw CSV data
-    df = pd.read_csv(csv_path, low_memory=False)
-    print(f"  Total samples: {len(df):,}")
-    print(f"  Fraud rate: {df['is_fraud'].mean():.2%}")
-
-    # Split into train/val/test (60/20/20)
-    # First split: separate test set
-    train_val_df, test_df = train_test_split(
-        df, test_size=0.2, stratify=df['is_fraud'], random_state=random_seed
-    )
-
-    # Second split: separate train and validation
-    train_df, val_df = train_test_split(
-        train_val_df, test_size=0.25, stratify=train_val_df['is_fraud'], random_state=random_seed
-    )
-
-    print(f"\n  Training set: {len(train_df):,} samples ({len(train_df)/len(df)*100:.1f}%)")
-    print(f"  Validation set: {len(val_df):,} samples ({len(val_df)/len(df)*100:.1f}%)")
-    print(f"  Test set: {len(test_df):,} samples ({len(test_df)/len(df)*100:.1f}%)")
-
-    return train_df, val_df, test_df
-
-
-# NOTE: evaluate_model, optimize_thresholds, and preprocessing pipeline creation
-# are now imported from shared modules (src/evaluation and src/preprocessing)
+# NOTE: Data loading, evaluate_model, optimize_thresholds, and preprocessing
+# pipeline creation are now imported from shared modules
+# (src/data, src/evaluation, and src/preprocessing)
 
 
 def train_model(
@@ -353,11 +317,14 @@ def main():
     print("=" * 100)
 
     try:
-        # Load raw data and split
-        data_dir = Path(args.data_dir)
-        train_raw, val_raw, test_raw = load_data(data_dir, random_seed=args.random_seed)
+        # Load raw data and split using shared function from src.data
+        train_raw, val_raw, test_raw = load_and_split_data(
+            data_path=str(Path(args.data_dir) / "transactions.csv"),
+            random_seed=args.random_seed,
+            verbose=True
+        )
 
-        # Apply feature engineering pipeline
+        # Apply feature engineering pipeline using FraudFeatureTransformer
         print("\n" + "=" * 100)
         print("FEATURE ENGINEERING - USING PRODUCTION PIPELINE")
         print("=" * 100)
