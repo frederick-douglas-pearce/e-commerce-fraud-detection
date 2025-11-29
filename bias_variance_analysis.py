@@ -167,6 +167,50 @@ def load_best_params_from_cv():
 
 
 # ============================================================================
+# Helper: Perform Cross-Validation for a Model
+# ============================================================================
+
+def perform_cv_evaluation(pipeline, cv_strategy, X_train_val, y_train_val, model_name):
+    """Perform k-fold cross-validation and return train/val scores and fold details.
+
+    Args:
+        pipeline: Sklearn Pipeline with preprocessor and classifier
+        cv_strategy: Cross-validation splitter (e.g., StratifiedKFold)
+        X_train_val: Combined training and validation features
+        y_train_val: Combined training and validation targets
+        model_name: Name of the model (for reporting)
+
+    Returns:
+        Tuple of (train_scores, val_scores, fold_details)
+    """
+    train_scores = []
+    val_scores = []
+    fold_details = []
+
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        pipeline.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, pipeline.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, pipeline.predict_proba(X_fold_val)[:, 1])
+        train_scores.append(train_score)
+        val_scores.append(val_score)
+
+        fold_details.append({
+            'model': model_name,
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+    return train_scores, val_scores, fold_details
+
+
+# ============================================================================
 # 1. Train-Validation Gap Analysis
 # ============================================================================
 
@@ -212,27 +256,10 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
     ])
 
     # Perform CV to get train and val scores for each fold
-    lr_train_scores = []
-    lr_val_scores = []
-    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
-        X_fold_train = X_train_val.iloc[train_idx]
-        y_fold_train = y_train_val.iloc[train_idx]
-        X_fold_val = X_train_val.iloc[val_idx]
-        y_fold_val = y_train_val.iloc[val_idx]
-
-        lr.fit(X_fold_train, y_fold_train)
-        train_score = average_precision_score(y_fold_train, lr.predict_proba(X_fold_train)[:, 1])
-        val_score = average_precision_score(y_fold_val, lr.predict_proba(X_fold_val)[:, 1])
-        lr_train_scores.append(train_score)
-        lr_val_scores.append(val_score)
-
-        fold_details.append({
-            'model': 'Logistic Regression',
-            'fold': fold_idx + 1,
-            'train_pr_auc': train_score,
-            'val_pr_auc': val_score,
-            'gap': train_score - val_score
-        })
+    lr_train_scores, lr_val_scores, lr_fold_details = perform_cv_evaluation(
+        lr, cv_strategy, X_train_val, y_train_val, 'Logistic Regression'
+    )
+    fold_details.extend(lr_fold_details)
 
     lr_train_pr = np.mean(lr_train_scores)
     lr_val_pr = np.mean(lr_val_scores)
@@ -273,27 +300,10 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
         ])
 
     # Perform CV
-    rf_train_scores = []
-    rf_val_scores = []
-    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
-        X_fold_train = X_train_val.iloc[train_idx]
-        y_fold_train = y_train_val.iloc[train_idx]
-        X_fold_val = X_train_val.iloc[val_idx]
-        y_fold_val = y_train_val.iloc[val_idx]
-
-        rf.fit(X_fold_train, y_fold_train)
-        train_score = average_precision_score(y_fold_train, rf.predict_proba(X_fold_train)[:, 1])
-        val_score = average_precision_score(y_fold_val, rf.predict_proba(X_fold_val)[:, 1])
-        rf_train_scores.append(train_score)
-        rf_val_scores.append(val_score)
-
-        fold_details.append({
-            'model': 'Random Forest',
-            'fold': fold_idx + 1,
-            'train_pr_auc': train_score,
-            'val_pr_auc': val_score,
-            'gap': train_score - val_score
-        })
+    rf_train_scores, rf_val_scores, rf_fold_details = perform_cv_evaluation(
+        rf, cv_strategy, X_train_val, y_train_val, 'Random Forest'
+    )
+    fold_details.extend(rf_fold_details)
 
     rf_train_pr = np.mean(rf_train_scores)
     rf_val_pr = np.mean(rf_val_scores)
@@ -344,27 +354,10 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
         ])
 
     # Perform CV
-    xgb_train_scores = []
-    xgb_val_scores = []
-    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
-        X_fold_train = X_train_val.iloc[train_idx]
-        y_fold_train = y_train_val.iloc[train_idx]
-        X_fold_val = X_train_val.iloc[val_idx]
-        y_fold_val = y_train_val.iloc[val_idx]
-
-        xgb_model.fit(X_fold_train, y_fold_train)
-        train_score = average_precision_score(y_fold_train, xgb_model.predict_proba(X_fold_train)[:, 1])
-        val_score = average_precision_score(y_fold_val, xgb_model.predict_proba(X_fold_val)[:, 1])
-        xgb_train_scores.append(train_score)
-        xgb_val_scores.append(val_score)
-
-        fold_details.append({
-            'model': 'XGBoost',
-            'fold': fold_idx + 1,
-            'train_pr_auc': train_score,
-            'val_pr_auc': val_score,
-            'gap': train_score - val_score
-        })
+    xgb_train_scores, xgb_val_scores, xgb_fold_details = perform_cv_evaluation(
+        xgb_model, cv_strategy, X_train_val, y_train_val, 'XGBoost'
+    )
+    fold_details.extend(xgb_fold_details)
 
     xgb_train_pr = np.mean(xgb_train_scores)
     xgb_val_pr = np.mean(xgb_val_scores)
@@ -738,7 +731,7 @@ def main():
     print("\nNOTE: If no CV results found, will use baseline parameters for comparison")
     print("="*80)
 
-    X_train, y_train, X_val, y_val, X_test, y_test = load_and_prepare_data()
+    X_train, y_train, X_val, y_val, _, _ = load_and_prepare_data()
 
     # use_tuned_params=True will auto-load best params from CV results
     gap_df = train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_params=True)
