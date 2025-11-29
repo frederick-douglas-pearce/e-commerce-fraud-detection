@@ -50,18 +50,22 @@ This refactoring eliminates code duplication across `bias_variance_analysis.py`,
 - `optimize_thresholds()` function (37 lines)
 - Hardcoded feature lists (lines 208-225)
 - Custom hyperparameter loading logic
+- Duplicate `load_data()` function (35 lines)
+- Unused imports (train_test_split, DataConfig)
 
 **Added:**
 - Imports from shared modules
+- Uses `load_and_split_data()` from `src.data`
 - Uses `FeatureListsConfig.load()` for feature categorization
 - Uses `PreprocessingPipelineFactory.create_tree_pipeline()`
 - Uses `ModelConfig.load_hyperparameters()` for param loading
 - Uses `TrainingConfig.get_cv_strategy()` for GridSearchCV
 
 **Key Changes:**
-- Removed unused imports (ColumnTransformer, OrdinalEncoder, metric functions)
-- Reduced function by ~90 lines through shared module usage
+- Removed unused imports (ColumnTransformer, OrdinalEncoder, metric functions, train_test_split)
+- Reduced function by ~120 lines through shared module usage
 - More consistent with bias_variance_analysis.py
+- Now uses single source of truth for all common operations
 
 #### `fraud_detection_modeling.ipynb`
 **No Changes** - Kept as-is for experimentation (per user preference)
@@ -76,12 +80,13 @@ This refactoring eliminates code duplication across `bias_variance_analysis.py`,
 
 ### 2. Code Reduction
 - **bias_variance_analysis.py**: ~120 lines removed
-- **train.py**: ~90 lines removed
-- **Total**: ~210 lines of duplicated code eliminated
+- **train.py**: ~120 lines removed
+- **Total**: ~240 lines of duplicated code eliminated
 
 ### 3. Consistency
 - Both scripts now use same random seed (1) by default
 - Both use same feature engineering pipeline (`FraudFeatureTransformer`)
+- Both use same data loading and splitting (`load_and_split_data()`)
 - Both use same preprocessing approach
 - Both use same CV strategy (4-fold stratified)
 
@@ -215,12 +220,13 @@ Potential improvements:
 ## Conclusion
 
 This refactoring successfully:
-- ✅ Eliminates ~210 lines of duplicated code
+- ✅ Eliminates ~240 lines of duplicated code
 - ✅ Creates single source of truth for all common logic
 - ✅ Maintains backward compatibility with existing artifacts
 - ✅ Makes code more maintainable and extensible
 - ✅ Standardizes configuration across all scripts
 - ✅ Passes all tests with identical results
+- ✅ Establishes consistent data loading across all analysis scripts
 
 The shared infrastructure is now ready for use across the project and will make future development faster and more consistent.
 
@@ -229,6 +235,6 @@ The shared infrastructure is now ready for use across the project and will make 
 **Date**: 2025-11-29
 **Files Changed**: 2 (bias_variance_analysis.py, train.py)
 **Files Created**: 8 new shared modules
-**Lines Removed**: ~210
+**Lines Removed**: ~240
 **Lines Added**: ~450 (in shared modules, reusable)
-**Net Reduction in Duplication**: ~210 lines
+**Net Reduction in Duplication**: ~240 lines
