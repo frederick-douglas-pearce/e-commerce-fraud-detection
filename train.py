@@ -110,20 +110,14 @@ def train_model(
         # Create pipeline
         pipeline = Pipeline([("preprocessor", preprocessor), ("classifier", xgb.XGBClassifier(random_state=random_seed))])
 
-        # Reduced parameter grid for faster tuning
-        param_grid = {
-            "classifier__n_estimators": [70, 90, 110],
-            "classifier__max_depth": [4, 5, 6],
-            "classifier__learning_rate": [0.06, 0.08, 0.10],
-            "classifier__scale_pos_weight": [6, 8, 10],
-            "classifier__gamma": [0.4, 0.6, 0.8],
-        }
+        # Load parameter grid from shared config
+        param_grid = ModelConfig.get_param_grid(model_type='xgboost')
 
         grid_search = GridSearchCV(
             pipeline,
             param_grid,
             cv=TrainingConfig.get_cv_strategy(random_seed=random_seed),
-            scoring="average_precision",
+            scoring="average_precision",  # Equivalent to XGBoost's eval_metric="aucpr"
             n_jobs=-1,
             verbose=2 if verbose else 0,
         )
