@@ -164,50 +164,6 @@ def load_best_params_from_cv():
 
 
 # ============================================================================
-# Helper: Perform Cross-Validation for a Model
-# ============================================================================
-
-def perform_cv_evaluation(pipeline, cv_strategy, X_train_val, y_train_val, model_name):
-    """Perform k-fold cross-validation and return train/val scores and fold details.
-
-    Args:
-        pipeline: Sklearn Pipeline with preprocessor and classifier
-        cv_strategy: Cross-validation splitter (e.g., StratifiedKFold)
-        X_train_val: Combined training and validation features
-        y_train_val: Combined training and validation targets
-        model_name: Name of the model (for reporting)
-
-    Returns:
-        Tuple of (train_scores, val_scores, fold_details)
-    """
-    train_scores = []
-    val_scores = []
-    fold_details = []
-
-    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
-        X_fold_train = X_train_val.iloc[train_idx]
-        y_fold_train = y_train_val.iloc[train_idx]
-        X_fold_val = X_train_val.iloc[val_idx]
-        y_fold_val = y_train_val.iloc[val_idx]
-
-        pipeline.fit(X_fold_train, y_fold_train)
-        train_score = average_precision_score(y_fold_train, pipeline.predict_proba(X_fold_train)[:, 1])
-        val_score = average_precision_score(y_fold_val, pipeline.predict_proba(X_fold_val)[:, 1])
-        train_scores.append(train_score)
-        val_scores.append(val_score)
-
-        fold_details.append({
-            'model': model_name,
-            'fold': fold_idx + 1,
-            'train_pr_auc': train_score,
-            'val_pr_auc': val_score,
-            'gap': train_score - val_score
-        })
-
-    return train_scores, val_scores, fold_details
-
-
-# ============================================================================
 # 1. Train-Validation Gap Analysis
 # ============================================================================
 
@@ -247,16 +203,40 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 
     # Logistic Regression (no tuning - always baseline)
     print("\nTraining Logistic Regression with 4-fold CV...")
-    lr = Pipeline([
-        ('preprocessor', logistic_preprocessor),
-        ('classifier', LogisticRegression(class_weight='balanced', max_iter=1000, random_state=RANDOM_SEED))
-    ])
+    lr_train_scores = []
+    lr_val_scores = []
 
-    # Perform CV to get train and val scores for each fold
-    lr_train_scores, lr_val_scores, lr_fold_details = perform_cv_evaluation(
-        lr, cv_strategy, X_train_val, y_train_val, 'Logistic Regression'
-    )
-    fold_details.extend(lr_fold_details)
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        print(f"  Processing fold {fold_idx + 1}/{cv_strategy.n_splits}...", end=" ", flush=True)
+
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        # Create pipeline for this fold
+        lr = Pipeline([
+            ('preprocessor', logistic_preprocessor),
+            ('classifier', LogisticRegression(class_weight='balanced', max_iter=1000, random_state=RANDOM_SEED))
+        ])
+
+        # Fit and evaluate
+        lr.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, lr.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, lr.predict_proba(X_fold_val)[:, 1])
+
+        lr_train_scores.append(train_score)
+        lr_val_scores.append(val_score)
+
+        fold_details.append({
+            'model': 'Logistic Regression',
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+        print("✓")
 
     lr_train_pr = np.mean(lr_train_scores)
     lr_val_pr = np.mean(lr_val_scores)
@@ -270,37 +250,64 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 
     # Random Forest - use tuned params if available
     print("\nTraining Random Forest with 4-fold CV...")
+    rf_train_scores = []
+    rf_val_scores = []
+
     if tuned_params and tuned_params['rf']:
         rf_params = tuned_params['rf']
         print(f"  Using tuned params: n_estimators={rf_params['n_estimators']}, max_depth={rf_params['max_depth']}, "
               f"min_samples_split={rf_params['min_samples_split']}, min_samples_leaf={rf_params['min_samples_leaf']}")
-        rf = Pipeline([
-            ('preprocessor', tree_preprocessor),
-            ('classifier', RandomForestClassifier(
-                n_estimators=rf_params['n_estimators'],
-                max_depth=rf_params['max_depth'],
-                min_samples_split=rf_params['min_samples_split'],
-                min_samples_leaf=rf_params['min_samples_leaf'],
-                max_features=rf_params['max_features'],
-                class_weight=rf_params['class_weight'],
-                random_state=RANDOM_SEED,
-                n_jobs=-1
-            ))
-        ])
     else:
         print("  Using baseline params: n_estimators=100, class_weight='balanced'")
-        rf = Pipeline([
-            ('preprocessor', tree_preprocessor),
-            ('classifier', RandomForestClassifier(
-                n_estimators=100, class_weight='balanced', random_state=RANDOM_SEED, n_jobs=-1
-            ))
-        ])
 
-    # Perform CV
-    rf_train_scores, rf_val_scores, rf_fold_details = perform_cv_evaluation(
-        rf, cv_strategy, X_train_val, y_train_val, 'Random Forest'
-    )
-    fold_details.extend(rf_fold_details)
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        print(f"  Processing fold {fold_idx + 1}/{cv_strategy.n_splits}...", end=" ", flush=True)
+
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        # Create pipeline for this fold
+        if tuned_params and tuned_params['rf']:
+            rf = Pipeline([
+                ('preprocessor', tree_preprocessor),
+                ('classifier', RandomForestClassifier(
+                    n_estimators=rf_params['n_estimators'],
+                    max_depth=rf_params['max_depth'],
+                    min_samples_split=rf_params['min_samples_split'],
+                    min_samples_leaf=rf_params['min_samples_leaf'],
+                    max_features=rf_params['max_features'],
+                    class_weight=rf_params['class_weight'],
+                    random_state=RANDOM_SEED,
+                    n_jobs=-1
+                ))
+            ])
+        else:
+            rf = Pipeline([
+                ('preprocessor', tree_preprocessor),
+                ('classifier', RandomForestClassifier(
+                    n_estimators=100, class_weight='balanced', random_state=RANDOM_SEED, n_jobs=-1
+                ))
+            ])
+
+        # Fit and evaluate
+        rf.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, rf.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, rf.predict_proba(X_fold_val)[:, 1])
+
+        rf_train_scores.append(train_score)
+        rf_val_scores.append(val_score)
+
+        fold_details.append({
+            'model': 'Random Forest',
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+        print("✓")
 
     rf_train_pr = np.mean(rf_train_scores)
     rf_val_pr = np.mean(rf_val_scores)
@@ -314,6 +321,9 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 
     # XGBoost - use tuned params if available
     print("\nTraining XGBoost with 4-fold CV...")
+    xgb_train_scores = []
+    xgb_val_scores = []
+
     if tuned_params and tuned_params['xgb']:
         xgb_params = tuned_params['xgb']
         print(f"  Using tuned params: n_estimators={xgb_params['n_estimators']}, max_depth={xgb_params['max_depth']}, "
@@ -321,40 +331,63 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
               f"gamma={xgb_params['gamma']}")
         if 'reg_alpha' in xgb_params or 'reg_lambda' in xgb_params:
             print(f"  + L1/L2 regularization: reg_alpha={xgb_params.get('reg_alpha', 0)}, reg_lambda={xgb_params.get('reg_lambda', 1)}")
-
-        xgb_model = Pipeline([
-            ('preprocessor', tree_preprocessor),
-            ('classifier', xgb.XGBClassifier(
-                n_estimators=xgb_params['n_estimators'],
-                max_depth=xgb_params['max_depth'],
-                learning_rate=xgb_params['learning_rate'],
-                subsample=xgb_params['subsample'],
-                colsample_bytree=xgb_params['colsample_bytree'],
-                min_child_weight=xgb_params['min_child_weight'],
-                gamma=xgb_params['gamma'],
-                reg_alpha=xgb_params.get('reg_alpha', 0.0),
-                reg_lambda=xgb_params.get('reg_lambda', 1.0),
-                scale_pos_weight=xgb_params['scale_pos_weight'],
-                random_state=RANDOM_SEED,
-                n_jobs=-1,
-                eval_metric='aucpr'
-            ))
-        ])
     else:
         print("  Using baseline params: n_estimators=100, scale_pos_weight=auto")
-        xgb_model = Pipeline([
-            ('preprocessor', tree_preprocessor),
-            ('classifier', xgb.XGBClassifier(
-                n_estimators=100, scale_pos_weight=scale_pos_weight,
-                random_state=RANDOM_SEED, n_jobs=-1, eval_metric='aucpr'
-            ))
-        ])
 
-    # Perform CV
-    xgb_train_scores, xgb_val_scores, xgb_fold_details = perform_cv_evaluation(
-        xgb_model, cv_strategy, X_train_val, y_train_val, 'XGBoost'
-    )
-    fold_details.extend(xgb_fold_details)
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
+        print(f"  Processing fold {fold_idx + 1}/{cv_strategy.n_splits}...", end=" ", flush=True)
+
+        X_fold_train = X_train_val.iloc[train_idx]
+        y_fold_train = y_train_val.iloc[train_idx]
+        X_fold_val = X_train_val.iloc[val_idx]
+        y_fold_val = y_train_val.iloc[val_idx]
+
+        # Create pipeline for this fold
+        if tuned_params and tuned_params['xgb']:
+            xgb_model = Pipeline([
+                ('preprocessor', tree_preprocessor),
+                ('classifier', xgb.XGBClassifier(
+                    n_estimators=xgb_params['n_estimators'],
+                    max_depth=xgb_params['max_depth'],
+                    learning_rate=xgb_params['learning_rate'],
+                    subsample=xgb_params['subsample'],
+                    colsample_bytree=xgb_params['colsample_bytree'],
+                    min_child_weight=xgb_params['min_child_weight'],
+                    gamma=xgb_params['gamma'],
+                    reg_alpha=xgb_params.get('reg_alpha', 0.0),
+                    reg_lambda=xgb_params.get('reg_lambda', 1.0),
+                    scale_pos_weight=xgb_params['scale_pos_weight'],
+                    random_state=RANDOM_SEED,
+                    n_jobs=-1,
+                    eval_metric='aucpr'
+                ))
+            ])
+        else:
+            xgb_model = Pipeline([
+                ('preprocessor', tree_preprocessor),
+                ('classifier', xgb.XGBClassifier(
+                    n_estimators=100, scale_pos_weight=scale_pos_weight,
+                    random_state=RANDOM_SEED, n_jobs=-1, eval_metric='aucpr'
+                ))
+            ])
+
+        # Fit and evaluate
+        xgb_model.fit(X_fold_train, y_fold_train)
+        train_score = average_precision_score(y_fold_train, xgb_model.predict_proba(X_fold_train)[:, 1])
+        val_score = average_precision_score(y_fold_val, xgb_model.predict_proba(X_fold_val)[:, 1])
+
+        xgb_train_scores.append(train_score)
+        xgb_val_scores.append(val_score)
+
+        fold_details.append({
+            'model': 'XGBoost',
+            'fold': fold_idx + 1,
+            'train_pr_auc': train_score,
+            'val_pr_auc': val_score,
+            'gap': train_score - val_score
+        })
+
+        print("✓")
 
     xgb_train_pr = np.mean(xgb_train_scores)
     xgb_val_pr = np.mean(xgb_val_scores)
@@ -466,18 +499,16 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 # ============================================================================
 
 def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=True):
-    """Track XGBoost performance per iteration using 4-fold CV average.
-
-    This function uses the same CV methodology as GridSearchCV to provide
-    robust iteration-by-iteration performance estimates across folds.
-    """
+    """Track XGBoost performance per iteration using 4-fold CV average."""
     print("\n" + "="*80)
     print("2. XGBOOST PER-ITERATION TRACKING (4-FOLD CV AVERAGE)")
     print("="*80)
+    print("NOTE: Training/validation curves show mean ± std across 4 folds")
+    print("      matching GridSearchCV methodology")
 
     _, tree_preprocessor = create_preprocessors()
 
-    # Combine train and val for CV (matching GridSearchCV methodology)
+    # Combine train and val for CV (to match GridSearchCV data)
     X_train_val = pd.concat([X_train, X_val])
     y_train_val = pd.concat([y_train, y_val])
     scale_pos_weight = (y_train_val == 0).sum() / (y_train_val == 1).sum()
@@ -485,20 +516,49 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
     # Load tuned parameters if available
     tuned_params = None
     if use_tuned_params:
-        print("\nAttempting to load tuned hyperparameters from CV results...")
         tuned_params = load_best_params_from_cv()
 
-    # Get CV strategy (same as GridSearchCV)
+    # Get CV strategy
     cv_strategy = TrainingConfig.get_cv_strategy(random_seed=RANDOM_SEED)
 
-    print(f"\nTraining XGBoost with {cv_strategy.n_splits}-fold CV iteration tracking...")
-    print("This matches the GridSearchCV methodology used for hyperparameter tuning")
+    print("\nTraining XGBoost with 4-fold CV iteration tracking...")
 
-    # Store scores from all folds
+    # Use tuned params if available, otherwise baseline
+    if tuned_params and tuned_params['xgb']:
+        xgb_params = tuned_params['xgb']
+        print(f"  Using tuned base params (will train with 200 iterations for tracking)")
+        model_params = {
+            'n_estimators': 200,  # Use more iterations to see overfitting behavior
+            'max_depth': xgb_params['max_depth'],
+            'learning_rate': xgb_params['learning_rate'],
+            'subsample': xgb_params['subsample'],
+            'colsample_bytree': xgb_params['colsample_bytree'],
+            'min_child_weight': xgb_params['min_child_weight'],
+            'gamma': xgb_params['gamma'],
+            'reg_alpha': xgb_params.get('reg_alpha', 0.0),
+            'reg_lambda': xgb_params.get('reg_lambda', 1.0),
+            'scale_pos_weight': xgb_params['scale_pos_weight'],
+            'random_state': RANDOM_SEED,
+            'n_jobs': -1,
+            'eval_metric': 'aucpr'
+        }
+    else:
+        print("  Using baseline params with 200 iterations")
+        model_params = {
+            'n_estimators': 200,
+            'max_depth': 5,
+            'learning_rate': 0.1,
+            'scale_pos_weight': scale_pos_weight,
+            'random_state': RANDOM_SEED,
+            'n_jobs': -1,
+            'eval_metric': 'aucpr'
+        }
+
+    # Store iteration scores from all folds
     all_fold_train_scores = []
     all_fold_val_scores = []
 
-    # Perform CV
+    # Train model for each fold with iteration tracking
     for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
         print(f"  Processing fold {fold_idx + 1}/{cv_strategy.n_splits}...", end=" ", flush=True)
 
@@ -507,41 +567,12 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
         X_fold_val = X_train_val.iloc[val_idx]
         y_fold_val = y_train_val.iloc[val_idx]
 
-        # Preprocess this fold
-        fold_preprocessor = PreprocessingPipelineFactory.create_tree_pipeline()
-        X_fold_train_processed = fold_preprocessor.fit_transform(X_fold_train)
-        X_fold_val_processed = fold_preprocessor.transform(X_fold_val)
+        # Preprocess
+        X_fold_train_processed = tree_preprocessor.fit_transform(X_fold_train)
+        X_fold_val_processed = tree_preprocessor.transform(X_fold_val)
 
-        # Use tuned params if available, otherwise baseline
-        if tuned_params and tuned_params['xgb']:
-            xgb_params = tuned_params['xgb']
-            xgb_model = xgb.XGBClassifier(
-                n_estimators=200,  # Use more iterations to see full curve
-                max_depth=xgb_params['max_depth'],
-                learning_rate=xgb_params['learning_rate'],
-                subsample=xgb_params['subsample'],
-                colsample_bytree=xgb_params['colsample_bytree'],
-                min_child_weight=xgb_params['min_child_weight'],
-                gamma=xgb_params['gamma'],
-                reg_alpha=xgb_params.get('reg_alpha', 0.0),
-                reg_lambda=xgb_params.get('reg_lambda', 1.0),
-                scale_pos_weight=xgb_params['scale_pos_weight'],
-                random_state=RANDOM_SEED,
-                n_jobs=-1,
-                eval_metric='aucpr'
-            )
-        else:
-            xgb_model = xgb.XGBClassifier(
-                n_estimators=200,
-                max_depth=5,
-                learning_rate=0.1,
-                scale_pos_weight=scale_pos_weight,
-                random_state=RANDOM_SEED,
-                n_jobs=-1,
-                eval_metric='aucpr'
-            )
-
-        # Train with eval_set to track iterations
+        # Create and train model with eval_set for iteration tracking
+        xgb_model = xgb.XGBClassifier(**model_params)
         xgb_model.fit(
             X_fold_train_processed, y_fold_train,
             eval_set=[(X_fold_train_processed, y_fold_train), (X_fold_val_processed, y_fold_val)],
@@ -550,28 +581,29 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
 
         # Extract iteration-by-iteration scores
         results = xgb_model.evals_result()
-        all_fold_train_scores.append(results['validation_0']['aucpr'])
-        all_fold_val_scores.append(results['validation_1']['aucpr'])
+        fold_train_scores = results['validation_0']['aucpr']
+        fold_val_scores = results['validation_1']['aucpr']
+
+        all_fold_train_scores.append(fold_train_scores)
+        all_fold_val_scores.append(fold_val_scores)
 
         print("✓")
 
-    # Average scores across all folds
+    # Average scores across folds
     train_scores = np.mean(all_fold_train_scores, axis=0)
     val_scores = np.mean(all_fold_val_scores, axis=0)
     train_std = np.std(all_fold_train_scores, axis=0)
     val_std = np.std(all_fold_val_scores, axis=0)
     iterations = range(1, len(train_scores) + 1)
 
-    print(f"\n✓ Averaged scores across {cv_strategy.n_splits} folds")
-
     # Use CV-tuned n_estimators
     if tuned_params and tuned_params['xgb']:
         cv_tuned_iter = tuned_params['xgb']['n_estimators']
         print(f"\n✓ Using CV-tuned n_estimators: {cv_tuned_iter}")
     else:
-        # Fallback to CV average peak if no tuned params available
+        # Fallback to averaged best if no tuned params available
         cv_tuned_iter = np.argmax(val_scores) + 1
-        print(f"\n⚠️  No tuned params found, using CV average peak: {cv_tuned_iter}")
+        print(f"\n⚠️  No tuned params found, using fold-averaged best: {cv_tuned_iter}")
 
     # Get performance at CV-tuned iteration
     cv_tuned_val = val_scores[cv_tuned_iter - 1]
@@ -579,17 +611,10 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
     cv_tuned_val_std = val_std[cv_tuned_iter - 1]
     cv_tuned_train_std = train_std[cv_tuned_iter - 1]
 
-    print(f"\nAt CV-tuned iteration ({cv_tuned_iter}) - {cv_strategy.n_splits}-FOLD AVERAGE:")
+    print(f"\nAt CV-tuned iteration ({cv_tuned_iter}) - 4-fold average:")
     print(f"  Training PR-AUC:   {cv_tuned_train:.4f} ± {cv_tuned_train_std:.4f}")
     print(f"  Validation PR-AUC: {cv_tuned_val:.4f} ± {cv_tuned_val_std:.4f}")
     print(f"  Gap:               {cv_tuned_train - cv_tuned_val:.4f}")
-
-    # Report CV average peak for comparison
-    cv_avg_peak_iter = np.argmax(val_scores) + 1
-    cv_avg_peak_val = val_scores[cv_avg_peak_iter - 1]
-    if cv_avg_peak_iter != cv_tuned_iter:
-        print(f"\nNote: CV average peak at iteration {cv_avg_peak_iter} (PR-AUC: {cv_avg_peak_val:.4f})")
-        print(f"      GridSearchCV selected {cv_tuned_iter}, which is appropriate")
 
     final_val = val_scores[-1]
     if final_val < cv_tuned_val - 0.01:
@@ -598,17 +623,17 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
         print(f"  Recommendation: CV-tuned value ({cv_tuned_iter}) is appropriate")
 
     # Plot with confidence bands
-    fig, ax = plt.subplots(figsize=(12, 6))
+    _, ax = plt.subplots(figsize=(12, 6))
 
-    # Plot mean curves
-    ax.plot(iterations, train_scores, label='Training PR-AUC (mean)', linewidth=2, color='C0')
-    ax.plot(iterations, val_scores, label='Validation PR-AUC (mean)', linewidth=2, color='C1')
+    # Plot mean lines
+    ax.plot(iterations, train_scores, label='Training PR-AUC (mean)', linewidth=2, color='#1f77b4')
+    ax.plot(iterations, val_scores, label='Validation PR-AUC (mean)', linewidth=2, color='#ff7f0e')
 
-    # Add confidence bands (±1 std dev)
+    # Add ±1 std confidence bands
     ax.fill_between(iterations, train_scores - train_std, train_scores + train_std,
-                     alpha=0.2, color='C0', label='Training ±1 std')
+                     alpha=0.2, color='#1f77b4', label='Training ±1 std')
     ax.fill_between(iterations, val_scores - val_std, val_scores + val_std,
-                     alpha=0.2, color='C1', label='Validation ±1 std')
+                     alpha=0.2, color='#ff7f0e', label='Validation ±1 std')
 
     # Mark CV-tuned iteration
     ax.axvline(cv_tuned_iter, color='red', linestyle='--', alpha=0.5, label=f'CV-Tuned ({cv_tuned_iter})')
@@ -616,10 +641,11 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
 
     ax.set_xlabel('Boosting Iteration')
     ax.set_ylabel('PR-AUC')
-    ax.set_title(f'XGBoost: Performance by Iteration ({cv_strategy.n_splits}-Fold CV Average)')
-    ax.legend(loc='lower right', fontsize=9)
+    ax.set_title('XGBoost: Performance by Iteration (4-Fold CV Average)')
+    ax.legend(loc='lower right')
     ax.grid(alpha=0.3)
 
+    # Add diagnosis in upper left corner (to avoid overlapping with legend)
     diagnosis = f"⚠️ Overfitting after iteration {cv_tuned_iter}" if final_val < cv_tuned_val - 0.01 else "✓ No severe overfitting"
     ax.text(0.02, 0.98, diagnosis, transform=ax.transAxes,
             verticalalignment='top', horizontalalignment='left',
@@ -630,7 +656,7 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
     print(f"\n✓ Saved: {OUTPUT_DIR / '02_xgboost_iterations.png'}")
     plt.close()
 
-    # Save data with CV statistics
+    # Save data with mean and std
     pd.DataFrame({
         'iteration': iterations,
         'train_pr_auc_mean': train_scores,
