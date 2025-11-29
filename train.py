@@ -17,25 +17,17 @@ from datetime import datetime
 from pathlib import Path
 
 import joblib
-import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.compose import ColumnTransformer
-from sklearn.metrics import (
-    average_precision_score,
-    confusion_matrix,
-    f1_score,
-    precision_recall_curve,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
-from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OrdinalEncoder
 
-# Import production feature engineering pipeline
+# Import production feature engineering pipeline and shared modules
 from src.preprocessing.transformer import FraudFeatureTransformer
+from src.preprocessing import PreprocessingPipelineFactory
+from src.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
+from src.data import load_and_split_data
+from src.evaluation import evaluate_model, optimize_thresholds
 
 
 def parse_args():
@@ -105,97 +97,8 @@ def load_data(data_dir: Path, random_seed: int = 1):
     return train_df, val_df, test_df
 
 
-def create_preprocessing_pipeline(categorical_features: list, continuous_numeric: list, binary: list) -> ColumnTransformer:
-    """Create preprocessing pipeline for tree-based models.
-
-    Matches the notebook's preprocessing approach for exact reproducibility.
-    """
-    return ColumnTransformer(
-        transformers=[
-            (
-                "cat",
-                OrdinalEncoder(
-                    handle_unknown="use_encoded_value", unknown_value=-1
-                ),
-                categorical_features,
-            ),
-            ("rest", "passthrough", continuous_numeric + binary)
-        ],
-        remainder="drop",
-        verbose_feature_names_out=False,
-    )
-
-
-def evaluate_model(model, X, y, model_name="Model", dataset_name="Dataset"):
-    """Evaluate model performance and return metrics dictionary."""
-    y_pred = model.predict(X)
-    y_proba = model.predict_proba(X)[:, 1]
-
-    metrics = {
-        "pr_auc": average_precision_score(y, y_proba),
-        "roc_auc": roc_auc_score(y, y_proba),
-        "precision": precision_score(y, y_pred),
-        "recall": recall_score(y, y_pred),
-        "f1": f1_score(y, y_pred),
-    }
-
-    # Print evaluation results
-    print(f"\n{'=' * 100}")
-    print(f"{model_name} - {dataset_name} Set Performance")
-    print(f"{'=' * 100}")
-    print(f"  PR-AUC:    {metrics['pr_auc']:.4f}")
-    print(f"  ROC-AUC:   {metrics['roc_auc']:.4f}")
-    print(f"  Precision: {metrics['precision']:.4f} ({metrics['precision']*100:.2f}%)")
-    print(f"  Recall:    {metrics['recall']:.4f} ({metrics['recall']*100:.2f}%)")
-    print(f"  F1 Score:  {metrics['f1']:.4f}")
-
-    # Confusion matrix
-    cm = confusion_matrix(y, y_pred)
-    print(f"\nConfusion Matrix:")
-    print(f"  TN: {cm[0, 0]:,}  |  FP: {cm[0, 1]:,}")
-    print(f"  FN: {cm[1, 0]:,}  |  TP: {cm[1, 1]:,}")
-    print(f"{'=' * 100}\n")
-
-    return metrics
-
-
-def optimize_thresholds(model, X_val, y_val):
-    """Find optimal thresholds for different recall targets."""
-    print("\n" + "=" * 100)
-    print("THRESHOLD OPTIMIZATION")
-    print("=" * 100)
-
-    y_val_proba = model.predict_proba(X_val)[:, 1]
-    precisions, recalls, thresholds = precision_recall_curve(y_val, y_val_proba)
-
-    # Target recall levels
-    recall_targets = {"conservative_90pct_recall": 0.90, "balanced_85pct_recall": 0.85, "aggressive_80pct_recall": 0.80}
-
-    threshold_config = {}
-
-    for name, target_recall in recall_targets.items():
-        # Find threshold closest to target recall
-        idx = np.argmin(np.abs(recalls - target_recall))
-        threshold = thresholds[idx] if idx < len(thresholds) else thresholds[-1]
-        precision = precisions[idx]
-        recall = recalls[idx]
-
-        threshold_config[name] = {
-            "threshold": float(threshold),
-            "precision": float(precision),
-            "recall": float(recall),
-            "target_recall": target_recall,
-        }
-
-        print(f"\n{name}:")
-        print(f"  Target Recall: {target_recall:.1%}")
-        print(f"  Actual Recall: {recall:.4f}")
-        print(f"  Precision:     {precision:.4f}")
-        print(f"  Threshold:     {threshold:.6f}")
-
-    print("=" * 100)
-
-    return threshold_config
+# NOTE: evaluate_model, optimize_thresholds, and preprocessing pipeline creation
+# are now imported from shared modules (src/evaluation and src/preprocessing)
 
 
 def train_model(
@@ -203,26 +106,11 @@ def train_model(
 ):
     """Train XGBoost model with hyperparameter tuning."""
 
-    # Define feature categories to match notebook preprocessing
-    # After FraudFeatureTransformer, these features remain categorical or should be treated as such
-    categorical_features = ['channel', 'promo_used', 'avs_match', 'cvv_result', 'three_ds_flag']
-
-    # Continuous numeric features
-    continuous_numeric = [
-        'account_age_days', 'total_transactions_user', 'avg_amount_user',
-        'amount', 'shipping_distance_km', 'hour_local', 'day_of_week_local',
-        'month_local', 'amount_deviation', 'amount_vs_avg_ratio',
-        'transaction_velocity', 'security_score'
-    ]
-
-    # Binary features (already 0/1, no preprocessing needed but grouped for consistency)
-    binary = [
-        'is_weekend_local', 'is_late_night_local', 'is_business_hours_local',
-        'is_micro_transaction', 'is_large_transaction', 'is_new_account',
-        'is_high_frequency_user', 'country_mismatch', 'high_risk_distance',
-        'zero_distance', 'new_account_with_promo', 'late_night_micro_transaction',
-        'high_value_long_distance'
-    ]
+    # Load feature categorization from shared config
+    feature_config = FeatureListsConfig.load()
+    categorical_features = feature_config['categorical']
+    continuous_numeric = feature_config['continuous_numeric']
+    binary = feature_config['binary']
 
     # Split features and target
     X_train = train_df.drop(columns=[target_col])
@@ -236,50 +124,20 @@ def train_model(
     print("FEATURE ENGINEERING & MODEL TRAINING")
     print("=" * 100)
 
-    # Create preprocessing pipeline (matches notebook approach)
-    preprocessor = create_preprocessing_pipeline(categorical_features, continuous_numeric, binary)
+    # Create preprocessing pipeline using shared factory
+    preprocessor = PreprocessingPipelineFactory.create_tree_pipeline(
+        categorical_features, continuous_numeric, binary
+    )
 
     # Feature names after preprocessing (order matches notebook)
     feature_names = categorical_features + continuous_numeric + binary
 
-    # Load optimal hyperparameters from previous training if available
-    metadata_path = Path("models/model_metadata.json")
-    if metadata_path.exists():
-        print("\nLoading optimal hyperparameters from previous training...")
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-            loaded_params = metadata["hyperparameters"]
-            # Extract only the model parameters (exclude random_state which may differ)
-            optimal_params = {
-                "n_estimators": loaded_params["n_estimators"],
-                "max_depth": loaded_params["max_depth"],
-                "learning_rate": loaded_params["learning_rate"],
-                "subsample": loaded_params["subsample"],
-                "colsample_bytree": loaded_params["colsample_bytree"],
-                "min_child_weight": loaded_params["min_child_weight"],
-                "gamma": loaded_params["gamma"],
-                "scale_pos_weight": loaded_params["scale_pos_weight"],
-                "eval_metric": "aucpr",
-                "random_state": random_seed,
-                "n_jobs": -1,
-            }
-        print(f"  ✓ Loaded hyperparameters from {metadata_path}")
-    else:
-        # Fallback to optimal hyperparameters from initial notebook tuning
-        print("\nUsing optimal hyperparameters from initial notebook tuning...")
-        optimal_params = {
-            "n_estimators": 100,
-            "max_depth": 4,
-            "learning_rate": 0.1,
-            "subsample": 0.9,
-            "colsample_bytree": 0.9,
-            "min_child_weight": 5,
-            "gamma": 0.6,
-            "scale_pos_weight": 8,
-            "eval_metric": "aucpr",
-            "random_state": random_seed,
-            "n_jobs": -1,
-        }
+    # Load optimal hyperparameters using shared ModelConfig
+    optimal_params = ModelConfig.load_hyperparameters(
+        model_type='xgboost',
+        source='metadata',
+        random_seed=random_seed
+    )
 
     if not skip_tuning:
         print("\nPerforming hyperparameter tuning with GridSearchCV...")
@@ -300,7 +158,7 @@ def train_model(
         grid_search = GridSearchCV(
             pipeline,
             param_grid,
-            cv=StratifiedKFold(n_splits=4, shuffle=True, random_state=random_seed),
+            cv=TrainingConfig.get_cv_strategy(random_seed=random_seed),
             scoring="average_precision",
             n_jobs=-1,
             verbose=2 if verbose else 0,

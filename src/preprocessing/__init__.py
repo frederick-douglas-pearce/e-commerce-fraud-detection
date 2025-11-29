@@ -6,9 +6,11 @@ including scikit-learn compatible transformers and configuration management.
 Main exports:
     FraudFeatureTransformer: Sklearn-compatible transformer for feature engineering
     FeatureConfig: Configuration dataclass for storing training-time parameters
+    PreprocessingPipelineFactory: Factory for creating preprocessing pipelines
 """
 
 from .transformer import FraudFeatureTransformer
 from .config import FeatureConfig
+from .pipelines import PreprocessingPipelineFactory
 
-__all__ = ['FraudFeatureTransformer', 'FeatureConfig']
+__all__ = ['FraudFeatureTransformer', 'FeatureConfig', 'PreprocessingPipelineFactory']

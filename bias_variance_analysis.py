@@ -19,16 +19,19 @@ import joblib
 warnings.filterwarnings('ignore')
 
 # Scikit-learn
-from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
-from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 # XGBoost
 import xgboost as xgb
+
+# Shared modules from src/
+from src.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
+from src.data import load_and_split_data
+from src.preprocessing import FraudFeatureTransformer, PreprocessingPipelineFactory
 
 # Set style
 sns.set_style("whitegrid")
@@ -39,17 +42,14 @@ plt.rcParams['font.size'] = 10
 # Configuration
 # ============================================================================
 
-RANDOM_SEED = 42
-TARGET_COL = 'is_fraud'
-DATA_PATH = 'data/transactions.csv'
+# Use shared configuration (default random seed = 1, configurable)
+RANDOM_SEED = DataConfig.DEFAULT_RANDOM_SEED
+TARGET_COL = DataConfig.TARGET_COLUMN
 OUTPUT_DIR = Path('analysis/bias_variance')
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Load feature lists from saved config
-with open('models/feature_lists.json', 'r') as f:
-    feature_config = json.load(f)
-
-# The notebook uses: continuous_numeric, categorical, binary, all_features
+# Load feature lists from shared config
+feature_config = FeatureListsConfig.load()
 CONTINUOUS_FEATURES = feature_config['continuous_numeric'] + feature_config['binary']
 CATEGORICAL_FEATURES = feature_config['categorical']
 ALL_FEATURES = feature_config['all_features']
@@ -62,103 +62,55 @@ print(f"  - Categorical: {len(CATEGORICAL_FEATURES)}")
 # Data Loading with Feature Engineering
 # ============================================================================
 
-def engineer_features(df):
-    """
-    Apply feature engineering (replicated from notebook).
-    """
-    df = df.copy()
-
-    # Parse datetime
-    df['transaction_datetime'] = pd.to_datetime(df['transaction_time'])
-
-    # Extract time features (assuming UTC+0, adjust as needed)
-    df['hour_local'] = df['transaction_datetime'].dt.hour
-    df['day_of_week_local'] = df['transaction_datetime'].dt.dayofweek
-    df['month_local'] = df['transaction_datetime'].dt.month
-
-    # User behavior features
-    df['amount_deviation'] = df['amount'] - df['avg_amount_user']
-    df['amount_vs_avg_ratio'] = df['amount'] / (df['avg_amount_user'] + 1)  # +1 to avoid division by zero
-    df['transaction_velocity'] = df['total_transactions_user'] / (df['account_age_days'] + 1)
-
-    # Security score (simple weighted sum)
-    df['security_score'] = (
-        (df['avs_match'] == 'full').astype(int) * 2 +
-        (df['cvv_result'] == 'match').astype(int) * 2 +
-        (df['three_ds_flag'] == 'Y').astype(int) * 2
-    )
-
-    # Binary features - Time-based
-    df['is_weekend_local'] = (df['day_of_week_local'] >= 5).astype(int)
-    df['is_late_night_local'] = ((df['hour_local'] >= 22) | (df['hour_local'] <= 5)).astype(int)
-    df['is_business_hours_local'] = ((df['hour_local'] >= 9) & (df['hour_local'] <= 17)).astype(int)
-
-    # Binary features - Amount-based
-    df['is_micro_transaction'] = (df['amount'] < 10).astype(int)
-    df['is_large_transaction'] = (df['amount'] > 500).astype(int)
-
-    # Binary features - Account-based
-    df['is_new_account'] = (df['account_age_days'] < 30).astype(int)
-    df['is_high_frequency_user'] = (df['total_transactions_user'] > 50).astype(int)
-
-    # Binary features - Location-based
-    df['country_mismatch'] = (df['country'] != df['bin_country']).astype(int)
-    df['high_risk_distance'] = (df['shipping_distance_km'] > 1000).astype(int)
-    df['zero_distance'] = (df['shipping_distance_km'] == 0).astype(int)
-
-    # Interaction features
-    df['new_account_with_promo'] = (df['is_new_account'] & (df['promo_used'] == 'Y')).astype(int)
-    df['late_night_micro_transaction'] = (df['is_late_night_local'] & df['is_micro_transaction']).astype(int)
-    df['high_value_long_distance'] = (df['is_large_transaction'] & df['high_risk_distance']).astype(int)
-
-    return df
-
-
 def load_and_prepare_data():
-    """Load and prepare data with feature engineering."""
-    print("\nLoading and preparing data...")
-    df = pd.read_csv(DATA_PATH)
+    """Load and prepare data with feature engineering using production transformer.
 
-    # Apply feature engineering
-    df = engineer_features(df)
+    Uses shared modules for consistency:
+    - load_and_split_data() from src.data
+    - FraudFeatureTransformer from src.preprocessing
+    """
+    # Load and split raw data using shared function
+    train_raw, val_raw, test_raw = load_and_split_data(random_seed=RANDOM_SEED, verbose=True)
 
-    # Select only the features we need
-    X = df[ALL_FEATURES]
-    y = df[TARGET_COL]
+    # Load or create feature transformer
+    transformer_path = Path('models/transformer_config.json')
+    if transformer_path.exists():
+        print(f"\n✓ Loading transformer config from {transformer_path}")
+        transformer = FraudFeatureTransformer.load(str(transformer_path))
+    else:
+        print(f"\n⚠️  Transformer config not found at {transformer_path}")
+        print("  Creating new transformer and fitting on training data...")
+        transformer = FraudFeatureTransformer()
+        transformer.fit(train_raw)
 
-    # 60% train / 20% validation / 20% test
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=RANDOM_SEED
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_val, y_train_val, test_size=0.25, stratify=y_train_val, random_state=RANDOM_SEED
-    )
+        # Save for future use
+        transformer.save(str(transformer_path))
+        print(f"  ✓ Saved transformer config to {transformer_path}")
 
-    print(f"Train: {len(X_train):,} | Val: {len(X_val):,} | Test: {len(X_test):,}")
-    print(f"Fraud rate - Train: {y_train.mean():.2%} | Val: {y_val.mean():.2%} | Test: {y_test.mean():.2%}")
+    # Apply feature engineering to all splits
+    print("\nApplying feature engineering...")
+    train_df = transformer.transform(train_raw)
+    val_df = transformer.transform(val_raw)
+    test_df = transformer.transform(test_raw)
+
+    # Extract features and targets
+    X_train = train_df[ALL_FEATURES]
+    y_train = train_raw[TARGET_COL]
+    X_val = val_df[ALL_FEATURES]
+    y_val = val_raw[TARGET_COL]
+    X_test = test_df[ALL_FEATURES]
+    y_test = test_raw[TARGET_COL]
+
+    print(f"  ✓ Engineered features: {len(ALL_FEATURES)}")
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
 def create_preprocessors():
-    """Create preprocessing pipelines."""
-    # For Logistic Regression
-    logistic_preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', StandardScaler(), CONTINUOUS_FEATURES),
-            ('cat', OneHotEncoder(drop='first', handle_unknown='ignore'), CATEGORICAL_FEATURES)
-        ],
-        remainder='drop'
-    )
-
-    # For tree-based models
-    tree_preprocessor = ColumnTransformer(
-        transformers=[
-            ('cat', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1), CATEGORICAL_FEATURES),
-            ('rest', 'passthrough', CONTINUOUS_FEATURES)
-        ],
-        remainder='drop'
-    )
+    """Create preprocessing pipelines using shared factory."""
+    # Create pipelines using shared factory
+    logistic_preprocessor = PreprocessingPipelineFactory.create_logistic_pipeline()
+    tree_preprocessor = PreprocessingPipelineFactory.create_tree_pipeline()
 
     return logistic_preprocessor, tree_preprocessor
 
@@ -169,55 +121,34 @@ def create_preprocessors():
 
 def load_best_params_from_cv():
     """
-    Load best hyperparameters from most recent CV results.
+    Load best hyperparameters using shared ModelConfig.
     Returns dict with 'rf' and 'xgb' keys containing best params, or None if not found.
     """
-    logs_dir = Path('models/logs')
-
     best_params = {'rf': None, 'xgb': None}
 
-    # Load Random Forest best params
-    rf_files = sorted(logs_dir.glob('random_forest_cv_results_*.csv'))
-    if rf_files:
-        rf_cv = pd.read_csv(rf_files[-1])
-        rf_best = rf_cv.nlargest(1, 'mean_test_score').iloc[0]
-        best_params['rf'] = {
-            'n_estimators': int(rf_best['param_classifier__n_estimators']),
-            'max_depth': int(rf_best['param_classifier__max_depth']),
-            'min_samples_split': int(rf_best['param_classifier__min_samples_split']),
-            'min_samples_leaf': int(rf_best['param_classifier__min_samples_leaf']),
-            'max_features': rf_best['param_classifier__max_features'],
-            'class_weight': rf_best['param_classifier__class_weight']
-        }
-        print(f"✓ Loaded Random Forest best params from {rf_files[-1].name}")
-    else:
-        print("⚠️  No Random Forest CV results found - using baseline params")
+    # Load Random Forest params from CV results
+    try:
+        rf_params = ModelConfig.load_hyperparameters(
+            model_type='random_forest',
+            source='cv_results',
+            random_seed=RANDOM_SEED
+        )
+        best_params['rf'] = rf_params
+    except Exception:
+        # Fallback handled by ModelConfig
+        pass
 
-    # Load XGBoost best params
-    xgb_files = sorted(logs_dir.glob('xgboost_cv_results_*.csv'))
-    if xgb_files:
-        xgb_cv = pd.read_csv(xgb_files[-1])
-        xgb_best = xgb_cv.nlargest(1, 'mean_test_score').iloc[0]
-        best_params['xgb'] = {
-            'n_estimators': int(xgb_best['param_classifier__n_estimators']),
-            'max_depth': int(xgb_best['param_classifier__max_depth']),
-            'learning_rate': float(xgb_best['param_classifier__learning_rate']),
-            'subsample': float(xgb_best['param_classifier__subsample']),
-            'colsample_bytree': float(xgb_best['param_classifier__colsample_bytree']),
-            'min_child_weight': int(xgb_best['param_classifier__min_child_weight']),
-            'gamma': float(xgb_best['param_classifier__gamma']),
-            'scale_pos_weight': float(xgb_best['param_classifier__scale_pos_weight'])
-        }
-
-        # Add reg_alpha and reg_lambda if they exist (new parameters)
-        if 'param_classifier__reg_alpha' in xgb_best.index:
-            best_params['xgb']['reg_alpha'] = float(xgb_best['param_classifier__reg_alpha'])
-        if 'param_classifier__reg_lambda' in xgb_best.index:
-            best_params['xgb']['reg_lambda'] = float(xgb_best['param_classifier__reg_lambda'])
-
-        print(f"✓ Loaded XGBoost best params from {xgb_files[-1].name}")
-    else:
-        print("⚠️  No XGBoost CV results found - using baseline params")
+    # Load XGBoost params from CV results
+    try:
+        xgb_params = ModelConfig.load_hyperparameters(
+            model_type='xgboost',
+            source='cv_results',
+            random_seed=RANDOM_SEED
+        )
+        best_params['xgb'] = xgb_params
+    except Exception:
+        # Fallback handled by ModelConfig
+        pass
 
     return best_params
 
@@ -246,8 +177,8 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
     y_train_val = pd.concat([y_train, y_val])
     scale_pos_weight = (y_train_val == 0).sum() / (y_train_val == 1).sum()
 
-    # Use same CV strategy as GridSearchCV
-    cv_strategy = StratifiedKFold(n_splits=4, shuffle=True, random_state=RANDOM_SEED)
+    # Use same CV strategy as GridSearchCV (from shared config)
+    cv_strategy = TrainingConfig.get_cv_strategy(random_seed=RANDOM_SEED)
 
     # Load tuned parameters if requested
     tuned_params = None
