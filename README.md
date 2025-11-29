@@ -141,12 +141,22 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │       ├── metrics.py                  # evaluate_model()
 │       ├── thresholds.py               # optimize_thresholds()
 │       └── __init__.py                 # Package exports
-├── tests/                              # Test suite (41 passing tests)
+├── tests/                              # Test suite (167 passing tests)
 │   ├── conftest.py                     # Shared pytest fixtures
-│   ├── test_api.py                     # API integration tests
-│   └── test_preprocessing/             # Preprocessing tests
+│   ├── test_api.py                     # API integration tests (24 tests)
+│   ├── test_config/                    # Shared config tests (45 tests)
+│   │   ├── test_data_config.py         # DataConfig tests (16 tests)
+│   │   ├── test_model_config.py        # ModelConfig tests (20 tests)
+│   │   └── test_training_config.py     # TrainingConfig tests (9 tests)
+│   ├── test_data/                      # Data loading tests (13 tests)
+│   │   └── test_loader.py              # load_and_split_data tests
+│   ├── test_evaluation/                # Evaluation tests (26 tests)
+│   │   ├── test_metrics.py             # Metrics tests (14 tests)
+│   │   └── test_thresholds.py          # Threshold optimization tests (12 tests)
+│   └── test_preprocessing/             # Preprocessing tests (59 tests)
 │       ├── test_config.py              # FeatureConfig tests (8 tests)
-│       ├── test_features.py            # Feature function tests (23 tests)
+│       ├── test_features.py            # Feature function tests (15 tests)
+│       ├── test_pipelines.py           # Pipeline factory tests (18 tests)
 │       └── test_transformer.py         # Transformer integration tests (18 tests)
 ├── models/                             # Model artifacts (tracked in git)
 │   ├── xgb_fraud_detector.joblib       # Trained XGBoost model (~156KB)
@@ -876,45 +886,87 @@ curl http://localhost:8000/model/info
 
 ## Testing
 
-Run comprehensive test suite to verify feature engineering pipeline and API functionality:
+Run comprehensive test suite to verify all components: shared infrastructure, preprocessing pipeline, and API functionality.
 
-### Unit Tests (Preprocessing Pipeline)
-```bash
-# Run all preprocessing tests
-uv run pytest tests/test_preprocessing/ -v
+### Test Organization
 
-# Run specific test file
-uv run pytest tests/test_preprocessing/test_transformer.py -v
+The test suite mirrors the source code structure with 167 passing tests:
+
+```
+tests/
+├── test_api.py              # API integration tests (24 tests)
+├── test_config/             # Shared config tests (45 tests)
+│   ├── test_data_config.py       # DataConfig (16 tests)
+│   ├── test_model_config.py      # ModelConfig, FeatureListsConfig (20 tests)
+│   └── test_training_config.py   # TrainingConfig (9 tests)
+├── test_data/               # Data loading tests (13 tests)
+│   └── test_loader.py            # load_and_split_data()
+├── test_evaluation/         # Evaluation tests (26 tests)
+│   ├── test_metrics.py           # calculate_metrics, evaluate_model (14 tests)
+│   └── test_thresholds.py        # optimize_thresholds (12 tests)
+└── test_preprocessing/      # Preprocessing tests (59 tests)
+    ├── test_config.py            # FeatureConfig (8 tests)
+    ├── test_features.py          # Feature engineering functions (15 tests)
+    ├── test_pipelines.py         # PreprocessingPipelineFactory (18 tests)
+    └── test_transformer.py       # FraudFeatureTransformer (18 tests)
 ```
 
-### Integration Tests (API)
-```bash
-# Run all API tests
-uv run pytest tests/test_api.py -v
+### Running Tests
 
-# Run specific test class
-uv run pytest tests/test_api.py::TestPredictEndpoint -v
-
-# Run with detailed output
-uv run pytest tests/test_api.py -v --tb=short
-```
-
-### All Tests
+**All Tests** (Recommended):
 ```bash
 # Run entire test suite
 uv run pytest tests/ -v
 
-# Quick smoke test
-uv run pytest tests/ -x  # Stop on first failure
+# Quick smoke test (stop on first failure)
+uv run pytest tests/ -x
 ```
 
-**Test Coverage:**
-- 41 preprocessing tests (100% passing)
-- 25+ API integration tests
-- Request/response validation
-- Error handling scenarios
-- Threshold strategies
-- Performance validation
+**By Component**:
+```bash
+# Configuration tests
+uv run pytest tests/test_config/ -v
+
+# Data loading tests
+uv run pytest tests/test_data/ -v
+
+# Evaluation tests
+uv run pytest tests/test_evaluation/ -v
+
+# Preprocessing tests
+uv run pytest tests/test_preprocessing/ -v
+
+# API tests
+uv run pytest tests/test_api.py -v
+```
+
+**Specific Test Files**:
+```bash
+# Test specific module
+uv run pytest tests/test_config/test_model_config.py -v
+
+# Test specific class
+uv run pytest tests/test_api.py::TestPredictEndpoint -v
+
+# Test with detailed output
+uv run pytest tests/test_preprocessing/test_transformer.py -v --tb=short
+```
+
+### Test Coverage Summary
+
+**167 total tests** covering:
+- ✅ **Shared Configuration** (45 tests): DataConfig, ModelConfig, TrainingConfig
+- ✅ **Data Loading** (13 tests): load_and_split_data with stratification validation
+- ✅ **Evaluation** (26 tests): Metrics calculation and threshold optimization
+- ✅ **Preprocessing** (59 tests): FeatureConfig, feature engineering functions, pipelines, transformer
+- ✅ **API** (24 tests): Endpoints, validation, error handling, threshold strategies
+
+**Key Test Features**:
+- Comprehensive edge case coverage (division by zero, missing data)
+- Fixtures for reusable test data (conftest.py)
+- Integration tests for end-to-end workflows
+- Performance validation (response times)
+- All tests passing with 100% success rate
 
 ---
 

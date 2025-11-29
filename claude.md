@@ -43,12 +43,23 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │       ├── metrics.py               # evaluate_model()
 │       ├── thresholds.py            # optimize_thresholds()
 │       └── __init__.py              # Package exports
-├── tests/                           # Test suite
+├── tests/                           # Test suite (167 passing tests)
 │   ├── conftest.py                  # Shared pytest fixtures
-│   └── test_preprocessing/          # Preprocessing tests
-│       ├── test_config.py           # FeatureConfig tests
-│       ├── test_features.py         # Feature function tests
-│       └── test_transformer.py      # Transformer integration tests
+│   ├── test_api.py                  # API integration tests (24 tests)
+│   ├── test_config/                 # Shared config tests (45 tests)
+│   │   ├── test_data_config.py      # DataConfig tests (16 tests)
+│   │   ├── test_model_config.py     # ModelConfig tests (20 tests)
+│   │   └── test_training_config.py  # TrainingConfig tests (9 tests)
+│   ├── test_data/                   # Data loading tests (13 tests)
+│   │   └── test_loader.py           # load_and_split_data tests
+│   ├── test_evaluation/             # Evaluation tests (26 tests)
+│   │   ├── test_metrics.py          # Metrics tests (14 tests)
+│   │   └── test_thresholds.py       # Threshold tests (12 tests)
+│   └── test_preprocessing/          # Preprocessing tests (59 tests)
+│       ├── test_config.py           # FeatureConfig tests (8 tests)
+│       ├── test_features.py         # Feature function tests (15 tests)
+│       ├── test_pipelines.py        # Pipeline factory tests (18 tests)
+│       └── test_transformer.py      # Transformer integration tests (18 tests)
 ├── models/                          # Model artifacts
 │   ├── xgb_fraud_detector.joblib    # Trained XGBoost model (gitignored)
 │   ├── transformer_config.json      # Feature transformer configuration (tracked)
@@ -383,46 +394,64 @@ predictions = pipeline.predict(test_df)
 
 ### Testing Strategy
 
-**Test Coverage**: Unit tests for each component + integration tests
+**Test Coverage**: Comprehensive unit and integration tests for all components (167 passing tests)
 
-**Test Structure**:
-- `tests/conftest.py`: Shared pytest fixtures
-  - `sample_raw_df()`: Small raw DataFrame (10 rows)
-  - `sample_raw_df_utc()`: Same data with UTC timestamps
-  - `sample_config()`: Pre-configured FeatureConfig
-  - `fitted_transformer()`: Fitted FraudFeatureTransformer
-  - `sample_engineered_df()`: Transformed data (30 features)
+**Test Organization**: Tests mirror source code structure for easy navigation
 
-- `tests/test_preprocessing/test_config.py`: FeatureConfig tests
-  - Configuration creation and validation
-  - Save/load round-trip testing
-  - JSON structure verification
-  - Quantile calculation from training data
+**Shared Fixtures** (`tests/conftest.py`):
+- `sample_raw_df()`: Small raw DataFrame (10 rows) for preprocessing tests
+- `sample_raw_df_utc()`: Same data with UTC timestamps
+- `sample_config()`: Pre-configured FeatureConfig
+- `fitted_transformer()`: Fitted FraudFeatureTransformer
+- `sample_engineered_df()`: Transformed data (30 features)
 
-- `tests/test_preprocessing/test_features.py`: Feature function tests
-  - Individual function testing (isolation)
-  - Edge case handling (zero values, division by zero)
-  - Timezone validation (strict UTC enforcement)
-  - Binary feature output verification
+**Test Modules**:
 
-- `tests/test_preprocessing/test_transformer.py`: Integration tests
-  - Full pipeline execution
-  - Output shape verification (30 features)
-  - Sklearn Pipeline compatibility
-  - Save/load consistency
-  - Multiple transform consistency
+1. **Configuration Tests** (`tests/test_config/` - 45 tests):
+   - `test_data_config.py` (16 tests): DataConfig constants, get_data_path(), get_random_seed(), get_split_config()
+   - `test_model_config.py` (20 tests): FeatureListsConfig.load(), ModelConfig.get_param_grid(), hyperparameter loading
+   - `test_training_config.py` (9 tests): CV strategy (StratifiedKFold), threshold targets, random seed handling
+
+2. **Data Loading Tests** (`tests/test_data/` - 13 tests):
+   - `test_loader.py`: load_and_split_data() with correct ratios, stratification, no data leakage, custom parameters
+
+3. **Evaluation Tests** (`tests/test_evaluation/` - 26 tests):
+   - `test_metrics.py` (14 tests): calculate_metrics(), evaluate_model(), perfect predictions, verbose control
+   - `test_thresholds.py` (12 tests): optimize_thresholds(), default/custom targets, threshold config structure
+
+4. **Preprocessing Tests** (`tests/test_preprocessing/` - 59 tests):
+   - `test_config.py` (8 tests): FeatureConfig creation, save/load, JSON structure, quantile calculation
+   - `test_features.py` (15 tests): Individual feature functions, edge cases, timezone validation
+   - `test_pipelines.py` (18 tests): PreprocessingPipelineFactory, tree/logistic pipelines, model type aliases
+   - `test_transformer.py` (18 tests): Full pipeline execution, sklearn compatibility, save/load consistency
+
+5. **API Tests** (`tests/test_api.py` - 24 tests):
+   - Endpoint testing (root, health, model info, predict)
+   - Request/response validation
+   - Error handling scenarios
+   - Threshold strategies
+   - Performance validation
 
 **Run Tests**:
 ```bash
 # Run all tests
-uv run pytest
+uv run pytest tests/ -v
+
+# Run by component
+uv run pytest tests/test_config/ -v        # Configuration tests
+uv run pytest tests/test_data/ -v          # Data loading tests
+uv run pytest tests/test_evaluation/ -v    # Evaluation tests
+uv run pytest tests/test_preprocessing/ -v # Preprocessing tests
+uv run pytest tests/test_api.py -v         # API tests
 
 # Run with coverage
-uv run pytest --cov=src/preprocessing --cov-report=html
+uv run pytest --cov=src --cov-report=html
 
 # Run specific test file
-uv run pytest tests/test_preprocessing/test_transformer.py
+uv run pytest tests/test_config/test_model_config.py -v
 ```
+
+**Test Results**: All 167 tests passing with 100% success rate
 
 ### Notebook Integration
 
