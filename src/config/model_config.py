@@ -61,11 +61,27 @@ class FeatureListsConfig:
                 }
 
         # Standard feature_lists.json format
+        # Support both old and new key names for backward compatibility
+        categorical = data.get('categorical') or data.get('categorical_features', [])
+        continuous_numeric = data.get('continuous_numeric', [])
+        binary = data.get('binary', [])
+
+        # If continuous_features exists but continuous_numeric doesn't, split it
+        if not continuous_numeric and 'continuous_features' in data:
+            # continuous_features contains both continuous_numeric and binary
+            # We need to separate them if possible, otherwise treat all as continuous
+            continuous_features = data['continuous_features']
+            # Binary features are typically boolean 0/1 flags
+            # For now, treat all continuous_features as continuous_numeric
+            continuous_numeric = continuous_features
+
+        all_features = data.get('all_features', categorical + continuous_numeric + binary)
+
         return {
-            'continuous_numeric': data.get('continuous_numeric', []),
-            'categorical': data.get('categorical', []),
-            'binary': data.get('binary', []),
-            'all_features': data.get('all_features', [])
+            'continuous_numeric': continuous_numeric,
+            'categorical': categorical,
+            'binary': binary,
+            'all_features': all_features
         }
 
     @classmethod

@@ -108,9 +108,22 @@ def load_and_prepare_data():
 
 def create_preprocessors():
     """Create preprocessing pipelines using shared factory."""
-    # Create pipelines using shared factory
-    logistic_preprocessor = PreprocessingPipelineFactory.create_logistic_pipeline()
-    tree_preprocessor = PreprocessingPipelineFactory.create_tree_pipeline()
+    # Get feature lists from config (already loaded at module level)
+    continuous_numeric = feature_config['continuous_numeric']
+    binary = feature_config['binary']
+    categorical = feature_config['categorical']
+
+    # Create pipelines using shared factory with explicit feature lists
+    logistic_preprocessor = PreprocessingPipelineFactory.create_logistic_pipeline(
+        categorical_features=categorical,
+        continuous_numeric=continuous_numeric,
+        binary=binary
+    )
+    tree_preprocessor = PreprocessingPipelineFactory.create_tree_pipeline(
+        categorical_features=categorical,
+        continuous_numeric=continuous_numeric,
+        binary=binary
+    )
 
     return logistic_preprocessor, tree_preprocessor
 
