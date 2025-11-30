@@ -236,6 +236,19 @@ def train_model(
         "continuous_numeric": continuous_numeric,
         "binary": binary,
         "optimal_params": optimal_params,
+        # Additional metadata for comprehensive model_metadata.json
+        "dataset_info": {
+            "train_samples": len(train_df),
+            "val_samples": len(val_df),
+            "train_val_samples": len(train_val_df),
+            "test_samples": len(test_df),
+            "num_features": len(feature_names),
+            "fraud_rate_train_val": float(y_train_val.mean()),
+            "fraud_rate_test": float(y_test.mean()),
+            "class_imbalance_ratio": float((y_train_val == 0).sum() / (y_train_val == 1).sum()),
+        },
+        "cv_best_score": grid_search.best_score_ if not skip_tuning else None,
+        "tuning_performed": not skip_tuning,
     }
 
 
@@ -275,31 +288,68 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         json.dump(feature_lists, f, indent=2)
     print(f"  ✓ Feature lists saved: {feature_lists_path}")
 
-    # 5. Save model metadata
+    # 5. Save model metadata (matching notebook structure)
     metadata = {
         "model_info": {
-            "name": "XGBoost Fraud Detector",
+            "model_name": "XGBoost Fraud Detector",
+            "model_type": "XGBClassifier",
             "version": "1.0",
-            "training_date": datetime.now().isoformat(),
-            "algorithm": "XGBoost Gradient Boosting",
-            "training_methodology": "GridSearchCV with 4-fold CV on train+val (80%) → Evaluate on test (20%)",
-            "methodology_details": "Combines train and validation data before hyperparameter tuning to maximize data available for GridSearchCV (239,756 samples vs 179,817). GridSearchCV automatically retrains on full train+val with best parameters (refit=True).",
+            "training_date": datetime.now().strftime('%Y-%m-%d'),
+            "framework": "xgboost + scikit-learn",
+            "python_version": "3.12+",
+            "note": "Final production model trained on train+val combined, evaluated on test set"
         },
-        "hyperparameters": results["optimal_params"],
+        "hyperparameters": {
+            param: value for param, value in results["optimal_params"].items()
+        },
+        "dataset_info": {
+            "training_samples": results["dataset_info"]["train_val_samples"],
+            "training_sources": {
+                "original_train": results["dataset_info"]["train_samples"],
+                "original_val": results["dataset_info"]["val_samples"],
+                "combined_total": results["dataset_info"]["train_val_samples"]
+            },
+            "test_samples": results["dataset_info"]["test_samples"],
+            "num_features": results["dataset_info"]["num_features"],
+            "fraud_rate_train_val": results["dataset_info"]["fraud_rate_train_val"],
+            "fraud_rate_test": results["dataset_info"]["fraud_rate_test"],
+            "class_imbalance_ratio": results["dataset_info"]["class_imbalance_ratio"]
+        },
         "performance": {
-            "test_set": {
-                "pr_auc": results["test_metrics"]["pr_auc"],
-                "roc_auc": results["test_metrics"]["roc_auc"],
-                "precision": results["test_metrics"]["precision"],
-                "recall": results["test_metrics"]["recall"],
-                "f1": results["test_metrics"]["f1"],
+            "test_set_final": {
+                "note": "Final performance from model trained on train+val combined",
+                "roc_auc": float(results["test_metrics"]["roc_auc"]),
+                "pr_auc": float(results["test_metrics"]["pr_auc"]),
+                "f1_score": float(results["test_metrics"]["f1"]),
+                "precision": float(results["test_metrics"]["precision"]),
+                "recall": float(results["test_metrics"]["recall"]),
+                "accuracy": float(results["test_metrics"]["accuracy"])
+            },
+            "cross_validation": {
+                "cv_folds": 4,
+                "cv_strategy": "StratifiedKFold",
+                "best_cv_pr_auc": float(results["cv_best_score"]) if results["cv_best_score"] is not None else None,
+                "note": "CV performed on train+val combined for hyperparameter selection" if results["tuning_performed"] else "No CV performed (skip-tuning mode)"
             }
         },
-        "feature_importance_top10": results["feature_importance"].head(10)[["feature", "importance"]].to_dict(
-            orient="records"
-        ),
-        "threshold_strategies": results["threshold_config"],
-        "random_seed": random_seed,
+        "features": {
+            "continuous_numeric": results["continuous_numeric"],
+            "categorical": results["categorical_features"],
+            "binary": results["binary"],
+            "total_count": results["dataset_info"]["num_features"]
+        },
+        "preprocessing": {
+            "categorical_encoding": "OrdinalEncoder (handle_unknown=use_encoded_value)",
+            "numeric_scaling": "None (tree-based model)",
+            "binary_features": "Passthrough (no transformation)"
+        },
+        "optimization": {
+            "optimization_metric": "PR-AUC (Precision-Recall Area Under Curve)",
+            "search_method": "GridSearchCV" if results["tuning_performed"] else "Pre-optimized parameters",
+            "num_combinations_tested": 108 if results["tuning_performed"] else 0,
+            "tuned_parameters": list(results["optimal_params"].keys()),
+            "final_model_training": "Retrained on train+val combined with optimal hyperparameters"
+        }
     }
 
     metadata_path = output_dir / "model_metadata.json"

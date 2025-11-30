@@ -316,8 +316,8 @@ async def get_model_info():
 async def predict_fraud(
     transaction: RawTransactionRequest,
     threshold_strategy: Literal[
-        "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
-    ] = "balanced_85pct_recall",
+        "optimal_f1", "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
+    ] = "optimal_f1",
 ):
     """
     Predict fraud for a raw transaction.
@@ -326,9 +326,10 @@ async def predict_fraud(
     using the production FraudFeatureTransformer pipeline before making predictions.
 
     **Threshold Strategies:**
+    - `optimal_f1`: Best precision-recall balance (F1 score optimized) - **RECOMMENDED DEFAULT**
     - `conservative_90pct_recall`: Catches 90% of fraud (more false positives)
-    - `balanced_85pct_recall`: Balanced approach (default)
-    - `aggressive_80pct_recall`: Fewer false positives (may miss some fraud)
+    - `balanced_85pct_recall`: Targets 85% recall with maximized precision
+    - `aggressive_80pct_recall`: Targets 80% recall with highest precision (fewer false positives)
 
     **Returns:**
     - Fraud prediction (True/False)

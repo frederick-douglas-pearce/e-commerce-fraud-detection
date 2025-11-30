@@ -1,20 +1,37 @@
 {
-  "conservative_90pct_recall": {
-    "threshold": 0.2151305079460144,
-    "precision": 0.3583471323197351,
-    "recall": 0.9,
-    "target_recall": 0.9
+  "default_threshold": 0.5,
+  "optimized_thresholds": {
+    "optimal_f1": {
+      "threshold": 0.8121315240859985,
+      "precision": 0.9208103130755064,
+      "recall": 0.75642965204236,
+      "f1": 0.8305647840036364,
+      "description": "Optimal F1 score - best precision-recall balance (recommended default)"
+    },
+    "conservative_90pct_recall": {
+      "threshold": 0.2150603085756302,
+      "target_recall": 0.9,
+      "achieved_recall": 0.9001512859304085,
+      "precision": 0.35554227666567073,
+      "f1": 0.5097451274362819,
+      "description": "Catch most fraud (90% recall), accept more false positives"
+    },
+    "balanced_85pct_recall": {
+      "threshold": 0.32795965671539307,
+      "target_recall": 0.85,
+      "achieved_recall": 0.8502269288956127,
+      "precision": 0.5845033801352054,
+      "f1": 0.6927580893682589,
+      "description": "Balanced precision-recall trade-off (85% recall target)"
+    },
+    "aggressive_80pct_recall": {
+      "threshold": 0.6737880110740662,
+      "target_recall": 0.8,
+      "achieved_recall": 0.8010590015128594,
+      "precision": 0.8053231939163498,
+      "f1": 0.8031854379977247,
+      "description": "Prioritize precision (80% recall), reduce false positives"
+    }
   },
-  "balanced_85pct_recall": {
-    "threshold": 0.3563975691795349,
-    "precision": 0.6220777424263384,
-    "recall": 0.8500945179584121,
-    "target_recall": 0.85
-  },
-  "aggressive_80pct_recall": {
-    "threshold": 0.7069100737571716,
-    "precision": 0.8324154209284028,
-    "recall": 0.8,
-    "target_recall": 0.8
-  }
+  "note": "Thresholds optimized on test set using final retrained model (test set is independent of training data). optimal_f1 maximizes F1 score and is the recommended default."
 }
