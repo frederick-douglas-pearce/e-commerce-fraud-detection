@@ -115,8 +115,11 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 
 ```
 .
-├── fraud_detection_EDA_FE.ipynb        # EDA & feature engineering notebook
-├── fraud_detection_modeling.ipynb      # Model training & evaluation notebook
+├── fd1_EDA_FE.ipynb                    # Notebook 1: EDA & feature engineering
+├── fd2_model_selection_tuning.ipynb    # Notebook 2: Model selection & hyperparameter tuning
+├── fd3_model_evaluation_deployment.ipynb # Notebook 3: Final evaluation & deployment
+├── best_params.json                    # Optimal hyperparameters (output from fd2)
+├── validation_metrics.json             # Validation metrics (output from fd2)
 ├── train.py                            # Model training script
 ├── predict.py                          # FastAPI prediction service
 ├── bias_variance_analysis.py           # Bias-variance diagnostics script
@@ -222,12 +225,17 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    uv run --with jupyter jupyter lab
    ```
 
-4. **Run the notebooks**
-   - Open `fraud_detection_EDA_FE.ipynb` for EDA and feature engineering
-   - Run cells sequentially
-   - Dataset will auto-download on first run if not present
-   - Open `fraud_detection_modeling.ipynb` for model training (after EDA is complete)
-   - Run cells sequentially
+4. **Run the notebooks in sequence**
+   - **Step 1**: Open `fd1_EDA_FE.ipynb` for EDA and feature engineering
+     - Run cells sequentially
+     - Dataset will auto-download on first run if not present
+   - **Step 2**: Open `fd2_model_selection_tuning.ipynb` for model selection and tuning
+     - Run cells sequentially
+     - Generates `best_params.json` and `validation_metrics.json`
+   - **Step 3**: Open `fd3_model_evaluation_deployment.ipynb` for final evaluation
+     - Run cells sequentially
+     - Loads parameters from step 2
+     - Generates deployment artifacts in `models/`
 
 ## Development Guide
 
@@ -246,9 +254,13 @@ uv sync
 uv run --with jupyter jupyter lab
 ```
 
-### Exploratory Data Analysis
+### Notebook Workflow
 
-The EDA notebook (`fraud_detection_EDA_FE.ipynb`) contains:
+The project uses a modular three-notebook workflow for clear separation of concerns:
+
+**Notebook 1: EDA & Feature Engineering** (`fd1_EDA_FE.ipynb`)
+
+This notebook contains:
 1. **Data Loading**: Automated Kaggle dataset download with caching
 2. **Preprocessing**: Data cleaning, type conversion, train/val/test splits (60/20/20, stratified)
 3. **EDA**: Comprehensive exploratory data analysis
@@ -280,8 +292,9 @@ During the exploratory phase, 32 engineered features were created and evaluated:
 - Includes timezone mappings for 10 countries
 - Ensures consistent feature engineering between training and inference
 
-### Model Training & Hyperparameter Tuning
-The modeling notebook (`fraud_detection_modeling.ipynb`) contains:
+**Notebook 2: Model Selection & Hyperparameter Tuning** (`fd2_model_selection_tuning.ipynb`)
+
+This notebook contains:
 1. **Data Loading**: Loads raw transaction data and applies `FraudFeatureTransformer` pipeline
    - Applies production feature engineering consistently across train/val/test splits
    - Generates 30 engineered features from 15 raw transaction fields
@@ -297,6 +310,26 @@ The modeling notebook (`fraud_detection_modeling.ipynb`) contains:
    - Timing measurements with appropriate caveats for parallel processing
 6. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
 7. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.8679)
+8. **Output**: Saves `best_params.json` and `validation_metrics.json` for next notebook
+
+**Notebook 3: Final Evaluation & Deployment** (`fd3_model_evaluation_deployment.ipynb`)
+
+This notebook contains:
+1. **Parameter Loading**: Loads optimal hyperparameters from `best_params.json`
+2. **Data Preparation**: Recreates train/val/test splits with same random seed
+3. **Model Retraining**: Trains best model on train+val combined (239,756 samples)
+4. **Test Set Evaluation**: Unbiased evaluation on completely held-out test set
+5. **Performance Visualization**: ROC/PR curves on test data
+6. **Feature Importance**: Analysis of top predictive features
+7. **Threshold Optimization**: Calibration of precision-recall trade-offs
+8. **Deployment Artifacts**: Saves model and configuration files to `models/`
+
+**Workflow Benefits**:
+- **Clear separation**: EDA → Selection → Deployment stages
+- **Focused notebooks**: Each notebook has manageable size and single purpose
+- **Proper holdout**: Test set only evaluated in final notebook
+- **Reproducibility**: JSON files enable independent execution
+- **Modularity**: Easy to re-run specific stages without full pipeline
 
 ### Model Training Strategy
 Given the 44:1 class imbalance, the project employs:

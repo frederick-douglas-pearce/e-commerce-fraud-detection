@@ -12,9 +12,12 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 
 ```
 .
-├── fraud_detection_EDA_FE.ipynb    # EDA & feature engineering notebook
-├── fraud_detection_modeling.ipynb  # Model training & evaluation notebook
-├── train.py                         # Model training script
+├── fd1_EDA_FE.ipynb                    # Notebook 1: EDA & feature engineering
+├── fd2_model_selection_tuning.ipynb    # Notebook 2: Model selection & hyperparameter tuning
+├── fd3_model_evaluation_deployment.ipynb # Notebook 3: Final evaluation & deployment
+├── best_params.json                    # Optimal hyperparameters (output from fd2, tracked)
+├── validation_metrics.json             # Validation performance metrics (output from fd2, tracked)
+├── train.py                            # Model training script
 ├── predict.py                       # FastAPI web service for real-time fraud prediction
 ├── bias_variance_analysis.py        # Bias-variance diagnostics script
 ├── Dockerfile                       # Multi-stage Docker image definition
@@ -1138,7 +1141,7 @@ locust -f locustfile.py \
 uv sync
 
 # Launch Jupyter
-uv run jupyter notebook
+uv run --with jupyter jupyter lab
 ```
 
 ### Data Download
@@ -1146,7 +1149,9 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 
 ## Notebook Structure
 
-### fraud_detection_EDA_FE.ipynb (EDA & Feature Engineering)
+The project uses a modular three-notebook workflow with clear separation of concerns:
+
+### Notebook 1: fd1_EDA_FE.ipynb (EDA & Feature Engineering)
 
 #### 1. Setup
 - Parameter definitions (data paths, split ratios, feature lists)
@@ -1197,7 +1202,7 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
 - Include timezone mappings for consistent local time conversion
 - Ensure reproducible feature engineering between training and inference
 
-### fraud_detection_modeling.ipynb (Model Training & Evaluation)
+### Notebook 2: fd2_model_selection_tuning.ipynb (Model Selection & Hyperparameter Tuning)
 
 #### 1. Setup
 - Parameter definitions (data paths, random seed, model directory)
@@ -1387,7 +1392,48 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
   - **XGBoost (Tuned)**: Production deployment - best overall balance
   - **Random Forest (Tuned)**: Applications requiring very low false positive rates (precision 90%)
 
-#### 10. Model Deployment Preparation
+#### 8. Save Best Parameters
+**Output artifacts for next notebook**:
+1. **best_params.json** - Optimal hyperparameters from GridSearchCV
+2. **validation_metrics.json** - Validation set performance metrics
+
+**Handoff Mechanism**: These JSON files enable the next notebook to load the best model configuration without re-running hyperparameter tuning.
+
+### Notebook 3: fd3_model_evaluation_deployment.ipynb (Final Evaluation & Deployment)
+
+#### 1. Load Best Parameters
+- Loads `best_params.json` from notebook 2
+- Loads `validation_metrics.json` for comparison
+
+#### 2. Data Preparation
+- Recreates same train/val/test splits (same random seed)
+- Applies FraudFeatureTransformer pipeline
+
+#### 3. Retrain Best Model
+- Creates model with optimal hyperparameters from notebook 2
+- Trains on combined train+val data (239,756 samples, 33% more data)
+
+#### 4. Test Set Evaluation
+**Final model performance on held-out test set**:
+- **PR-AUC**: 0.8655 ✅ (target: >0.85)
+- **ROC-AUC**: 0.9768 ✅ (target: >0.95)
+- **F1 Score**: 0.7754 ✅ (target: >0.75)
+- **Precision**: 72.72% ✅ (target: >70%)
+- **Recall**: 83.06% ✅ (target: >80%)
+
+#### 5. Performance Visualization
+- ROC and PR curves on test set
+- Comparison with validation performance
+
+#### 6. Feature Importance Analysis
+- XGBoost built-in importance (gain metric)
+- Top 10 features visualization
+
+#### 7. Threshold Optimization
+- Three threshold strategies calibrated on validation set
+- Precision-recall trade-offs for different use cases
+
+#### 8. Model Deployment Preparation
 **All deployment artifacts generated and saved to `models/` directory**:
 
 1. **xgb_fraud_detector.joblib** (gitignored)
@@ -1415,6 +1461,26 @@ The notebook automatically downloads the dataset from Kaggle on first run if not
    - Feature names for API documentation
 
 **Status**: ✅ Model fully trained, evaluated, and ready for production deployment via FastAPI
+
+### Notebook Workflow Summary
+
+```
+fd1_EDA_FE.ipynb
+    ↓ (saves transformer_config.json)
+fd2_model_selection_tuning.ipynb
+    ↓ (saves best_params.json + validation_metrics.json)
+fd3_model_evaluation_deployment.ipynb
+    ↓ (saves models/*.joblib, models/*.json)
+Production Deployment
+```
+
+**Benefits of Split Workflow**:
+- **Clear separation**: EDA → Selection → Deployment stages
+- **Focused notebooks**: Each notebook manageable size with single purpose
+- **Proper holdout**: Test set only evaluated in final notebook
+- **Reproducibility**: JSON files enable independent notebook execution
+- **Modularity**: Easy to re-run specific stages without full pipeline
+- **Collaboration**: Different team members can work on different stages
 
 ## Notebook Best Practices
 
@@ -1654,9 +1720,15 @@ uv add <package-name>
 uv sync
 ```
 
-### Run notebook
+### Run notebooks
 ```bash
-uv run jupyter notebook ec_fraud_detection.ipynb
+# Launch Jupyter Lab
+uv run --with jupyter jupyter lab
+
+# Run notebooks in sequence:
+# 1. fd1_EDA_FE.ipynb (EDA and feature engineering)
+# 2. fd2_model_selection_tuning.ipynb (model selection and tuning)
+# 3. fd3_model_evaluation_deployment.ipynb (final evaluation and deployment)
 ```
 
 ### Run API server
