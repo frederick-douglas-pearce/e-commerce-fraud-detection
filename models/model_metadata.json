@@ -2,9 +2,10 @@
   "model_info": {
     "name": "XGBoost Fraud Detector",
     "version": "1.0",
-    "training_date": "2025-11-28T23:28:53.988188",
+    "training_date": "2025-11-29T22:19:49.797506",
     "algorithm": "XGBoost Gradient Boosting",
-    "training_methodology": "GridSearchCV tuning on train \u2192 Retrain on train+val \u2192 Evaluate on test"
+    "training_methodology": "GridSearchCV with 4-fold CV on train+val (80%) \u2192 Evaluate on test (20%)",
+    "methodology_details": "Combines train and validation data before hyperparameter tuning to maximize data available for GridSearchCV (239,756 samples vs 179,817). GridSearchCV automatically retrains on full train+val with best parameters (refit=True)."
   },
   "hyperparameters": {
     "n_estimators": 100,
@@ -18,77 +19,77 @@
     "eval_metric": "aucpr",
     "random_state": 1,
     "n_jobs": -1,
-    "reg_alpha": 0.0,
-    "reg_lambda": 0
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0
   },
   "performance": {
     "test_set": {
-      "pr_auc": 0.8657717471876925,
-      "roc_auc": 0.9765865685131541,
-      "precision": 0.7312834224598931,
-      "recall": 0.8275340393343419,
-      "f1": 0.7764371894960965
+      "pr_auc": 0.8659391995996268,
+      "roc_auc": 0.9761493408956425,
+      "precision": 0.7321309285237141,
+      "recall": 0.8290468986384266,
+      "f1": 0.7775807023767294
     }
   },
   "feature_importance_top10": [
     {
+      "feature": "avs_match",
+      "importance": 0.21883943676948547
+    },
+    {
       "feature": "account_age_days",
-      "importance": 0.22400778532028198
+      "importance": 0.20589390397071838
     },
     {
       "feature": "security_score",
-      "importance": 0.13858625292778015
-    },
-    {
-      "feature": "avs_match",
-      "importance": 0.13437604904174805
+      "importance": 0.11409910023212433
     },
     {
       "feature": "shipping_distance_km",
-      "importance": 0.0877838209271431
-    },
-    {
-      "feature": "amount_deviation",
-      "importance": 0.05838887020945549
+      "importance": 0.08686552196741104
     },
     {
       "feature": "amount",
-      "importance": 0.05539610609412193
+      "importance": 0.0496697835624218
     },
     {
-      "feature": "country_mismatch",
-      "importance": 0.04918378219008446
-    },
-    {
-      "feature": "high_risk_distance",
-      "importance": 0.04833247885107994
+      "feature": "amount_deviation",
+      "importance": 0.04551205411553383
     },
     {
       "feature": "transaction_velocity",
-      "importance": 0.044895682483911514
+      "importance": 0.04505179077386856
+    },
+    {
+      "feature": "country_mismatch",
+      "importance": 0.04412725567817688
+    },
+    {
+      "feature": "high_risk_distance",
+      "importance": 0.04408196359872818
     },
     {
       "feature": "amount_vs_avg_ratio",
-      "importance": 0.04062417522072792
+      "importance": 0.03646523132920265
     }
   ],
   "threshold_strategies": {
     "conservative_90pct_recall": {
-      "threshold": 0.2624581754207611,
-      "precision": 0.46127033307513554,
-      "recall": 0.9002267573696145,
+      "threshold": 0.2151305079460144,
+      "precision": 0.3583471323197351,
+      "recall": 0.9,
       "target_recall": 0.9
     },
     "balanced_85pct_recall": {
-      "threshold": 0.439964234828949,
-      "precision": 0.6923076923076923,
-      "recall": 0.8503401360544217,
+      "threshold": 0.3563975691795349,
+      "precision": 0.6220777424263384,
+      "recall": 0.8500945179584121,
       "target_recall": 0.85
     },
     "aggressive_80pct_recall": {
-      "threshold": 0.725890576839447,
-      "precision": 0.8491171749598716,
-      "recall": 0.799697656840514,
+      "threshold": 0.7069100737571716,
+      "precision": 0.8324154209284028,
+      "recall": 0.8,
       "target_recall": 0.8
     }
   },
