@@ -68,7 +68,16 @@ def parse_args():
 def train_model(
     train_df, val_df, test_df, target_col="is_fraud", random_seed=1, skip_tuning=False, verbose=False
 ):
-    """Train XGBoost model with hyperparameter tuning."""
+    """Train XGBoost model with hyperparameter tuning.
+
+    Methodology:
+    1. Combine train+val datasets (80% of total data)
+    2. Use GridSearchCV with 4-fold CV on combined data for hyperparameter tuning
+    3. GridSearchCV automatically retrains on full train+val with best params (refit=True)
+    4. Evaluate final model on held-out test set (20%)
+
+    This follows ML best practices and maximizes data available for hyperparameter selection.
+    """
 
     # Load feature categorization from shared config
     feature_config = FeatureListsConfig.load()
@@ -76,16 +85,21 @@ def train_model(
     continuous_numeric = feature_config['continuous_numeric']
     binary = feature_config['binary']
 
-    # Split features and target
-    X_train = train_df.drop(columns=[target_col])
-    y_train = train_df[target_col]
-    X_val = val_df.drop(columns=[target_col])
-    y_val = val_df[target_col]
+    # Combine train and validation for hyperparameter tuning
+    # This gives GridSearchCV access to 80% of data instead of just 60%
+    train_val_df = pd.concat([train_df, val_df], axis=0, ignore_index=True)
+    X_train_val = train_val_df.drop(columns=[target_col])
+    y_train_val = train_val_df[target_col]
     X_test = test_df.drop(columns=[target_col])
     y_test = test_df[target_col]
 
     print("\n" + "=" * 100)
-    print("FEATURE ENGINEERING & MODEL TRAINING")
+    print("HYPERPARAMETER TUNING & MODEL TRAINING")
+    print("=" * 100)
+    print(f"Combined training data: {len(train_val_df):,} samples (train + validation)")
+    print(f"  - Training set:   {len(train_df):,} samples")
+    print(f"  - Validation set: {len(val_df):,} samples")
+    print(f"Test data: {len(test_df):,} samples")
     print("=" * 100)
 
     # Create preprocessing pipeline using shared factory
@@ -105,6 +119,7 @@ def train_model(
 
     if not skip_tuning:
         print("\nPerforming hyperparameter tuning with GridSearchCV...")
+        print("Using 4-fold cross-validation on combined train+validation data")
         print("This may take several minutes...")
 
         # Create pipeline
@@ -120,49 +135,82 @@ def train_model(
             scoring="average_precision",  # Equivalent to XGBoost's eval_metric="aucpr"
             n_jobs=-1,
             verbose=2 if verbose else 0,
+            refit=True,  # Automatically retrain on full train+val with best params
         )
 
-        grid_search.fit(X_train, y_train)
+        # Fit on combined train+val (80% of total data)
+        # GridSearchCV will:
+        # 1. Use 4-fold CV to find best parameters
+        # 2. Automatically retrain on ALL of X_train_val with best params
+        # 3. Store final model in best_estimator_
+        grid_search.fit(X_train_val, y_train_val)
 
-        print(f"\nBest parameters found:")
+        print(f"\nBest parameters found (via 4-fold CV on {len(X_train_val):,} samples):")
         for param, value in grid_search.best_params_.items():
             print(f"  {param}: {value}")
+        print(f"Best CV score (PR-AUC): {grid_search.best_score_:.4f}")
 
-        # Evaluate tuned model on validation set
-        val_metrics = evaluate_model(grid_search.best_estimator_, X_val, y_val, "XGBoost (Tuned)", "Validation")
+        # Use the best estimator (already trained on full train+val)
+        final_pipeline = grid_search.best_estimator_
 
         # Update optimal params with tuned values
         for param, value in grid_search.best_params_.items():
             param_name = param.replace("classifier__", "")
             optimal_params[param_name] = value
 
-    # Retrain on train+val combined with optimal hyperparameters
-    print("\n" + "=" * 100)
-    print("RETRAINING FINAL MODEL ON TRAIN+VALIDATION COMBINED")
-    print("=" * 100)
+    else:
+        # skip_tuning=True: Train model with optimal params from config
+        print("\n" + "=" * 100)
+        print("TRAINING MODEL WITH OPTIMAL PARAMETERS (SKIPPING TUNING)")
+        print("=" * 100)
+        print(f"Training on {len(train_val_df):,} samples (train + validation)")
 
-    train_val_df = pd.concat([train_df, val_df], axis=0, ignore_index=True)
-    X_train_val = train_val_df.drop(columns=[target_col])
-    y_train_val = train_val_df[target_col]
+        # Create final production model with optimal params
+        final_pipeline = Pipeline(
+            [
+                ("preprocessor", preprocessor),
+                ("classifier", xgb.XGBClassifier(**optimal_params)),
+            ]
+        )
 
-    print(f"Combined training samples: {len(train_val_df):,}")
-
-    # Create final production model
-    final_pipeline = Pipeline(
-        [
-            ("preprocessor", preprocessor),
-            ("classifier", xgb.XGBClassifier(**optimal_params)),
-        ]
-    )
-
-    print("\nTraining final model...")
-    final_pipeline.fit(X_train_val, y_train_val)
+        print("\nTraining final model...")
+        final_pipeline.fit(X_train_val, y_train_val)
 
     # Evaluate on test set
-    test_metrics = evaluate_model(final_pipeline, X_test, y_test, "XGBoost (Final - Retrained)", "Test")
+    print("\n" + "=" * 100)
+    print("TEST SET EVALUATION")
+    print("=" * 100)
+    test_metrics = evaluate_model(final_pipeline, X_test, y_test, "XGBoost (Final)", "Test")
 
-    # Optimize thresholds on validation set
-    threshold_config = optimize_thresholds(final_pipeline, X_val, y_val)
+    # Optimize thresholds using cross-validation predictions on train+val
+    # This provides unbiased threshold estimates without needing a separate validation set
+    print("\n" + "=" * 100)
+    print("THRESHOLD OPTIMIZATION")
+    print("=" * 100)
+    print("Using cross-validation predictions on train+val for threshold optimization...")
+
+    from sklearn.model_selection import cross_val_predict
+
+    # Get CV predictions on train+val
+    cv_predictions = cross_val_predict(
+        final_pipeline,
+        X_train_val,
+        y_train_val,
+        cv=TrainingConfig.get_cv_strategy(random_seed=random_seed),
+        method='predict_proba'
+    )
+
+    # Optimize thresholds using CV predictions
+    # Note: We need to create a temporary object that has predict_proba method
+    class PredictionWrapper:
+        def __init__(self, predictions):
+            self.predictions = predictions
+
+        def predict_proba(self, X):
+            return self.predictions
+
+    wrapper = PredictionWrapper(cv_predictions)
+    threshold_config = optimize_thresholds(wrapper, X_train_val, y_train_val)
 
     # Extract feature importance
     xgb_model = final_pipeline.named_steps["classifier"]
@@ -234,7 +282,8 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
             "version": "1.0",
             "training_date": datetime.now().isoformat(),
             "algorithm": "XGBoost Gradient Boosting",
-            "training_methodology": "GridSearchCV tuning on train → Retrain on train+val → Evaluate on test",
+            "training_methodology": "GridSearchCV with 4-fold CV on train+val (80%) → Evaluate on test (20%)",
+            "methodology_details": "Combines train and validation data before hyperparameter tuning to maximize data available for GridSearchCV (239,756 samples vs 179,817). GridSearchCV automatically retrains on full train+val with best parameters (refit=True).",
         },
         "hyperparameters": results["optimal_params"],
         "performance": {
