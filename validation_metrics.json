@@ -1,0 +1,12 @@
+{
+  "xgboost_tuned": {
+    "roc_auc": 0.9838250071877166,
+    "pr_auc": 0.8807333010954098,
+    "f1": 0.7774294670846394,
+    "precision": 0.7209302325581395,
+    "recall": 0.8435374149659864,
+    "accuracy": 0.9893391614808389
+  },
+  "cv_best_score": 0.8684399245510874,
+  "note": "Validation performance from model trained on train set only (for comparison with test set)"
+}
