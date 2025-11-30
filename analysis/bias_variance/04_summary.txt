@@ -35,10 +35,10 @@ Recommendations:
   • Good bias-variance tradeoff
 
 XGBoost Iteration Analysis:
-  • Single-split validation peaks at iteration 82
-  • However, GridSearchCV's 4-fold average is more reliable
-  • Recommendation: Trust GridSearchCV's n_estimators from tuning
-  • Single-split peaks can vary due to random data split
+  • Using CV-tuned n_estimators: 100
+  • This value is based on 4-fold GridSearchCV (more robust than single split)
+  • Plot shows performance at CV-tuned value, not single-split peak
+  • Recommendation: CV-tuned value is appropriate and well-validated
 
 ================================================================================
 
