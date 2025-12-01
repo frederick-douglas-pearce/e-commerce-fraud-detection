@@ -202,10 +202,10 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    ```
 
 3. **Kaggle API Credentials (Optional)**
-   - Create an account at [kaggle.com](https://www.kaggle.com)
-   - Go to Account settings → API → Create New Token
-   - Place the downloaded `kaggle.json` in `~/.kaggle/`
-   - Set permissions: `chmod 600 ~/.kaggle/kaggle.json`
+  - Create an account at [kaggle.com](https://www.kaggle.com)
+  - Go to Account settings → API → Create New Token
+  - Place the downloaded `kaggle.json` in `~/.kaggle/`
+  - Set permissions: `chmod 600 ~/.kaggle/kaggle.json`
 
 ### Installation
 
@@ -226,16 +226,16 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    ```
 
 4. **Run the notebooks in sequence**
-   - **Step 1**: Open `fd1_EDA_FE.ipynb` for EDA and feature engineering
-     - Run cells sequentially
-     - Dataset will auto-download on first run if not present
-   - **Step 2**: Open `fd2_model_selection_tuning.ipynb` for model selection and tuning
-     - Run cells sequentially
-     - Generates `best_params.json` and `validation_metrics.json`
-   - **Step 3**: Open `fd3_model_evaluation_deployment.ipynb` for final evaluation
-     - Run cells sequentially
-     - Loads parameters from step 2
-     - Generates deployment artifacts in `models/`
+  - **Step 1**: Open `fd1_EDA_FE.ipynb` for EDA and feature engineering
+    - Run cells sequentially
+    - Dataset will auto-download on first run if not present
+  - **Step 2**: Open `fd2_model_selection_tuning.ipynb` for model selection and tuning
+    - Run cells sequentially
+    - Generates `best_params.json` and `validation_metrics.json`
+  - **Step 3**: Open `fd3_model_evaluation_deployment.ipynb` for final evaluation
+    - Run cells sequentially
+    - Loads parameters from step 2
+    - Generates deployment artifacts in `models/`
 
 ## Development Guide
 
@@ -264,50 +264,45 @@ This notebook contains:
 1. **Data Loading**: Automated Kaggle dataset download with caching
 2. **Preprocessing**: Data cleaning, type conversion, train/val/test splits (60/20/20, stratified)
 3. **EDA**: Comprehensive exploratory data analysis
-   - Target distribution and class imbalance analysis (44:1 ratio)
-   - Numeric feature distributions and correlations
-   - Categorical feature fraud rates and mutual information
-   - Temporal pattern analysis
-   - Multicollinearity detection (VIF)
-
-### Feature Engineering Development
-
-During the exploratory phase, 32 engineered features were created and evaluated:
-- **Temporal**: UTC and local timezone features (hour, day_of_week, is_late_night, etc.)
-- **Amount**: Deviation, ratios, micro/large transaction flags
-- **User Behavior**: Transaction velocity, new account flags, frequency indicators
-- **Geographic**: Country mismatch, high-risk distance, zero distance
-- **Security**: Composite security score from verification flags
-- **Interaction**: Fraud scenario-specific combinations (e.g., new_account_with_promo)
-
-**Feature Selection**: Final selection of **30 features** from 45 available
-- Removed redundant features (UTC features, duplicate country fields)
-- Excluded low-signal features (merchant_category)
-- Prioritized interpretability and fraud scenario alignment
-
-**Production Configuration**: Generates `FraudFeatureTransformer` configuration for deployment
-- Automatically creates `transformer_config.json` from training data
-- Stores quantile thresholds (95th/75th percentiles) for feature engineering
-- Saves 30 selected feature names with categorical groupings
-- Includes timezone mappings for 10 countries
-- Ensures consistent feature engineering between training and inference
+  - Target distribution and class imbalance analysis (44:1 ratio)
+  - Numeric feature distributions and correlations
+  - Categorical feature fraud rates and mutual information
+  - Temporal pattern analysis
+  - Multicollinearity detection (VIF)
+4. **Feature Engineering Development**: 32 engineered features were created and evaluated:
+  - **Temporal**: UTC and local timezone features (hour, day_of_week, is_late_night, etc.)
+  - **Amount**: Deviation, ratios, micro/large transaction flags
+  - **User Behavior**: Transaction velocity, new account flags, frequency indicators
+  - **Geographic**: Country mismatch, high-risk distance, zero distance
+  - **Security**: Composite security score from verification flags
+  - **Interaction**: Fraud scenario-specific combinations (e.g., new_account_with_promo)
+5. **Feature Selection**: Final selection of **30 features** from 45 available
+  - Removed redundant features (UTC features, duplicate country fields)
+  - Excluded low-signal features (merchant_category)
+  - Prioritized interpretability and fraud scenario alignment
+6. **Production Configuration**: Generates `FraudFeatureTransformer` configuration for deployment
+  - Automatically creates `transformer_config.json` from training data
+  - Stores quantile thresholds (95th/75th percentiles) for feature engineering
+  - Saves 30 selected feature names with categorical groupings
+  - Includes timezone mappings for 10 countries
+  - Ensures consistent feature engineering between training and inference
 
 **Notebook 2: Model Selection & Hyperparameter Tuning** (`fd2_model_selection_tuning.ipynb`)
 
 This notebook contains:
 1. **Data Loading**: Loads raw transaction data and applies `FraudFeatureTransformer` pipeline
-   - Applies production feature engineering consistently across train/val/test splits
-   - Generates 30 engineered features from 15 raw transaction fields
-   - Uses same transformer configuration as deployment API
+  - Applies production feature engineering consistently across train/val/test splits
+  - Generates 30 engineered features from 15 raw transaction fields
+  - Uses same transformer configuration as deployment API
 2. **Preprocessing**: Model-specific transformations (one-hot encoding, scaling)
 3. **Baseline Models**: Logistic Regression, Random Forest, XGBoost (all trained)
 4. **Hyperparameter Tuning**: Flexible GridSearchCV/RandomizedSearchCV with detailed logging
-   - Random Forest: GridSearchCV over 8 parameter combinations
-   - XGBoost: GridSearchCV over 108 combinations (tuned scale_pos_weight, gamma, learning_rate)
+  - Random Forest: GridSearchCV over 8 parameter combinations
+  - XGBoost: GridSearchCV over 108 combinations (tuned scale_pos_weight, gamma, learning_rate)
 5. **CV Results Analysis**: Production-focused evaluation of model stability and timing
-   - Comprehensive CSV logging of all CV results
-   - Stability analysis (std_test_score across folds)
-   - Timing measurements with appropriate caveats for parallel processing
+  - Comprehensive CSV logging of all CV results
+  - Stability analysis (std_test_score across folds)
+  - Timing measurements with appropriate caveats for parallel processing
 6. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
 7. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.8679)
 8. **Output**: Saves `best_params.json` and `validation_metrics.json` for next notebook
@@ -513,7 +508,7 @@ Train the fraud detection model using the provided training script.
 
 **Prerequisites**
 1. Raw transaction data must exist in `data/` directory:
-   - `transactions.csv` (download from Kaggle)
+  - `transactions.csv` (download from Kaggle)
 
 **Note:** The training script uses raw transaction data and applies the production `FraudFeatureTransformer` pipeline, ensuring consistency between training and inference. All feature engineering is performed on-the-fly using the same transformer configuration deployed in the API.
 
