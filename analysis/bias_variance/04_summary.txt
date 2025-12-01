@@ -6,8 +6,8 @@ E-Commerce Fraud Detection Models
 Logistic Regression
 -------------------
 Training PR-AUC:     0.6862
-Validation PR-AUC:   0.6859
-Train-Val Gap:       0.0002 (0.0%)
+Validation PR-AUC:   0.6861
+Train-Val Gap:       0.0000 (0.0%)
 Diagnosis:           ✓ Good fit
 
 Recommendations:
@@ -17,7 +17,7 @@ Random Forest
 -------------
 Training PR-AUC:     0.9745
 Validation PR-AUC:   0.8524
-Train-Val Gap:       0.1220 (12.5%)
+Train-Val Gap:       0.1221 (12.5%)
 Diagnosis:           ⚠️  HIGH VARIANCE (Moderate Overfitting)
 
 Recommendations:
@@ -26,16 +26,16 @@ Recommendations:
 
 XGBoost
 -------
-Training PR-AUC:     0.8809
-Validation PR-AUC:   0.8675
-Train-Val Gap:       0.0133 (1.5%)
+Training PR-AUC:     0.8826
+Validation PR-AUC:   0.8684
+Train-Val Gap:       0.0142 (1.6%)
 Diagnosis:           ✓ Good fit
 
 Recommendations:
   • Good bias-variance tradeoff
 
 XGBoost Iteration Analysis:
-  • Using CV-tuned n_estimators: 100
+  • Using CV-tuned n_estimators: 110
   • This value is based on 4-fold GridSearchCV (more robust than single split)
   • Plot shows performance at CV-tuned value, not single-split peak
   • Recommendation: CV-tuned value is appropriate and well-validated

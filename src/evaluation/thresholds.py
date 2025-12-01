@@ -8,7 +8,7 @@ for different recall targets (conservative, balanced, aggressive).
 from typing import Dict
 
 import numpy as np
-from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import f1_score, precision_recall_curve
 
 from ..config import TrainingConfig
 
@@ -65,26 +65,72 @@ def optimize_thresholds(
 
     threshold_config = {}
 
+    # 1. Calculate optimal F1 threshold (best overall precision-recall balance)
+    if verbose:
+        print("\n1. OPTIMAL F1 THRESHOLD (Best Precision-Recall Balance)")
+        print("-" * 100)
+
+    # Calculate F1 for all thresholds
+    f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-10)
+    # Find threshold with maximum F1
+    best_f1_idx = np.argmax(f1_scores)
+    optimal_f1_threshold = thresholds[best_f1_idx]
+    optimal_f1_precision = precisions[best_f1_idx]
+    optimal_f1_recall = recalls[best_f1_idx]
+    optimal_f1_score = f1_scores[best_f1_idx]
+
+    threshold_config['optimal_f1'] = {
+        'threshold': float(optimal_f1_threshold),
+        'precision': float(optimal_f1_precision),
+        'recall': float(optimal_f1_recall),
+        'f1': float(optimal_f1_score),
+        'description': 'Optimal F1 score - best precision-recall balance (recommended default)'
+    }
+
+    if verbose:
+        print(f"Optimal F1 Threshold: {optimal_f1_threshold:.4f}")
+        print(f"  • F1 Score:   {optimal_f1_score:.4f} (MAXIMUM)")
+        print(f"  • Precision:  {optimal_f1_precision:.4f} ({optimal_f1_precision*100:.2f}%)")
+        print(f"  • Recall:     {optimal_f1_recall:.4f} ({optimal_f1_recall*100:.2f}%)")
+        print("\nℹ️  This threshold maximizes F1 score - the harmonic mean of precision and recall")
+        print("   It provides the best overall balance without targeting a specific recall level")
+
+    # 2. Calculate recall-targeted thresholds
+    if verbose:
+        print("\n" + "=" * 100)
+        print("2. RECALL-TARGETED THRESHOLDS")
+        print("=" * 100)
+
     for name, target_recall in recall_targets.items():
         # Find threshold closest to target recall
         idx = np.argmin(np.abs(recalls - target_recall))
         threshold = thresholds[idx] if idx < len(thresholds) else thresholds[-1]
         precision = precisions[idx]
         recall = recalls[idx]
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+        # Map threshold names to descriptions
+        descriptions = {
+            'conservative_90pct_recall': 'Catch most fraud (90% recall), accept more false positives',
+            'balanced_85pct_recall': 'Balanced precision-recall trade-off (85% recall target)',
+            'aggressive_80pct_recall': 'Prioritize precision (80% recall), reduce false positives'
+        }
 
         threshold_config[name] = {
             "threshold": float(threshold),
-            "precision": float(precision),
-            "recall": float(recall),
             "target_recall": target_recall,
+            "achieved_recall": float(recall),
+            "precision": float(precision),
+            "f1": float(f1),
+            "description": descriptions.get(name, f"Target {target_recall*100:.0f}% recall")
         }
 
         if verbose:
-            print(f"\n{name}:")
-            print(f"  Target Recall: {target_recall:.1%}")
-            print(f"  Actual Recall: {recall:.4f}")
-            print(f"  Precision:     {precision:.4f}")
-            print(f"  Threshold:     {threshold:.6f}")
+            print(f"\nTarget Recall: {target_recall*100:.0f}%")
+            print(f"  • Optimal Threshold: {threshold:.4f}")
+            print(f"  • Achieved Recall:   {recall:.4f} ({recall*100:.2f}%)")
+            print(f"  • Precision:         {precision:.4f} ({precision*100:.2f}%)")
+            print(f"  • F1 Score:          {f1:.4f}")
 
     if verbose:
         print("=" * 100)

@@ -129,7 +129,8 @@ def test_feature_config_final_features_content(sample_config):
 
     # Expected features by category
     original_numeric = {'account_age_days', 'total_transactions_user', 'avg_amount_user', 'amount', 'shipping_distance_km'}
-    original_categorical = {'channel', 'promo_used', 'avs_match', 'cvv_result', 'three_ds_flag'}
+    original_categorical = {'channel'}
+    original_binary = {'promo_used', 'avs_match', 'cvv_result', 'three_ds_flag'}
     temporal_local = {'hour_local', 'day_of_week_local', 'month_local', 'is_weekend_local', 'is_late_night_local', 'is_business_hours_local'}
     amount_features = {'amount_deviation', 'amount_vs_avg_ratio', 'is_micro_transaction', 'is_large_transaction'}
     behavior_features = {'transaction_velocity', 'is_new_account', 'is_high_frequency_user'}
@@ -138,7 +139,7 @@ def test_feature_config_final_features_content(sample_config):
     interaction_features = {'new_account_with_promo', 'late_night_micro_transaction', 'high_value_long_distance'}
 
     all_expected = (
-        original_numeric | original_categorical | temporal_local |
+        original_numeric | original_categorical | original_binary | temporal_local |
         amount_features | behavior_features | geographic_features |
         security_features | interaction_features
     )

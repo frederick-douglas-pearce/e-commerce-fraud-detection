@@ -270,11 +270,17 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
     results["transformer"].save(str(transformer_config_path))
     print(f"  ✓ Transformer config saved: {transformer_config_path}")
 
-    # 3. Save threshold configuration
+    # 3. Save threshold configuration (wrapped in structure matching notebook)
+    threshold_config_wrapped = {
+        "default_threshold": 0.5,
+        "optimized_thresholds": results["threshold_config"],
+        "note": "Thresholds optimized on cross-validation predictions from train+val combined. optimal_f1 maximizes F1 score and is the recommended default."
+    }
     threshold_path = output_dir / "threshold_config.json"
     with open(threshold_path, "w") as f:
-        json.dump(results["threshold_config"], f, indent=2)
+        json.dump(threshold_config_wrapped, f, indent=2)
     print(f"  ✓ Threshold config saved: {threshold_path}")
+    print(f"  • {len(results['threshold_config'])} threshold strategies available (including optimal F1)")
 
     # 4. Save feature lists
     feature_lists = {

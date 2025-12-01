@@ -55,9 +55,13 @@ def get_final_feature_names() -> List[str]:
         'shipping_distance_km'
     ]
 
-    # Original categorical (5)
+    # Original categorical (1) - only channel is truly categorical (web/app)
     original_categorical = [
-        'channel',
+        'channel'
+    ]
+
+    # Original binary (4) - these are 0/1 flags, not categorical
+    original_binary = [
         'promo_used',
         'avs_match',
         'cvv_result',
@@ -108,7 +112,7 @@ def get_final_feature_names() -> List[str]:
         'high_value_long_distance'
     ]
 
-    return (original_numeric + original_categorical + temporal_local +
+    return (original_numeric + original_categorical + original_binary + temporal_local +
             amount_features + behavior_features + geographic_features +
             security_features + interaction_features)
 

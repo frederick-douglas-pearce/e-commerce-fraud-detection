@@ -59,7 +59,7 @@ class TestCalculateMetrics:
         y_true, y_pred, y_proba = sample_binary_classification_data
         metrics = calculate_metrics(y_true, y_pred, y_proba)
 
-        expected_keys = ['pr_auc', 'roc_auc', 'precision', 'recall', 'f1']
+        expected_keys = ['pr_auc', 'roc_auc', 'precision', 'recall', 'f1', 'accuracy']
         assert set(metrics.keys()) == set(expected_keys)
 
     def test_calculate_metrics_values_in_valid_range(self, sample_binary_classification_data):
@@ -125,7 +125,7 @@ class TestEvaluateModel:
 
         metrics = evaluate_model(mock_model, X, y_true, verbose=False)
 
-        expected_keys = ['pr_auc', 'roc_auc', 'precision', 'recall', 'f1']
+        expected_keys = ['pr_auc', 'roc_auc', 'precision', 'recall', 'f1', 'accuracy']
         assert set(metrics.keys()) == set(expected_keys)
 
     def test_evaluate_model_calls_predict(self, mock_model, sample_binary_classification_data):

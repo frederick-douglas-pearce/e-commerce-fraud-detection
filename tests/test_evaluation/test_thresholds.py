@@ -58,7 +58,7 @@ class TestOptimizeThresholds:
 
     def test_optimize_thresholds_uses_default_targets(self, mock_model_with_probabilities,
                                                        sample_classification_data):
-        """Test that default recall targets from TrainingConfig are used"""
+        """Test that default recall targets from TrainingConfig are used plus optimal_f1"""
         y_val, _ = sample_classification_data
         X_val = np.random.randn(len(y_val), 5)
 
@@ -66,13 +66,14 @@ class TestOptimizeThresholds:
             mock_model_with_probabilities, X_val, y_val, verbose=False
         )
 
-        # Should have default thresholds from TrainingConfig
+        # Should have optimal_f1 + default thresholds from TrainingConfig
         default_targets = TrainingConfig.get_threshold_targets()
-        assert set(config.keys()) == set(default_targets.keys())
+        expected_keys = set(['optimal_f1']) | set(default_targets.keys())
+        assert set(config.keys()) == expected_keys
 
     def test_optimize_thresholds_custom_recall_targets(self, mock_model_with_probabilities,
                                                         sample_classification_data):
-        """Test that custom recall targets are respected"""
+        """Test that custom recall targets are respected plus optimal_f1"""
         y_val, _ = sample_classification_data
         X_val = np.random.randn(len(y_val), 5)
 
@@ -87,7 +88,9 @@ class TestOptimizeThresholds:
             verbose=False
         )
 
-        assert set(config.keys()) == set(custom_targets.keys())
+        # Should have optimal_f1 + custom targets
+        expected_keys = set(['optimal_f1']) | set(custom_targets.keys())
+        assert set(config.keys()) == expected_keys
 
     def test_optimize_thresholds_config_structure(self, mock_model_with_probabilities,
                                                    sample_classification_data):
@@ -102,8 +105,13 @@ class TestOptimizeThresholds:
         for threshold_name, threshold_config in config.items():
             assert 'threshold' in threshold_config
             assert 'precision' in threshold_config
-            assert 'recall' in threshold_config
-            assert 'target_recall' in threshold_config
+            # optimal_f1 has 'recall' and 'f1', recall-targeted have 'achieved_recall' and 'target_recall'
+            if threshold_name == 'optimal_f1':
+                assert 'recall' in threshold_config
+                assert 'f1' in threshold_config
+            else:
+                assert 'achieved_recall' in threshold_config
+                assert 'target_recall' in threshold_config
 
     def test_optimize_thresholds_values_are_floats(self, mock_model_with_probabilities,
                                                     sample_classification_data):
@@ -118,8 +126,13 @@ class TestOptimizeThresholds:
         for threshold_name, threshold_config in config.items():
             assert isinstance(threshold_config['threshold'], float)
             assert isinstance(threshold_config['precision'], float)
-            assert isinstance(threshold_config['recall'], float)
-            assert isinstance(threshold_config['target_recall'], float)
+            # optimal_f1 has 'recall' and 'f1', recall-targeted have 'achieved_recall' and 'target_recall'
+            if threshold_name == 'optimal_f1':
+                assert isinstance(threshold_config['recall'], float)
+                assert isinstance(threshold_config['f1'], float)
+            else:
+                assert isinstance(threshold_config['achieved_recall'], float)
+                assert isinstance(threshold_config['target_recall'], float)
 
     def test_optimize_thresholds_values_in_valid_range(self, mock_model_with_probabilities,
                                                         sample_classification_data):
@@ -134,8 +147,12 @@ class TestOptimizeThresholds:
         for threshold_name, threshold_config in config.items():
             assert 0 <= threshold_config['threshold'] <= 1
             assert 0 <= threshold_config['precision'] <= 1
-            assert 0 <= threshold_config['recall'] <= 1
-            assert 0 <= threshold_config['target_recall'] <= 1
+            # optimal_f1 has 'recall', recall-targeted have 'achieved_recall' and 'target_recall'
+            if threshold_name == 'optimal_f1':
+                assert 0 <= threshold_config['recall'] <= 1
+            else:
+                assert 0 <= threshold_config['achieved_recall'] <= 1
+                assert 0 <= threshold_config['target_recall'] <= 1
 
     def test_optimize_thresholds_recall_close_to_target(self, mock_model_with_probabilities,
                                                          sample_classification_data):
@@ -152,9 +169,12 @@ class TestOptimizeThresholds:
         )
 
         # Actual recall should be close to target (within 10% tolerance)
+        # Skip optimal_f1 since it doesn't have target_recall
         for threshold_name, threshold_config in config.items():
+            if threshold_name == 'optimal_f1':
+                continue
             target = threshold_config['target_recall']
-            actual = threshold_config['recall']
+            actual = threshold_config['achieved_recall']
             assert abs(actual - target) < 0.10, \
                 f"Recall {actual} too far from target {target}"
 
@@ -198,14 +218,14 @@ class TestOptimizeThresholds:
         captured = capsys.readouterr()
         assert "THRESHOLD OPTIMIZATION" in captured.out
         assert "Target Recall:" in captured.out
-        assert "Actual Recall:" in captured.out
+        assert "Achieved Recall:" in captured.out  # Changed from "Actual Recall:"
         assert "Precision:" in captured.out
         assert "Threshold:" in captured.out
 
     def test_optimize_thresholds_default_config_has_three_targets(self,
                                                                    mock_model_with_probabilities,
                                                                    sample_classification_data):
-        """Test that default config includes all three threshold targets"""
+        """Test that default config includes all four threshold strategies"""
         y_val, _ = sample_classification_data
         X_val = np.random.randn(len(y_val), 5)
 
@@ -213,8 +233,9 @@ class TestOptimizeThresholds:
             mock_model_with_probabilities, X_val, y_val, verbose=False
         )
 
-        # Should have 3 default targets
-        assert len(config) == 3
+        # Should have 4 strategies: optimal_f1 + 3 recall-targeted thresholds
+        assert len(config) == 4
+        assert 'optimal_f1' in config
         assert 'conservative_90pct_recall' in config
         assert 'balanced_85pct_recall' in config
         assert 'aggressive_80pct_recall' in config

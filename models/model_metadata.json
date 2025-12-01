@@ -1,20 +1,21 @@
 {
   "model_info": {
-    "name": "XGBoost Fraud Detector",
+    "model_name": "XGBoost Fraud Detector",
+    "model_type": "XGBClassifier",
     "version": "1.0",
-    "training_date": "2025-11-29T22:19:49.797506",
-    "algorithm": "XGBoost Gradient Boosting",
-    "training_methodology": "GridSearchCV with 4-fold CV on train+val (80%) \u2192 Evaluate on test (20%)",
-    "methodology_details": "Combines train and validation data before hyperparameter tuning to maximize data available for GridSearchCV (239,756 samples vs 179,817). GridSearchCV automatically retrains on full train+val with best parameters (refit=True)."
+    "training_date": "2025-11-30",
+    "framework": "xgboost + scikit-learn",
+    "python_version": "3.12+",
+    "note": "Final production model trained on train+val combined, evaluated on test set"
   },
   "hyperparameters": {
-    "n_estimators": 100,
+    "n_estimators": 110,
     "max_depth": 4,
     "learning_rate": 0.1,
     "subsample": 0.9,
     "colsample_bytree": 0.9,
     "min_child_weight": 7,
-    "gamma": 0.7,
+    "gamma": 0.6,
     "scale_pos_weight": 8,
     "eval_metric": "aucpr",
     "random_state": 1,
@@ -22,76 +23,99 @@
     "reg_alpha": 0.1,
     "reg_lambda": 1.0
   },
+  "dataset_info": {
+    "training_samples": 239756,
+    "training_sources": {
+      "original_train": 179817,
+      "original_val": 59939,
+      "combined_total": 239756
+    },
+    "test_samples": 59939,
+    "num_features": 30,
+    "fraud_rate_train_val": 0.02206409850014181,
+    "fraud_rate_test": 0.022055756685964063,
+    "class_imbalance_ratio": 44.32249527410208
+  },
   "performance": {
-    "test_set": {
-      "pr_auc": 0.8659391995996268,
-      "roc_auc": 0.9761493408956425,
-      "precision": 0.7321309285237141,
-      "recall": 0.8290468986384266,
-      "f1": 0.7775807023767294
+    "test_set_final": {
+      "note": "Final performance from model trained on train+val combined",
+      "roc_auc": 0.9765966534675712,
+      "pr_auc": 0.8657030147332653,
+      "f1_score": 0.7742392073602264,
+      "precision": 0.7273936170212766,
+      "recall": 0.8275340393343419,
+      "accuracy": 0.9893558451091944
+    },
+    "cross_validation": {
+      "cv_folds": 4,
+      "cv_strategy": "StratifiedKFold",
+      "best_cv_pr_auc": 0.8684399245510874,
+      "note": "CV performed on train+val combined for hyperparameter selection"
     }
   },
-  "feature_importance_top10": [
-    {
-      "feature": "avs_match",
-      "importance": 0.21883943676948547
-    },
-    {
-      "feature": "account_age_days",
-      "importance": 0.20589390397071838
-    },
-    {
-      "feature": "security_score",
-      "importance": 0.11409910023212433
-    },
-    {
-      "feature": "shipping_distance_km",
-      "importance": 0.08686552196741104
-    },
-    {
-      "feature": "amount",
-      "importance": 0.0496697835624218
-    },
-    {
-      "feature": "amount_deviation",
-      "importance": 0.04551205411553383
-    },
-    {
-      "feature": "transaction_velocity",
-      "importance": 0.04505179077386856
-    },
-    {
-      "feature": "country_mismatch",
-      "importance": 0.04412725567817688
-    },
-    {
-      "feature": "high_risk_distance",
-      "importance": 0.04408196359872818
-    },
-    {
-      "feature": "amount_vs_avg_ratio",
-      "importance": 0.03646523132920265
-    }
-  ],
-  "threshold_strategies": {
-    "conservative_90pct_recall": {
-      "threshold": 0.2151305079460144,
-      "precision": 0.3583471323197351,
-      "recall": 0.9,
-      "target_recall": 0.9
-    },
-    "balanced_85pct_recall": {
-      "threshold": 0.3563975691795349,
-      "precision": 0.6220777424263384,
-      "recall": 0.8500945179584121,
-      "target_recall": 0.85
-    },
-    "aggressive_80pct_recall": {
-      "threshold": 0.7069100737571716,
-      "precision": 0.8324154209284028,
-      "recall": 0.8,
-      "target_recall": 0.8
-    }
+  "features": {
+    "continuous_numeric": [
+      "account_age_days",
+      "total_transactions_user",
+      "avg_amount_user",
+      "amount",
+      "shipping_distance_km",
+      "hour_local",
+      "day_of_week_local",
+      "month_local",
+      "amount_deviation",
+      "amount_vs_avg_ratio",
+      "transaction_velocity",
+      "security_score"
+    ],
+    "categorical": [
+      "channel"
+    ],
+    "binary": [
+      "promo_used",
+      "avs_match",
+      "cvv_result",
+      "three_ds_flag",
+      "is_weekend_local",
+      "is_late_night_local",
+      "is_business_hours_local",
+      "is_micro_transaction",
+      "is_large_transaction",
+      "is_new_account",
+      "is_high_frequency_user",
+      "country_mismatch",
+      "high_risk_distance",
+      "zero_distance",
+      "new_account_with_promo",
+      "late_night_micro_transaction",
+      "high_value_long_distance"
+    ],
+    "total_count": 30
   },
-  "random_seed": 1
+  "preprocessing": {
+    "categorical_encoding": "OrdinalEncoder (handle_unknown=use_encoded_value)",
+    "numeric_scaling": "None (tree-based model)",
+    "binary_features": "Passthrough (no transformation)"
+  },
+  "optimization": {
+    "optimization_metric": "PR-AUC (Precision-Recall Area Under Curve)",
+    "search_method": "GridSearchCV",
+    "num_combinations_tested": 108,
+    "tuned_parameters": [
+      "n_estimators",
+      "max_depth",
+      "learning_rate",
+      "subsample",
+      "colsample_bytree",
+      "min_child_weight",
+      "gamma",
+      "scale_pos_weight",
+      "eval_metric",
+      "random_state",
+      "n_jobs",
+      "reg_alpha",
+      "reg_lambda"
+    ],
+    "final_model_training": "Retrained on train+val combined with optimal hyperparameters"
+  }
 }
