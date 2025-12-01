@@ -6,8 +6,16 @@ This script performs comprehensive bias-variance diagnostics using:
 2. Simple retrained models with train/val tracking
 3. XGBoost iteration tracking
 4. Diagnostic visualizations and recommendations
+
+Usage:
+    # Default: Analyze deployed model hyperparameters (from model_metadata.json)
+    python bias_variance_analysis.py
+
+    # Optional: Analyze latest CV results (for exploring alternative configs)
+    python bias_variance_analysis.py --param-source cv_results
 """
 
+import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -129,18 +137,23 @@ def create_preprocessors():
 # Helper: Load Best Parameters from CV Results
 # ============================================================================
 
-def load_best_params_from_cv():
+def load_best_params_from_config(source='metadata'):
     """
     Load best hyperparameters using shared ModelConfig.
-    Returns dict with 'rf' and 'xgb' keys containing best params, or None if not found.
+
+    Args:
+        source: Source to load from ('metadata' or 'cv_results')
+
+    Returns:
+        Dict with 'rf' and 'xgb' keys containing best params, or None if not found.
     """
     best_params = {'rf': None, 'xgb': None}
 
-    # Load Random Forest params from CV results
+    # Load Random Forest params from specified source
     try:
         rf_params = ModelConfig.load_hyperparameters(
             model_type='random_forest',
-            source='cv_results',
+            source=source,
             random_seed=RANDOM_SEED
         )
         best_params['rf'] = rf_params
@@ -148,11 +161,11 @@ def load_best_params_from_cv():
         # Fallback handled by ModelConfig
         pass
 
-    # Load XGBoost params from CV results
+    # Load XGBoost params from specified source
     try:
         xgb_params = ModelConfig.load_hyperparameters(
             model_type='xgboost',
-            source='cv_results',
+            source=source,
             random_seed=RANDOM_SEED
         )
         best_params['xgb'] = xgb_params
@@ -167,12 +180,15 @@ def load_best_params_from_cv():
 # 1. Train-Validation Gap Analysis
 # ============================================================================
 
-def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_params=True):
+def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_params=True, param_source='metadata'):
     """
     Compare training vs validation performance using cross-validation.
     Uses 4-fold stratified CV to match GridSearchCV methodology.
-    If use_tuned_params=True, loads best params from CV results.
+    If use_tuned_params=True, loads best params from specified source.
     Otherwise uses baseline parameters.
+
+    Args:
+        param_source: Source to load hyperparameters from ('metadata' or 'cv_results')
     """
     print("\n" + "="*80)
     print("1. TRAIN-VALIDATION GAP ANALYSIS (4-FOLD CV)")
@@ -193,8 +209,9 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
     # Load tuned parameters if requested
     tuned_params = None
     if use_tuned_params:
-        print("\nAttempting to load tuned hyperparameters from CV results...")
-        tuned_params = load_best_params_from_cv()
+        source_desc = "model_metadata.json" if param_source == 'metadata' else "latest CV results"
+        print(f"\nAttempting to load tuned hyperparameters from {source_desc}...")
+        tuned_params = load_best_params_from_config(param_source)
     else:
         print("\nUsing baseline hyperparameters (no tuning)")
 
@@ -253,11 +270,21 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
     rf_train_scores = []
     rf_val_scores = []
 
+    # Validate RF params have required keys
+    rf_params = None
     if tuned_params and tuned_params['rf']:
-        rf_params = tuned_params['rf']
-        print(f"  Using tuned params: n_estimators={rf_params['n_estimators']}, max_depth={rf_params['max_depth']}, "
-              f"min_samples_split={rf_params['min_samples_split']}, min_samples_leaf={rf_params['min_samples_leaf']}")
-    else:
+        potential_rf_params = tuned_params['rf']
+        # Check if params have RF-specific keys (not XGBoost keys)
+        required_rf_keys = ['n_estimators', 'max_depth', 'min_samples_split', 'min_samples_leaf']
+        if all(key in potential_rf_params for key in required_rf_keys):
+            rf_params = potential_rf_params
+            print(f"  Using tuned params: n_estimators={rf_params['n_estimators']}, max_depth={rf_params['max_depth']}, "
+                  f"min_samples_split={rf_params['min_samples_split']}, min_samples_leaf={rf_params['min_samples_leaf']}")
+        else:
+            print(f"  ⚠️  Loaded params missing RF-specific keys, falling back to baseline")
+            rf_params = None
+
+    if rf_params is None:
         print("  Using baseline params: n_estimators=100, class_weight='balanced'")
 
     for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
@@ -269,7 +296,7 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
         y_fold_val = y_train_val.iloc[val_idx]
 
         # Create pipeline for this fold
-        if tuned_params and tuned_params['rf']:
+        if rf_params is not None:
             rf = Pipeline([
                 ('preprocessor', tree_preprocessor),
                 ('classifier', RandomForestClassifier(
@@ -324,14 +351,24 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
     xgb_train_scores = []
     xgb_val_scores = []
 
+    # Validate XGBoost params have required keys
+    xgb_params = None
     if tuned_params and tuned_params['xgb']:
-        xgb_params = tuned_params['xgb']
-        print(f"  Using tuned params: n_estimators={xgb_params['n_estimators']}, max_depth={xgb_params['max_depth']}, "
-              f"learning_rate={xgb_params['learning_rate']}, min_child_weight={xgb_params['min_child_weight']}, "
-              f"gamma={xgb_params['gamma']}")
-        if 'reg_alpha' in xgb_params or 'reg_lambda' in xgb_params:
-            print(f"  + L1/L2 regularization: reg_alpha={xgb_params.get('reg_alpha', 0)}, reg_lambda={xgb_params.get('reg_lambda', 1)}")
-    else:
+        potential_xgb_params = tuned_params['xgb']
+        # Check if params have XGBoost-specific keys
+        required_xgb_keys = ['n_estimators', 'max_depth', 'learning_rate', 'subsample', 'colsample_bytree']
+        if all(key in potential_xgb_params for key in required_xgb_keys):
+            xgb_params = potential_xgb_params
+            print(f"  Using tuned params: n_estimators={xgb_params['n_estimators']}, max_depth={xgb_params['max_depth']}, "
+                  f"learning_rate={xgb_params['learning_rate']}, min_child_weight={xgb_params['min_child_weight']}, "
+                  f"gamma={xgb_params['gamma']}")
+            if 'reg_alpha' in xgb_params or 'reg_lambda' in xgb_params:
+                print(f"  + L1/L2 regularization: reg_alpha={xgb_params.get('reg_alpha', 0)}, reg_lambda={xgb_params.get('reg_lambda', 1)}")
+        else:
+            print(f"  ⚠️  Loaded params missing XGBoost-specific keys, falling back to baseline")
+            xgb_params = None
+
+    if xgb_params is None:
         print("  Using baseline params: n_estimators=100, scale_pos_weight=auto")
 
     for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_train_val, y_train_val)):
@@ -343,7 +380,7 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
         y_fold_val = y_train_val.iloc[val_idx]
 
         # Create pipeline for this fold
-        if tuned_params and tuned_params['xgb']:
+        if xgb_params is not None:
             xgb_model = Pipeline([
                 ('preprocessor', tree_preprocessor),
                 ('classifier', xgb.XGBClassifier(
@@ -498,8 +535,12 @@ def train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_para
 # 2. XGBoost Iteration Tracking
 # ============================================================================
 
-def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=True):
-    """Track XGBoost performance per iteration using 4-fold CV average."""
+def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=True, param_source='metadata'):
+    """Track XGBoost performance per iteration using 4-fold CV average.
+
+    Args:
+        param_source: Source to load hyperparameters from ('metadata' or 'cv_results')
+    """
     print("\n" + "="*80)
     print("2. XGBOOST PER-ITERATION TRACKING (4-FOLD CV AVERAGE)")
     print("="*80)
@@ -516,16 +557,26 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
     # Load tuned parameters if available
     tuned_params = None
     if use_tuned_params:
-        tuned_params = load_best_params_from_cv()
+        tuned_params = load_best_params_from_config(param_source)
 
     # Get CV strategy
     cv_strategy = TrainingConfig.get_cv_strategy(random_seed=RANDOM_SEED)
 
     print("\nTraining XGBoost with 4-fold CV iteration tracking...")
 
-    # Use tuned params if available, otherwise baseline
+    # Validate XGBoost params have required keys
+    xgb_params = None
     if tuned_params and tuned_params['xgb']:
-        xgb_params = tuned_params['xgb']
+        potential_xgb_params = tuned_params['xgb']
+        required_xgb_keys = ['n_estimators', 'max_depth', 'learning_rate', 'subsample', 'colsample_bytree']
+        if all(key in potential_xgb_params for key in required_xgb_keys):
+            xgb_params = potential_xgb_params
+        else:
+            print(f"  ⚠️  Loaded params missing XGBoost-specific keys, falling back to baseline")
+            xgb_params = None
+
+    # Use tuned params if available, otherwise baseline
+    if xgb_params is not None:
         print(f"  Using tuned base params (will train with 200 iterations for tracking)")
         model_params = {
             'n_estimators': 200,  # Use more iterations to see overfitting behavior
@@ -597,8 +648,8 @@ def xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=
     iterations = range(1, len(train_scores) + 1)
 
     # Use CV-tuned n_estimators
-    if tuned_params and tuned_params['xgb']:
-        cv_tuned_iter = tuned_params['xgb']['n_estimators']
+    if xgb_params is not None:
+        cv_tuned_iter = xgb_params['n_estimators']
         print(f"\n✓ Using CV-tuned n_estimators: {cv_tuned_iter}")
     else:
         # Fallback to averaged best if no tuned params available
@@ -809,23 +860,55 @@ def generate_summary(gap_df, best_iter):
 # Main
 # ============================================================================
 
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Bias-Variance Analysis for Fraud Detection Models",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Default: Analyze deployed model (from model_metadata.json)
+  python bias_variance_analysis.py
+
+  # Analyze latest CV results (for exploring alternative configs)
+  python bias_variance_analysis.py --param-source cv_results
+        """
+    )
+    parser.add_argument(
+        '--param-source',
+        type=str,
+        choices=['metadata', 'cv_results'],
+        default='metadata',
+        help="""Source to load hyperparameters from (default: metadata).
+                'metadata' = model_metadata.json (deployed model params - recommended for README plots).
+                'cv_results' = latest CV results CSV (for exploring recent tuning experiments)."""
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     print("\n" + "="*80)
     print("BIAS-VARIANCE ANALYSIS")
     print("="*80)
     print("\nThis script will:")
-    print("  1. Load BEST hyperparameters from most recent CV results")
+    print(f"  1. Load hyperparameters from {args.param_source}")
+    if args.param_source == 'metadata':
+        print("     (model_metadata.json - deployed model params)")
+    else:
+        print("     (latest CV results - recent tuning experiments)")
     print("  2. Retrain models with those parameters")
     print("  3. Analyze train-validation gap to detect overfitting")
     print("  4. Generate diagnostic plots and recommendations")
-    print("\nNOTE: If no CV results found, will use baseline parameters for comparison")
+    print("\nNOTE: If no params found, will use baseline parameters for comparison")
     print("="*80)
 
     X_train, y_train, X_val, y_val, _, _ = load_and_prepare_data()
 
-    # use_tuned_params=True will auto-load best params from CV results
-    gap_df = train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_params=True)
-    best_iter = xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=True)
+    # use_tuned_params=True will auto-load best params from specified source
+    gap_df = train_validation_gap_analysis(X_train, y_train, X_val, y_val, use_tuned_params=True, param_source=args.param_source)
+    best_iter = xgboost_iteration_tracking(X_train, y_train, X_val, y_val, use_tuned_params=True, param_source=args.param_source)
     analyze_cv_fold_variance()
     generate_summary(gap_df, best_iter)
 
