@@ -23,8 +23,10 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ├── Dockerfile                       # Multi-stage Docker image definition
 ├── docker-compose.yml               # Docker Compose configuration for local deployment
 ├── requirements.txt                 # Python dependencies for Docker
-├── benchmark.py                     # Performance benchmarking script
-├── locustfile.py                    # Load testing configuration (Locust)
+├── benchmarks/                      # Performance testing suite
+│   ├── benchmark.py                 # Custom benchmarking script
+│   ├── locustfile.py                # Locust load testing configuration
+│   └── results/                     # Generated outputs (gitignored)
 ├── data/                            # Data directory (gitignored)
 │   └── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
 ├── src/                             # Source code modules
@@ -1002,10 +1004,10 @@ docker run --rm -it fraud-detection-api ls -lhR /app
 ### Overview
 
 Comprehensive performance testing suite to measure API latency, throughput, and scalability. The benchmarking infrastructure includes:
-- **`benchmark.py`**: Python script for automated performance testing
-- **`locustfile.py`**: Load testing configuration for distributed testing
+- **`benchmarks/benchmark.py`**: Python script for automated performance testing
+- **`benchmarks/locustfile.py`**: Load testing configuration for distributed testing
 
-### Quick Benchmarking (benchmark.py)
+### Quick Benchmarking (benchmarks/benchmark.py)
 
 **Purpose**: Measure single-request latency and basic concurrent performance
 
@@ -1019,14 +1021,14 @@ Comprehensive performance testing suite to measure API latency, throughput, and 
 **Usage**:
 ```bash
 # Default benchmark (100 requests, 10 concurrent users)
-uv run python benchmark.py --url http://localhost:8000
+uv run python benchmarks/benchmark.py --url http://localhost:8000
 
 # Custom configuration
-uv run python benchmark.py \
+uv run python benchmarks/benchmark.py \
   --url http://localhost:8000 \
   --iterations 500 \
   --concurrent 20 \
-  --output results/benchmark_$(date +%Y%m%d_%H%M%S).json
+  --output benchmarks/results/benchmark_$(date +%Y%m%d_%H%M%S).json
 ```
 
 **Output Example**:
@@ -1063,7 +1065,7 @@ FRAUD DETECTION API - PERFORMANCE BENCHMARK REPORT
   Success Rate: 100.0%
 ```
 
-### Load Testing (locustfile.py)
+### Load Testing (benchmarks/locustfile.py)
 
 **Purpose**: Simulate realistic user behavior and identify breaking points
 
@@ -1081,11 +1083,11 @@ FRAUD DETECTION API - PERFORMANCE BENCHMARK REPORT
 **Usage**:
 ```bash
 # Interactive web UI (recommended for testing)
-locust -f locustfile.py --host=http://localhost:8000
+locust -f benchmarks/locustfile.py --host=http://localhost:8000
 # Open browser to http://localhost:8089
 
 # Headless mode (CI/CD integration)
-locust -f locustfile.py \
+locust -f benchmarks/locustfile.py \
   --host=http://localhost:8000 \
   --users 50 \
   --spawn-rate 10 \
@@ -1093,13 +1095,13 @@ locust -f locustfile.py \
   --headless
 
 # Generate HTML report
-locust -f locustfile.py \
+locust -f benchmarks/locustfile.py \
   --host=http://localhost:8000 \
   --users 100 \
   --spawn-rate 10 \
   --run-time 120s \
   --headless \
-  --html=reports/locust_$(date +%Y%m%d_%H%M%S).html
+  --html=benchmarks/results/locust_$(date +%Y%m%d_%H%M%S).html
 ```
 
 **Key Metrics**:
@@ -1854,18 +1856,18 @@ uv run pytest --cov=src/preprocessing --cov-report=html
 ### Run benchmarks
 ```bash
 # Quick performance benchmark
-uv run python benchmark.py --url http://localhost:8000
+uv run python benchmarks/benchmark.py --url http://localhost:8000
 
 # Custom benchmark configuration
-uv run python benchmark.py --iterations 500 --concurrent 20
+uv run python benchmarks/benchmark.py --iterations 500 --concurrent 20
 
 # Load testing with Locust (web UI)
-locust -f locustfile.py --host=http://localhost:8000
+locust -f benchmarks/locustfile.py --host=http://localhost:8000
 
 # Headless load test with report
-locust -f locustfile.py --host=http://localhost:8000 \
+locust -f benchmarks/locustfile.py --host=http://localhost:8000 \
   --users 100 --spawn-rate 10 --run-time 120s --headless \
-  --html=locust_report.html
+  --html=benchmarks/results/locust_report.html
 ```
 
 ### Git workflow
