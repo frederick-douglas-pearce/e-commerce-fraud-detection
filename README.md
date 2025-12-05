@@ -115,66 +115,68 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 
 ```
 .
-├── fd1_EDA_FE.ipynb                    # Notebook 1: EDA & feature engineering
-├── fd2_model_selection_tuning.ipynb    # Notebook 2: Model selection & hyperparameter tuning
-├── fd3_model_evaluation_deployment.ipynb # Notebook 3: Final evaluation & deployment
-├── best_params.json                    # Optimal hyperparameters (output from fd2)
-├── validation_metrics.json             # Validation metrics (output from fd2)
 ├── train.py                            # Model training script
 ├── predict.py                          # FastAPI prediction service
-├── bias_variance_analysis.py           # Bias-variance diagnostics script
+├── notebooks/                          # Jupyter notebooks
+│   ├── fd1_EDA_FE.ipynb                # Notebook 1: EDA & feature engineering
+│   ├── fd2_model_selection_tuning.ipynb # Notebook 2: Model selection & tuning
+│   └── fd3_model_evaluation_deployment.ipynb # Notebook 3: Evaluation & deployment
+├── docs/                               # Supplementary documentation
+│   ├── CHANGES_SUMMARY.md              # Summary of major changes
+│   ├── GCP_DEPLOYMENT.md               # Google Cloud Run deployment guide
+│   └── REFACTORING_SUMMARY.md          # Code refactoring documentation
+├── analysis/                           # Analysis scripts
+│   └── bias_variance_analysis.py       # Bias-variance diagnostics script
+├── benchmarks/                         # Performance testing suite
+│   ├── benchmark.py                    # Custom benchmarking script
+│   ├── locustfile.py                   # Load testing configuration (Locust)
+│   └── results/                        # Generated outputs (gitignored)
 ├── data/                               # Dataset directory (gitignored)
 │   └── transactions.csv                # Raw transaction data from Kaggle
-├── src/                                # Production source code
-│   ├── config/                         # Configuration management
-│   │   ├── data_config.py              # Data loading configuration
-│   │   ├── model_config.py             # Hyperparameters & feature lists
-│   │   ├── training_config.py          # CV strategy & thresholds
-│   │   └── __init__.py                 # Package exports
-│   ├── data/                           # Data loading utilities
-│   │   ├── loader.py                   # load_and_split_data()
-│   │   └── __init__.py                 # Package exports
-│   ├── preprocessing/                  # Feature engineering pipeline
-│   │   ├── config.py                   # FeatureConfig dataclass (JSON serialization)
-│   │   ├── features.py                 # Feature engineering functions
-│   │   ├── transformer.py              # FraudFeatureTransformer (sklearn-compatible)
-│   │   ├── pipelines.py                # PreprocessingPipelineFactory
-│   │   └── __init__.py                 # Package exports
-│   └── evaluation/                     # Model evaluation utilities
-│       ├── metrics.py                  # evaluate_model()
-│       ├── thresholds.py               # optimize_thresholds()
-│       └── __init__.py                 # Package exports
-├── tests/                              # Test suite (167 passing tests)
+├── src/                                # Source code modules
+│   ├── deployment/                     # Production code for model deployment
+│   │   ├── config/                     # Configuration management
+│   │   │   ├── data_config.py          # Data loading configuration
+│   │   │   ├── model_config.py         # Hyperparameters & feature lists
+│   │   │   ├── training_config.py      # CV strategy & thresholds
+│   │   │   └── __init__.py             # Package exports
+│   │   ├── data/                       # Data loading utilities
+│   │   │   ├── loader.py               # load_and_split_data()
+│   │   │   └── __init__.py             # Package exports
+│   │   ├── preprocessing/              # Feature engineering pipeline
+│   │   │   ├── config.py               # FeatureConfig dataclass
+│   │   │   ├── features.py             # Feature engineering functions
+│   │   │   ├── transformer.py          # FraudFeatureTransformer (sklearn-compatible)
+│   │   │   ├── pipelines.py            # PreprocessingPipelineFactory
+│   │   │   └── __init__.py             # Package exports
+│   │   └── evaluation/                 # Model evaluation utilities
+│   │       ├── metrics.py              # evaluate_model()
+│   │       ├── thresholds.py           # optimize_thresholds()
+│   │       └── __init__.py             # Package exports
+│   ├── fd1_nb/                         # Notebook 1 utility functions (EDA & FE)
+│   │   ├── data_utils.py               # Data loading, splitting, analysis
+│   │   ├── eda_utils.py                # EDA functions (VIF, correlations, MI)
+│   │   └── feature_engineering.py      # Feature engineering utilities
+│   ├── fd2_nb/                         # Notebook 2 utility functions (placeholder)
+│   └── fd3_nb/                         # Notebook 3 utility functions (placeholder)
+├── tests/                              # Test suite (212 passing tests)
 │   ├── conftest.py                     # Shared pytest fixtures
 │   ├── test_api.py                     # API integration tests (24 tests)
 │   ├── test_config/                    # Shared config tests (45 tests)
-│   │   ├── test_data_config.py         # DataConfig tests (16 tests)
-│   │   ├── test_model_config.py        # ModelConfig tests (20 tests)
-│   │   └── test_training_config.py     # TrainingConfig tests (9 tests)
 │   ├── test_data/                      # Data loading tests (13 tests)
-│   │   └── test_loader.py              # load_and_split_data tests
+│   ├── test_eda/                       # EDA utility tests (45 tests)
 │   ├── test_evaluation/                # Evaluation tests (26 tests)
-│   │   ├── test_metrics.py             # Metrics tests (14 tests)
-│   │   └── test_thresholds.py          # Threshold optimization tests (12 tests)
 │   └── test_preprocessing/             # Preprocessing tests (59 tests)
-│       ├── test_config.py              # FeatureConfig tests (8 tests)
-│       ├── test_features.py            # Feature function tests (15 tests)
-│       ├── test_pipelines.py           # Pipeline factory tests (18 tests)
-│       └── test_transformer.py         # Transformer integration tests (18 tests)
 ├── models/                             # Model artifacts (tracked in git)
 │   ├── xgb_fraud_detector.joblib       # Trained XGBoost model (~156KB)
 │   ├── transformer_config.json         # Feature engineering configuration
 │   ├── model_metadata.json             # Model version, hyperparameters, metrics
 │   ├── threshold_config.json           # Optimized decision thresholds
 │   ├── feature_lists.json              # Feature names and categorization
-│   ├── training_report.txt             # Training summary and results
-│   └── logs/                           # Hyperparameter tuning logs
-│       ├── *.csv                       # Cross-validation results
-│       └── *.log                       # Tuning summaries
+│   ├── best_params.json                # Optimal hyperparameters (from fd2)
+│   ├── validation_metrics.json         # Validation metrics (from fd2)
+│   └── logs/                           # Hyperparameter tuning logs (gitignored)
 ├── images/                             # Screenshots and documentation images
-│   └── *.png                           # API documentation screenshots
-├── benchmark.py                        # Performance benchmarking script
-├── locustfile.py                       # Load testing configuration (Locust)
 ├── Dockerfile                          # Container image definition
 ├── docker-compose.yml                  # Local Docker deployment
 ├── requirements.txt                    # Python dependencies (pip format)
@@ -182,7 +184,6 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ├── uv.lock                             # Locked dependency versions
 ├── .gitignore                          # Git exclusions
 ├── claude.md                           # Project context for Claude Code
-├── GCP_DEPLOYMENT.md                   # Google Cloud Run deployment guide
 └── README.md                           # This file
 ```
 
@@ -225,14 +226,14 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
    uv run --with jupyter jupyter lab
    ```
 
-4. **Run the notebooks in sequence**
-  - **Step 1**: Open `fd1_EDA_FE.ipynb` for EDA and feature engineering
+4. **Run the notebooks in sequence** (in `notebooks/` folder)
+  - **Step 1**: Open `notebooks/fd1_EDA_FE.ipynb` for EDA and feature engineering
     - Run cells sequentially
     - Dataset will auto-download on first run if not present
-  - **Step 2**: Open `fd2_model_selection_tuning.ipynb` for model selection and tuning
+  - **Step 2**: Open `notebooks/fd2_model_selection_tuning.ipynb` for model selection and tuning
     - Run cells sequentially
-    - Generates `best_params.json` and `validation_metrics.json`
-  - **Step 3**: Open `fd3_model_evaluation_deployment.ipynb` for final evaluation
+    - Generates `models/best_params.json` and `models/validation_metrics.json`
+  - **Step 3**: Open `notebooks/fd3_model_evaluation_deployment.ipynb` for final evaluation
     - Run cells sequentially
     - Loads parameters from step 2
     - Generates deployment artifacts in `models/`
@@ -258,7 +259,7 @@ uv run --with jupyter jupyter lab
 
 The project uses a modular three-notebook workflow for clear separation of concerns:
 
-**Notebook 1: EDA & Feature Engineering** (`fd1_EDA_FE.ipynb`)
+**Notebook 1: EDA & Feature Engineering** (`notebooks/fd1_EDA_FE.ipynb`)
 
 This notebook contains:
 1. **Data Loading**: Automated Kaggle dataset download with caching
@@ -287,7 +288,7 @@ This notebook contains:
   - Includes timezone mappings for 10 countries
   - Ensures consistent feature engineering between training and inference
 
-**Notebook 2: Model Selection & Hyperparameter Tuning** (`fd2_model_selection_tuning.ipynb`)
+**Notebook 2: Model Selection & Hyperparameter Tuning** (`notebooks/fd2_model_selection_tuning.ipynb`)
 
 This notebook contains:
 1. **Data Loading**: Loads raw transaction data and applies `FraudFeatureTransformer` pipeline
@@ -305,12 +306,12 @@ This notebook contains:
   - Timing measurements with appropriate caveats for parallel processing
 6. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
 7. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.8679)
-8. **Output**: Saves `best_params.json` and `validation_metrics.json` for next notebook
+8. **Output**: Saves `models/best_params.json` and `models/validation_metrics.json` for next notebook
 
-**Notebook 3: Final Evaluation & Deployment** (`fd3_model_evaluation_deployment.ipynb`)
+**Notebook 3: Final Evaluation & Deployment** (`notebooks/fd3_model_evaluation_deployment.ipynb`)
 
 This notebook contains:
-1. **Parameter Loading**: Loads optimal hyperparameters from `best_params.json`
+1. **Parameter Loading**: Loads optimal hyperparameters from `models/best_params.json`
 2. **Data Preparation**: Recreates train/val/test splits with same random seed
 3. **Model Retraining**: Trains best model on train+val combined (239,756 samples)
 4. **Test Set Evaluation**: Unbiased evaluation on completely held-out test set
@@ -379,7 +380,7 @@ This section covers the production-ready components: the feature engineering tra
 
 ### Feature Engineering Pipeline
 
-The project includes a production-ready feature engineering pipeline (`src/preprocessing/`) designed for deployment. This sklearn-compatible transformer ensures consistent feature engineering between training and inference.
+The project includes a production-ready feature engineering pipeline (`src/deployment/preprocessing/`) designed for deployment. This sklearn-compatible transformer ensures consistent feature engineering between training and inference.
 
 **Architecture Overview**
 
@@ -406,7 +407,7 @@ The project includes a production-ready feature engineering pipeline (`src/prepr
 
 Training Workflow:
 ```python
-from src.preprocessing import FraudFeatureTransformer
+from src.deployment.preprocessing import FraudFeatureTransformer
 
 # Fit transformer on training data
 transformer = FraudFeatureTransformer()
@@ -704,7 +705,7 @@ docker compose down
 
 **Deployment Status:** This API is deployed and available for testing.
 
-**📖 Full Deployment Guide:** See [GCP_DEPLOYMENT.md](GCP_DEPLOYMENT.md) for complete step-by-step deployment instructions including:
+**📖 Full Deployment Guide:** See [docs/GCP_DEPLOYMENT.md](docs/GCP_DEPLOYMENT.md) for complete step-by-step deployment instructions including:
 - Initial setup and authentication
 - Building and pushing Docker images
 - Deployment configuration
@@ -918,7 +919,7 @@ Run comprehensive test suite to verify all components: shared infrastructure, pr
 
 ### Test Organization
 
-The test suite mirrors the source code structure with 167 passing tests:
+The test suite mirrors the source code structure with 212 passing tests:
 
 ```
 tests/
@@ -929,6 +930,10 @@ tests/
 │   └── test_training_config.py   # TrainingConfig (9 tests)
 ├── test_data/               # Data loading tests (13 tests)
 │   └── test_loader.py            # load_and_split_data()
+├── test_eda/                # EDA utility tests (45 tests)
+│   ├── test_data_utils.py        # Data loading/splitting utilities
+│   ├── test_eda_utils.py         # VIF, correlations, mutual information
+│   └── test_feature_engineering.py # Feature engineering functions
 ├── test_evaluation/         # Evaluation tests (26 tests)
 │   ├── test_metrics.py           # calculate_metrics, evaluate_model (14 tests)
 │   └── test_thresholds.py        # optimize_thresholds (12 tests)
@@ -982,9 +987,10 @@ uv run pytest tests/test_preprocessing/test_transformer.py -v --tb=short
 
 ### Test Coverage Summary
 
-**167 total tests** covering:
+**212 total tests** covering:
 - ✅ **Shared Configuration** (45 tests): DataConfig, ModelConfig, TrainingConfig
 - ✅ **Data Loading** (13 tests): load_and_split_data with stratification validation
+- ✅ **EDA Utilities** (45 tests): Data utils, EDA functions, feature engineering
 - ✅ **Evaluation** (26 tests): Metrics calculation and threshold optimization
 - ✅ **Preprocessing** (59 tests): FeatureConfig, feature engineering functions, pipelines, transformer
 - ✅ **API** (24 tests): Endpoints, validation, error handling, threshold strategies
@@ -1008,14 +1014,14 @@ Comprehensive performance testing suite to measure API latency and throughput.
 
 ```bash
 # Default benchmark (100 requests, 10 concurrent users)
-uv run python benchmark.py --url http://localhost:8000
+uv run python benchmarks/benchmark.py --url http://localhost:8000
 
 # Custom configuration
-uv run python benchmark.py \
+uv run python benchmarks/benchmark.py \
   --url http://localhost:8000 \
   --iterations 500 \
   --concurrent 20 \
-  --output benchmark_results.json
+  --output benchmarks/results/benchmark_results.json
 ```
 
 **Metrics Measured:**
@@ -1028,10 +1034,10 @@ uv run python benchmark.py \
 
 ```bash
 # Start Locust web UI
-uv run locust -f locustfile.py --host=http://localhost:8000
+uv run locust -f benchmarks/locustfile.py --host=http://localhost:8000
 
 # Headless mode with 50 users, run for 60 seconds
-uv run locust -f locustfile.py \
+uv run locust -f benchmarks/locustfile.py \
   --host=http://localhost:8000 \
   --users 50 \
   --spawn-rate 10 \
@@ -1039,13 +1045,13 @@ uv run locust -f locustfile.py \
   --headless
 
 # Generate HTML report
-uv run locust -f locustfile.py \
+uv run locust -f benchmarks/locustfile.py \
   --host=http://localhost:8000 \
   --users 100 \
   --spawn-rate 10 \
   --run-time 120s \
   --headless \
-  --html=locust_report.html
+  --html=benchmarks/results/locust_report.html
 ```
 
 **User Scenarios:**
