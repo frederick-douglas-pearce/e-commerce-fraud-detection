@@ -27,26 +27,34 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 ├── locustfile.py                    # Load testing configuration (Locust)
 ├── data/                            # Data directory (gitignored)
 │   └── transactions.csv             # Downloaded dataset (~300k rows, 17 columns)
-├── src/                             # Source code for production
-│   ├── config/                      # Configuration management
-│   │   ├── data_config.py           # Data loading configuration
-│   │   ├── model_config.py          # Hyperparameters & feature lists
-│   │   ├── training_config.py       # CV strategy & thresholds
-│   │   └── __init__.py              # Package exports
-│   ├── data/                        # Data loading utilities
-│   │   ├── loader.py                # load_and_split_data()
-│   │   └── __init__.py              # Package exports
-│   ├── preprocessing/               # Feature engineering pipeline
-│   │   ├── config.py                # FeatureConfig dataclass
-│   │   ├── features.py              # Feature engineering functions
-│   │   ├── transformer.py           # FraudFeatureTransformer (sklearn-compatible)
-│   │   ├── pipelines.py             # PreprocessingPipelineFactory
-│   │   └── __init__.py              # Package exports
-│   └── evaluation/                  # Model evaluation utilities
-│       ├── metrics.py               # evaluate_model()
-│       ├── thresholds.py            # optimize_thresholds()
-│       └── __init__.py              # Package exports
-├── tests/                           # Test suite (167 passing tests)
+├── src/                             # Source code modules
+│   ├── deployment/                  # Production code for model deployment
+│   │   ├── config/                  # Configuration management
+│   │   │   ├── data_config.py       # Data loading configuration
+│   │   │   ├── model_config.py      # Hyperparameters & feature lists
+│   │   │   ├── training_config.py   # CV strategy & thresholds
+│   │   │   └── __init__.py          # Package exports
+│   │   ├── data/                    # Data loading utilities
+│   │   │   ├── loader.py            # load_and_split_data()
+│   │   │   └── __init__.py          # Package exports
+│   │   ├── preprocessing/           # Feature engineering pipeline
+│   │   │   ├── config.py            # FeatureConfig dataclass
+│   │   │   ├── features.py          # Feature engineering functions
+│   │   │   ├── transformer.py       # FraudFeatureTransformer (sklearn-compatible)
+│   │   │   ├── pipelines.py         # PreprocessingPipelineFactory
+│   │   │   └── __init__.py          # Package exports
+│   │   └── evaluation/              # Model evaluation utilities
+│   │       ├── metrics.py           # evaluate_model()
+│   │       ├── thresholds.py        # optimize_thresholds()
+│   │       └── __init__.py          # Package exports
+│   ├── fd1_nb/                      # Notebook 1 utility functions (EDA & FE)
+│   │   ├── data_utils.py            # Data loading, splitting, analysis
+│   │   ├── eda_utils.py             # EDA functions (VIF, correlations, MI)
+│   │   └── feature_engineering.py   # Feature engineering utilities
+│   ├── fd2_nb/                      # Notebook 2 utility functions (placeholder)
+│   ├── fd3_nb/                      # Notebook 3 utility functions (placeholder)
+│   └── README.md                    # Source code organization documentation
+├── tests/                           # Test suite (212 passing tests)
 │   ├── conftest.py                  # Shared pytest fixtures
 │   ├── test_api.py                  # API integration tests (24 tests)
 │   ├── test_config/                 # Shared config tests (45 tests)
@@ -161,61 +169,96 @@ uv pip install requests
 ## Shared Infrastructure & Code Organization
 
 ### Overview
-The project uses a modular architecture with shared modules in `src/` to eliminate code duplication and ensure consistency across all scripts (`train.py`, `bias_variance_analysis.py`, notebooks). This refactoring creates a single source of truth for all common logic.
+The project uses a modular architecture with shared modules in `src/` organized into two main categories:
+
+1. **`src/deployment/`**: Production code for model training, evaluation, and API deployment
+2. **`src/fd*_nb/`**: Notebook-specific utility functions for exploratory analysis
+
+This separation enables:
+- Minimal Docker deployments (only `src/deployment/`)
+- Clear distinction between production and exploratory code
+- Reusable notebook utilities without polluting production code
 
 ### Module Structure
 
-#### 1. `src/config/` - Configuration Management
+#### 1. `src/deployment/config/` - Configuration Management
 Centralizes all configuration for data loading, model hyperparameters, and training strategies.
 
-**`src/config/data_config.py`**:
+**`src/deployment/config/data_config.py`**:
 - `DataConfig.DEFAULT_RANDOM_SEED`: Default random seed (1) for reproducibility
 - `DataConfig.TARGET_COLUMN`: Target column name ('is_fraud')
 - `DataConfig.DATA_DIR`: Default data directory path
 - Train/val/test split ratios (60/20/20)
 
-**`src/config/model_config.py`**:
+**`src/deployment/config/model_config.py`**:
 - `FeatureListsConfig.load()`: Loads feature categorization from `models/feature_lists.json`
 - `ModelConfig.load_hyperparameters()`: Loads hyperparameters from model metadata or CV results
 - `ModelConfig.get_param_grid()`: Returns parameter grid for GridSearchCV
 - Fallback hyperparameters for XGBoost and Random Forest
 - Supports loading from multiple sources: metadata, CV results, or custom JSON files
 
-**`src/config/training_config.py`**:
+**`src/deployment/config/training_config.py`**:
 - `TrainingConfig.get_cv_strategy()`: Returns StratifiedKFold(4) for cross-validation
 - `TrainingConfig.get_threshold_targets()`: Returns target recall values for threshold optimization (80%, 85%, 90%)
 
-#### 2. `src/data/` - Data Loading Utilities
+#### 2. `src/deployment/data/` - Data Loading Utilities
 Provides unified data loading and splitting functionality.
 
-**`src/data/loader.py`**:
+**`src/deployment/data/loader.py`**:
 - `load_and_split_data(data_path, random_seed, verbose)`: Loads raw CSV, performs stratified train/val/test splits, returns 3 DataFrames
 - Used by `train.py`, `bias_variance_analysis.py`, and can be used in notebooks
 - Ensures consistent data splitting across all scripts
 
-#### 3. `src/preprocessing/` - Feature Engineering Pipeline
+#### 3. `src/deployment/preprocessing/` - Feature Engineering Pipeline
 Production-ready feature engineering with sklearn compatibility.
 
-**`src/preprocessing/pipelines.py`**:
+**`src/deployment/preprocessing/pipelines.py`**:
 - `PreprocessingPipelineFactory.create_logistic_pipeline()`: Creates pipeline with StandardScaler + OneHotEncoder
 - `PreprocessingPipelineFactory.create_tree_pipeline()`: Creates minimal pipeline (OrdinalEncoder only) for tree models
 - Used by `train.py` and `bias_variance_analysis.py` for consistent preprocessing
 
 **Other modules**: See "Production Feature Engineering Pipeline" section below for details on `config.py`, `features.py`, `transformer.py`.
 
-#### 4. `src/evaluation/` - Model Evaluation Utilities
+#### 4. `src/deployment/evaluation/` - Model Evaluation Utilities
 Provides standardized model evaluation and threshold optimization.
 
-**`src/evaluation/metrics.py`**:
+**`src/deployment/evaluation/metrics.py`**:
 - `evaluate_model(model, X, y, model_name, dataset_name)`: Comprehensive evaluation with PR-AUC, ROC-AUC, F1, Precision, Recall
 - Prints formatted results with confusion matrix
 - Returns metrics dictionary
 - Used by `train.py` and `bias_variance_analysis.py`
 
-**`src/evaluation/thresholds.py`**:
+**`src/deployment/evaluation/thresholds.py`**:
 - `optimize_thresholds(model, X_val, y_val)`: Finds optimal thresholds for 80%, 85%, 90% recall targets
 - Returns threshold configuration dictionary
 - Used by `train.py` to generate `models/threshold_config.json`
+
+#### 5. `src/fd1_nb/` - Notebook 1 Utilities (EDA & Feature Engineering)
+General-purpose utility functions extracted from notebook 1 for reusability.
+
+**`src/fd1_nb/data_utils.py`**:
+- `load_data()`: Efficient pandas CSV loading
+- `split_train_val_test()`: Stratified train/val/test splitting
+- `analyze_target_stats()`: Target distribution and imbalance detection
+- `analyze_feature_stats()`: Feature summary statistics
+
+**`src/fd1_nb/eda_utils.py`**:
+- `calculate_vif()`, `analyze_vif()`: Variance Inflation Factor analysis
+- `calculate_numeric_correlations()`, `analyze_correlations()`: Correlation analysis
+- `calculate_mi_scores()`, `analyze_mutual_information()`: Mutual information for categorical features
+- `plot_numeric_distributions()`, `plot_box_plots()`: Distribution visualizations
+- `analyze_temporal_patterns()`: Time-based fraud pattern analysis
+
+**`src/fd1_nb/feature_engineering.py`**:
+- `convert_utc_to_local_time()`: Timezone conversion with validation
+- `create_temporal_features()`: Hour, day_of_week, is_late_night, etc.
+- `create_interaction_features()`: Fraud scenario-specific combinations
+- `create_percentile_based_features()`: Threshold-based binary flags
+
+**Design Philosophy**: General-purpose, configurable functions that work with any dataset when given proper parameters. Includes verbose output and visualizations for exploratory analysis.
+
+#### 6. `src/fd2_nb/` and `src/fd3_nb/` - Placeholder Modules
+Reserved for notebook 2 (Model Selection & Tuning) and notebook 3 (Evaluation & Deployment) utility functions.
 
 ### Benefits of Shared Infrastructure
 ✅ **Single Source of Truth**: Configuration, data loading, evaluation logic defined once
@@ -226,12 +269,14 @@ Provides standardized model evaluation and threshold optimization.
 ✅ **Extensibility**: New analysis scripts can easily reuse existing infrastructure
 
 ### Usage Example
+
+**From Production Scripts (train.py, predict.py, bias_variance_analysis.py):**
 ```python
-# Import shared modules
-from src.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
-from src.data import load_and_split_data
-from src.preprocessing import FraudFeatureTransformer, PreprocessingPipelineFactory
-from src.evaluation import evaluate_model, optimize_thresholds
+# Import deployment modules
+from src.deployment.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
+from src.deployment.data import load_and_split_data
+from src.deployment.preprocessing import FraudFeatureTransformer, PreprocessingPipelineFactory
+from src.deployment.evaluation import evaluate_model, optimize_thresholds
 
 # Load data with consistent splitting
 train_df, val_df, test_df = load_and_split_data(random_seed=1)
@@ -260,10 +305,27 @@ metrics = evaluate_model(model, X_test, y_test, "XGBoost", "Test")
 threshold_config = optimize_thresholds(model, X_val, y_val)
 ```
 
+**From Notebooks (fd1_EDA_FE.ipynb):**
+```python
+# Import notebook-specific utilities
+from src.fd1_nb.data_utils import load_data, split_train_val_test, analyze_target_stats
+from src.fd1_nb.eda_utils import analyze_vif, analyze_correlations, analyze_mutual_information
+from src.fd1_nb.feature_engineering import convert_utc_to_local_time, create_temporal_features
+
+# Load and split data
+df = load_data(data_dir, csv_file)
+train_df, val_df, test_df = split_train_val_test(df, target_col='is_fraud')
+
+# Run EDA analyses (single function calls with visualizations)
+analyze_target_stats(train_df, target_col='is_fraud')
+analyze_vif(train_df, numeric_features)
+analyze_correlations(train_df, numeric_features, target_col='is_fraud')
+```
+
 ## Production Feature Engineering Pipeline
 
 ### Overview
-The production feature engineering pipeline is implemented in `src/preprocessing/` as a scikit-learn compatible transformer. This architecture enables seamless integration with sklearn pipelines and consistent feature engineering between training and inference.
+The production feature engineering pipeline is implemented in `src/deployment/preprocessing/` as a scikit-learn compatible transformer. This architecture enables seamless integration with sklearn pipelines and consistent feature engineering between training and inference.
 
 ### Architecture: Option 4 (Hybrid Class + Config)
 
@@ -279,7 +341,7 @@ The production feature engineering pipeline is implemented in `src/preprocessing
 
 ### Module Structure
 
-#### 1. `src/preprocessing/config.py` - Configuration Management
+#### 1. `src/deployment/preprocessing/config.py` - Configuration Management
 **Purpose**: Type-safe configuration for feature engineering
 
 **FeatureConfig dataclass** stores training-time statistics:
@@ -298,7 +360,7 @@ The production feature engineering pipeline is implemented in `src/preprocessing
 
 **Usage**:
 ```python
-from src.preprocessing import FeatureConfig
+from src.deployment.preprocessing import FeatureConfig
 
 # During training (in EDA notebook)
 config = FeatureConfig.from_training_data(train_df)
@@ -308,7 +370,7 @@ config.save("models/feature_config.json")
 config = FeatureConfig.load("models/feature_config.json")
 ```
 
-#### 2. `src/preprocessing/features.py` - Feature Engineering Functions
+#### 2. `src/deployment/preprocessing/features.py` - Feature Engineering Functions
 **Purpose**: Modular functions for each feature engineering step
 
 **Helper Functions**:
@@ -344,7 +406,7 @@ config = FeatureConfig.load("models/feature_config.json")
   - Creates 6 features targeting fraud scenarios
   - Only 3 used in final 30: new_account_with_promo, late_night_micro_transaction, high_value_long_distance
 
-#### 3. `src/preprocessing/transformer.py` - Sklearn Transformer
+#### 3. `src/deployment/preprocessing/transformer.py` - Sklearn Transformer
 **Purpose**: Orchestrate complete feature engineering pipeline
 
 **FraudFeatureTransformer class** (inherits from `BaseEstimator`, `TransformerMixin`):
@@ -371,7 +433,7 @@ config = FeatureConfig.load("models/feature_config.json")
 
 **Usage**:
 ```python
-from src.preprocessing import FraudFeatureTransformer
+from src.deployment.preprocessing import FraudFeatureTransformer
 
 # Training workflow
 transformer = FraudFeatureTransformer()
@@ -397,7 +459,7 @@ predictions = pipeline.predict(test_df)
 
 ### Testing Strategy
 
-**Test Coverage**: Comprehensive unit and integration tests for all components (167 passing tests)
+**Test Coverage**: Comprehensive unit and integration tests for all components (212 passing tests)
 
 **Test Organization**: Tests mirror source code structure for easy navigation
 
@@ -418,17 +480,22 @@ predictions = pipeline.predict(test_df)
 2. **Data Loading Tests** (`tests/test_data/` - 13 tests):
    - `test_loader.py`: load_and_split_data() with correct ratios, stratification, no data leakage, custom parameters
 
-3. **Evaluation Tests** (`tests/test_evaluation/` - 26 tests):
+3. **EDA Utility Tests** (`tests/test_eda/` - 45 tests):
+   - `test_data_utils.py` (11 tests): split_train_val_test(), analyze_target_stats(), analyze_feature_stats()
+   - `test_eda_utils.py` (14 tests): VIF, correlations, mutual information calculations
+   - `test_feature_engineering.py` (20 tests): Timezone conversion, temporal features, interaction features
+
+4. **Evaluation Tests** (`tests/test_evaluation/` - 26 tests):
    - `test_metrics.py` (14 tests): calculate_metrics(), evaluate_model(), perfect predictions, verbose control
    - `test_thresholds.py` (12 tests): optimize_thresholds(), default/custom targets, threshold config structure
 
-4. **Preprocessing Tests** (`tests/test_preprocessing/` - 59 tests):
+5. **Preprocessing Tests** (`tests/test_preprocessing/` - 59 tests):
    - `test_config.py` (8 tests): FeatureConfig creation, save/load, JSON structure, quantile calculation
    - `test_features.py` (15 tests): Individual feature functions, edge cases, timezone validation
    - `test_pipelines.py` (18 tests): PreprocessingPipelineFactory, tree/logistic pipelines, model type aliases
    - `test_transformer.py` (18 tests): Full pipeline execution, sklearn compatibility, save/load consistency
 
-5. **API Tests** (`tests/test_api.py` - 24 tests):
+6. **API Tests** (`tests/test_api.py` - 24 tests):
    - Endpoint testing (root, health, model info, predict)
    - Request/response validation
    - Error handling scenarios
@@ -443,6 +510,7 @@ uv run pytest tests/ -v
 # Run by component
 uv run pytest tests/test_config/ -v        # Configuration tests
 uv run pytest tests/test_data/ -v          # Data loading tests
+uv run pytest tests/test_eda/ -v           # EDA utility tests
 uv run pytest tests/test_evaluation/ -v    # Evaluation tests
 uv run pytest tests/test_preprocessing/ -v # Preprocessing tests
 uv run pytest tests/test_api.py -v         # API tests
@@ -454,15 +522,15 @@ uv run pytest --cov=src --cov-report=html
 uv run pytest tests/test_config/test_model_config.py -v
 ```
 
-**Test Results**: All 167 tests passing with 100% success rate
+**Test Results**: All 212 tests passing with 100% success rate
 
 ### Notebook Integration
 
-The EDA notebook (`fraud_detection_EDA_FE.ipynb`) now includes a cell that automatically generates and saves the FeatureConfig:
+The EDA notebook (`fd1_EDA_FE.ipynb`) now includes a cell that automatically generates and saves the FeatureConfig:
 
 ```python
 # Create and save feature configuration for deployment
-from src.preprocessing import FeatureConfig
+from src.deployment.preprocessing import FeatureConfig
 
 feature_config = FeatureConfig.from_training_data(train_fe)
 feature_config.save("models/feature_config.json")
@@ -1516,20 +1584,101 @@ from sklearn.metrics import roc_auc_score, f1_score
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
-# Local imports (if any)
-from src.preprocessing import FeatureConfig, FraudFeatureTransformer
+# Local imports - notebook utilities
+from src.fd1_nb.data_utils import load_data, split_train_val_test, analyze_target_stats
+from src.fd1_nb.eda_utils import analyze_vif, analyze_correlations, analyze_mutual_information
+from src.fd1_nb.feature_engineering import convert_utc_to_local_time, create_temporal_features
+
+# Local imports - production modules (if needed)
+from src.deployment.preprocessing import FeatureConfig, FraudFeatureTransformer
 ```
 
-### Keep Cells Clean with Functions
+### Extract Functions to Source Modules
 
-**Core Principle**: Notebook cells should contain minimal logic - ideally just a single function call. All complex logic should be encapsulated in well-named functions defined in the "Define functions" section.
+**Core Principle**: Move medium and long functions out of notebooks into dedicated source modules (`src/fd*_nb/`). This keeps notebooks focused on storytelling and analysis rather than implementation details.
+
+#### Why Extract Functions?
+
+**Notebooks should tell a story**, not be cluttered with function definitions. When a notebook contains many functions:
+- The narrative flow is broken by large code blocks
+- Functions can't be unit tested
+- Code can't be reused across notebooks
+- Version control diffs become noisy
+- The notebook becomes harder to read and maintain
+
+#### The Pattern
+
+1. **Create a module** in `src/fd*_nb/` for each notebook's utilities
+2. **Move functions** that are reusable or longer than ~10 lines
+3. **Import and call** the functions in notebook cells
+4. **Keep the notebook** focused on parameters, function calls, and analysis
+
+#### Example Workflow
+
+**Before (cluttered notebook):**
+```python
+# Cell 1: 50-line function definition
+def analyze_vif(df, numeric_features, threshold=5.0, verbose=True):
+    """Calculate VIF and visualize results."""
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+    # ... 45 more lines of code
+    plt.show()
+
+# Cell 2: Call the function
+analyze_vif(train_df, numeric_features)
+```
+
+**After (clean notebook):**
+```python
+# In src/fd1_nb/eda_utils.py - the function lives here with full implementation
+
+# In notebook - just import and call
+from src.fd1_nb.eda_utils import analyze_vif
+
+analyze_vif(train_df, numeric_features)
+```
+
+#### What to Extract
+
+**Move to source modules:**
+- Functions longer than ~10-15 lines
+- Visualization functions with complex matplotlib/seaborn logic
+- Data transformation functions used multiple times
+- Analysis functions that could be unit tested
+- Utility functions reusable across notebooks
+
+**Keep in notebook:**
+- Short helper functions (<10 lines) specific to one analysis
+- One-off calculations that don't need reuse
+- Simple wrappers around library functions
+
+#### Module Organization
+
+Each notebook should have a corresponding module in `src/`:
+
+| Notebook | Source Module | Purpose |
+|----------|---------------|---------|
+| `fd1_EDA_FE.ipynb` | `src/fd1_nb/` | EDA utilities, feature engineering |
+| `fd2_model_selection_tuning.ipynb` | `src/fd2_nb/` | Tuning utilities, comparison functions |
+| `fd3_model_evaluation_deployment.ipynb` | `src/fd3_nb/` | Evaluation, deployment prep |
 
 #### Benefits
+
+✅ **Readable notebooks**: Focus on the story, not implementation details
+✅ **Testable code**: Functions in `src/` can be unit tested
+✅ **Reusable utilities**: Functions available across notebooks and scripts
+✅ **Clean diffs**: Changes to logic don't clutter notebook diffs
+✅ **Better collaboration**: Easier to review and understand
+
+### Keep Cells Clean with Function Calls
+
+**Core Principle**: Notebook cells should contain minimal logic - ideally just a single function call. Complex logic should live in source modules (`src/fd*_nb/`), not inline in the notebook.
+
+#### Cell Design Goals
 1. **Readability**: Cells are easy to scan and understand at a glance
-2. **Reusability**: Functions can be called multiple times or on different datasets
-3. **Maintainability**: Changes to logic happen in one place
-4. **Testability**: Functions can be unit tested
-5. **Organization**: All logic is centralized in the functions section
+2. **Narrative focus**: The notebook tells a story with clear steps
+3. **Minimal code**: Each cell has a clear, single purpose
+4. **Self-documenting**: Function names describe what happens
 
 #### Examples
 
@@ -1546,27 +1695,11 @@ for idx, col in enumerate(numeric_features):
 
 **✅ Good Practice** - Clean single function call:
 ```python
-# Cell with single function call
+# Cell with single function call (function defined in src/fd1_nb/)
+from src.fd1_nb.eda_utils import plot_numeric_distributions
+
 plot_numeric_distributions(train_df, numeric_features)
 ```
-
-#### Implementation Pattern
-
-1. **Define functions in "Define functions" section**:
-   ```python
-   def plot_numeric_distributions(df, numeric_features):
-       """Visualize distributions of numeric features with histograms."""
-       # All plotting logic here
-       fig, axes = plt.subplots(3, 2, figsize=(14, 12))
-       # ... implementation
-       plt.show()
-       print("\nKey Observations:...")
-   ```
-
-2. **Call functions in notebook cells**:
-   ```python
-   plot_numeric_distributions(train_df, numeric_features)
-   ```
 
 #### Function Naming Conventions
 - **Action-based names**: `analyze_`, `plot_`, `calculate_`, `print_`
@@ -1576,99 +1709,68 @@ plot_numeric_distributions(train_df, numeric_features)
   - `plot_categorical_fraud_rates()` - Visualize fraud rates by category
   - `analyze_temporal_patterns()` - Analyze time-based fraud patterns
 
-#### When to Create a Function
-Create a function when:
-- Logic exceeds ~5-10 lines
-- Code involves visualization (matplotlib/seaborn)
-- Analysis might be reused or repeated
-- Cell logic becomes hard to read at a glance
+#### Where Functions Should Live
 
-Keep inline when:
-- Single line operations (e.g., `df.head()`)
-- Simple variable assignments
-- Direct function calls to existing functions
+| Function Type | Location | Example |
+|--------------|----------|---------|
+| **Long/reusable** (>10-15 lines) | `src/fd*_nb/` module | `analyze_vif()`, `create_temporal_features()` |
+| **Short/one-off** (<10 lines) | Inline in notebook | Simple calculations, quick formatting |
+| **Production/deployment** | `src/deployment/` | `FraudFeatureTransformer`, `evaluate_model()` |
 
 ## Key Functions
 
-### Data Loading & Preprocessing
-- `download_data_csv(kaggle_source, data_dir, csv_file)`: Download from Kaggle with caching
+Functions are organized by module location for easy reference.
+
+### Notebook Utilities (`src/fd1_nb/`)
+
+#### Data Loading & Preprocessing (`src/fd1_nb/data_utils.py`)
 - `load_data(data_dir, csv_file, verbose)`: Load CSV efficiently
 - `split_train_val_test(df, val_ratio, test_ratio, stratify, r_seed)`: Create train/val/test splits with stratification
-
-### Preprocessing & Analysis Functions
 - `analyze_target_stats(df, target_col)`: Target distribution and imbalance detection with visualization
 - `analyze_feature_stats(df, id_cols, target_col, categorical_features, numeric_features)`: Feature summary statistics
+
+#### EDA & Analysis Functions (`src/fd1_nb/eda_utils.py`)
 - `calculate_mi_scores(df, categorical_features, target_col)`: Mutual information for categorical features
 - `calculate_numeric_correlations(df, numeric_features, target_col)`: Pearson correlations
 - `calculate_vif(df, numeric_features)`: Variance Inflation Factor for multicollinearity
-
-### EDA Visualization Functions
-- `plot_target_distribution(df, target_col)`: Visualizes target distribution with count and percentage plots, shows class imbalance
-- `plot_numeric_distributions(df, numeric_features)`: Histogram visualizations with mean/median lines
 - `analyze_vif(df, numeric_features)`: VIF calculation and visualization with interpretation
 - `analyze_correlations(df, numeric_features, target_col)`: Correlation analysis with bar chart visualization
-- `plot_box_plots(df, numeric_features, target_col)`: Box plots comparing fraud vs non-fraud distributions
-- `analyze_temporal_patterns(df, date_feature, target_col, baseline_fraud_rate)`: Time-based fraud patterns by hour/day/month
-- `analyze_categorical_fraud_rates(df, categorical_features, target_col)`: Fraud rate calculations by category with high-risk identification
-- `plot_categorical_fraud_rates(df, categorical_features, target_col, baseline_fraud_rate)`: Visualize categorical fraud rates with baseline comparison
 - `analyze_mutual_information(df, categorical_features, target_col)`: MI score calculation and visualization
-- `print_feature_recommendations(corr_df, mi_df, vif_df, numeric_features, categorical_features)`: Comprehensive feature recommendations based on EDA
 
-### Feature Engineering Functions
-- `get_country_timezone_mapping()`: Returns dictionary mapping countries to capital city timezones
+#### Feature Engineering (`src/fd1_nb/feature_engineering.py`)
 - `convert_utc_to_local_time(df, date_col, country_col)`: Convert UTC to local time with timezone validation
-- `create_temporal_features(df, date_col, use_local_time)`: Generate temporal features (hour, day_of_week, is_late_night, etc.)
-- `create_amount_features(df)`: Transaction amount patterns (deviation, ratios, micro/large flags)
-- `create_user_behavior_features(df)`: User account patterns (velocity, new account, high frequency)
-- `create_geographic_features(df, risk_distance_quantile)`: Geographic features (country mismatch, distance flags)
-- `create_security_features(df)`: Security verification features (composite score, failures)
-- `create_interaction_features(df)`: Fraud scenario-specific interaction features
-- `engineer_features(df, date_col, country_col)`: Master function to create all 32 engineered features with progress logging
+- `create_temporal_features(df, date_col, suffix)`: Generate temporal features (hour, day_of_week, is_late_night, etc.)
+- `create_interaction_features(df, feature_pairs)`: Fraud scenario-specific interaction features
+- `create_percentile_based_features(df, feature_configs)`: Threshold-based binary flags
 
-### Feature Selection Function
-- `analyze_final_feature_selection(train_new_features)`: Comprehensive feature selection analysis that returns categorized dictionary of 30 selected features with rationale for inclusions/exclusions
+### Production Deployment (`src/deployment/`)
 
-### Model Training & Evaluation Functions
+#### Data Loading (`src/deployment/data/loader.py`)
+- `load_and_split_data(data_path, random_seed, verbose)`: Load CSV and perform stratified train/val/test splits
 
-#### Preprocessing Functions
-- `create_preprocessing_pipeline(numeric_features, categorical_features, scale_numeric=True)`: Creates sklearn Pipeline with ColumnTransformer for numeric scaling and categorical encoding
+#### Feature Engineering (`src/deployment/preprocessing/`)
+- `FraudFeatureTransformer`: Sklearn-compatible transformer for production feature engineering
+- `FeatureConfig`: Dataclass for storing training-time thresholds
+- `PreprocessingPipelineFactory`: Create model-specific preprocessing pipelines
 
-#### Training & Evaluation Functions
-- `train_and_evaluate_model(model_name, pipeline, X_train, y_train, X_val, y_val)`: Trains model pipeline and evaluates on validation set, returns metrics dictionary
-- `evaluate_model(model, X, y, model_name, dataset_name)`: Comprehensive evaluation of trained model with PR-AUC, ROC-AUC, F1, Precision, Recall, prints formatted results with confusion matrix
-- `compare_models(results_dict)`: Compares multiple models side-by-side with formatted output of key metrics
-- `calculate_metrics(y_true, y_pred, y_pred_proba)`: Calculates comprehensive metrics (PR-AUC, ROC-AUC, F1, Precision, Recall, Confusion Matrix)
-- `print_evaluation_metrics(metrics_dict, model_name, dataset_name='Validation')`: Formatted display of evaluation metrics with confusion matrix breakdown
-- `plot_confusion_matrix(y_true, y_pred, model_name)`: Visualizes confusion matrix with seaborn heatmap
+#### Evaluation (`src/deployment/evaluation/`)
+- `evaluate_model(model, X, y, model_name, dataset_name)`: Comprehensive model evaluation
+- `optimize_thresholds(model, X_val, y_val)`: Find optimal thresholds for recall targets
+- `calculate_metrics(y_true, y_pred, y_pred_proba)`: Calculate PR-AUC, ROC-AUC, F1, Precision, Recall
 
-#### Hyperparameter Tuning Functions
-- `create_search_object(search_type, estimator, param_grid, scoring='average_precision', cv=4, n_iter=None, verbose=1, random_state=42, n_jobs=-1)`:
-  - Creates either GridSearchCV or RandomizedSearchCV based on `search_type` parameter ('grid' or 'random')
-  - Calculates and displays total parameter combinations
-  - Flexible switching between exhaustive and sampling-based search strategies
-  - Returns configured search object ready for fitting
+### Notebook Functions (In-Notebook, Pending Extraction)
 
-- `tune_with_logging(search_type, pipeline, param_grid, X_train, y_train, cv, model_name, random_state=42, n_iter=None)`:
-  - Executes hyperparameter search with comprehensive logging
-  - Creates timestamped log files in `models/logs/` directory
-  - Saves CV results to CSV for post-analysis
-  - Supports both GridSearchCV and RandomizedSearchCV
-  - Returns: (search_object, log_path, csv_path)
+The following functions are currently defined in notebooks and will be extracted to `src/fd2_nb/` and `src/fd3_nb/` in future refactoring:
 
-- `analyze_cv_results(cv_results_csv_path, top_n=5)`:
-  - Production-focused analysis of cross-validation results
-  - Identifies best model by PR-AUC score and stability (std_test_score)
-  - Displays top N parameter combinations with comprehensive metrics
-  - **Includes timing caveats** for parallel processing (n_jobs=-1) unreliability
-  - Labels metrics as "✓ Reliable" (PR-AUC, std) or "⚠ Unreliable" (timing)
-  - Returns best parameters dictionary for easy model instantiation
+#### Hyperparameter Tuning (fd2 notebook)
+- `create_search_object()`: Creates GridSearchCV or RandomizedSearchCV
+- `tune_with_logging()`: Executes search with logging to `models/logs/`
+- `analyze_cv_results()`: Analyzes CV results, identifies best parameters
+- `train_and_evaluate_model()`: Trains and evaluates model pipeline
+- `compare_models()`: Side-by-side model comparison
 
-#### Threshold Optimization Functions
-- `find_threshold_for_recall(target_recall, precisions, recalls, thresholds)`:
-  - Finds optimal threshold for target recall percentage
-  - Maximizes precision while meeting recall target
-  - Returns (threshold, precision, recall, f1)
-  - Used to calibrate the three deployment threshold strategies (conservative 90%, balanced 85%, aggressive 80%)
+#### Threshold Optimization (fd3 notebook)
+- `find_threshold_for_recall()`: Find optimal threshold for target recall
 
 ## Important Notes
 
