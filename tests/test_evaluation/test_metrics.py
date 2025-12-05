@@ -1,5 +1,5 @@
 """
-Tests for src/evaluation/metrics.py
+Tests for src/deployment/evaluation/metrics.py
 
 Tests calculate_metrics and evaluate_model functions.
 """
@@ -7,7 +7,7 @@ Tests calculate_metrics and evaluate_model functions.
 import pytest
 import numpy as np
 from unittest.mock import Mock
-from src.evaluation.metrics import calculate_metrics, evaluate_model
+from src.deployment.evaluation.metrics import calculate_metrics, evaluate_model
 
 
 @pytest.fixture

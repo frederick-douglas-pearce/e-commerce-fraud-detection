@@ -8,8 +8,8 @@ import pytest
 import pandas as pd
 import tempfile
 from pathlib import Path
-from src.data.loader import load_and_split_data
-from src.config.data_config import DataConfig
+from src.deployment.data.loader import load_and_split_data
+from src.deployment.config.data_config import DataConfig
 
 
 @pytest.fixture

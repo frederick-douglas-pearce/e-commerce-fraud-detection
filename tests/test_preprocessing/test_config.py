@@ -5,8 +5,8 @@ import json
 import tempfile
 from pathlib import Path
 
-from src.preprocessing import FeatureConfig
-from src.preprocessing.features import get_country_timezone_mapping, get_final_feature_names
+from src.deployment.preprocessing import FeatureConfig
+from src.deployment.preprocessing.features import get_country_timezone_mapping, get_final_feature_names
 
 
 def test_feature_config_creation(sample_config):

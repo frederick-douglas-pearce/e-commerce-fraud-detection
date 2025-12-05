@@ -30,7 +30,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 # Import production feature engineering pipeline
-from src.preprocessing.transformer import FraudFeatureTransformer
+from src.deployment.preprocessing.transformer import FraudFeatureTransformer
 
 # Configure logging
 logging.basicConfig(

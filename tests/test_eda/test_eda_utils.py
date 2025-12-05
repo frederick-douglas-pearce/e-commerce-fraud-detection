@@ -1,5 +1,5 @@
 """
-Tests for src/eda/eda_utils.py
+Tests for src/fd1_nb/eda_utils.py
 
 Tests EDA analysis and visualization utilities.
 """
@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for tests
-from src.eda.eda_utils import (
+from src.fd1_nb.eda_utils import (
     calculate_mi_scores,
     calculate_numeric_correlations,
     calculate_vif,

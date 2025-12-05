@@ -23,11 +23,11 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
 # Import production feature engineering pipeline and shared modules
-from src.preprocessing.transformer import FraudFeatureTransformer
-from src.preprocessing import PreprocessingPipelineFactory
-from src.config import FeatureListsConfig, ModelConfig, TrainingConfig
-from src.data import load_and_split_data
-from src.evaluation import evaluate_model, optimize_thresholds
+from src.deployment.preprocessing.transformer import FraudFeatureTransformer
+from src.deployment.preprocessing import PreprocessingPipelineFactory
+from src.deployment.config import FeatureListsConfig, ModelConfig, TrainingConfig
+from src.deployment.data import load_and_split_data
+from src.deployment.evaluation import evaluate_model, optimize_thresholds
 
 
 def parse_args():

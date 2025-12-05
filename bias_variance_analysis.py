@@ -33,10 +33,10 @@ from sklearn.metrics import average_precision_score
 # XGBoost
 import xgboost as xgb
 
-# Shared modules from src/
-from src.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
-from src.data import load_and_split_data
-from src.preprocessing import FraudFeatureTransformer, PreprocessingPipelineFactory
+# Shared modules from src/deployment/
+from src.deployment.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
+from src.deployment.data import load_and_split_data
+from src.deployment.preprocessing import FraudFeatureTransformer, PreprocessingPipelineFactory
 
 # Set style
 sns.set_style("whitegrid")

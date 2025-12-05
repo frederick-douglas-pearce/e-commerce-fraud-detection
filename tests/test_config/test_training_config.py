@@ -6,7 +6,7 @@ Tests TrainingConfig class
 
 import pytest
 from sklearn.model_selection import StratifiedKFold
-from src.config.training_config import TrainingConfig
+from src.deployment.config.training_config import TrainingConfig
 
 
 class TestTrainingConfig:

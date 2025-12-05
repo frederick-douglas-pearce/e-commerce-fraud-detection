@@ -1,5 +1,5 @@
 """
-Tests for src/preprocessing/pipelines.py
+Tests for src/deployment/preprocessing/pipelines.py
 
 Tests PreprocessingPipelineFactory for creating preprocessing pipelines.
 """
@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
-from src.preprocessing.pipelines import PreprocessingPipelineFactory
-from src.config.model_config import FeatureListsConfig
+from src.deployment.preprocessing.pipelines import PreprocessingPipelineFactory
+from src.deployment.config.model_config import FeatureListsConfig
 
 
 @pytest.fixture

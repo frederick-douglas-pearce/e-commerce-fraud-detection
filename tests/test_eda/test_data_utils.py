@@ -1,5 +1,5 @@
 """
-Tests for src/eda/data_utils.py
+Tests for src/fd1_nb/data_utils.py
 
 Tests data loading and preprocessing utilities.
 """
@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for tests
-from src.eda.data_utils import (
+from src.fd1_nb.data_utils import (
     load_data,
     split_train_val_test,
     analyze_target_stats,

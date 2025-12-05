@@ -7,7 +7,7 @@ Tests ModelConfig and FeatureListsConfig classes
 import pytest
 import json
 from pathlib import Path
-from src.config.model_config import FeatureListsConfig, ModelConfig
+from src.deployment.config.model_config import FeatureListsConfig, ModelConfig
 
 
 class TestFeatureListsConfig:

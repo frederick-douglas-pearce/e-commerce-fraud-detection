@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 from datetime import datetime, timedelta
 
-from src.preprocessing import FeatureConfig, FraudFeatureTransformer
-from src.preprocessing.features import get_country_timezone_mapping, get_final_feature_names
+from src.deployment.preprocessing import FeatureConfig, FraudFeatureTransformer
+from src.deployment.preprocessing.features import get_country_timezone_mapping, get_final_feature_names
 
 
 @pytest.fixture

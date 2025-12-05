@@ -7,7 +7,7 @@ from pathlib import Path
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 
-from src.preprocessing import FraudFeatureTransformer, FeatureConfig
+from src.deployment.preprocessing import FraudFeatureTransformer, FeatureConfig
 
 
 def test_transformer_initialization():

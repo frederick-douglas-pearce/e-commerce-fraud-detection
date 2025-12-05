@@ -1,5 +1,5 @@
 """
-Tests for src/eda/feature_engineering.py
+Tests for src/fd1_nb/feature_engineering.py
 
 Tests feature engineering utilities.
 """
@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import pytz
-from src.eda.feature_engineering import (
+from src.fd1_nb.feature_engineering import (
     convert_utc_to_local_time,
     create_temporal_features,
     create_interaction_features,

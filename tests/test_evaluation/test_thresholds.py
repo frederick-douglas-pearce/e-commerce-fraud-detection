@@ -1,5 +1,5 @@
 """
-Tests for src/evaluation/thresholds.py
+Tests for src/deployment/evaluation/thresholds.py
 
 Tests optimize_thresholds function for threshold optimization.
 """
@@ -7,8 +7,8 @@ Tests optimize_thresholds function for threshold optimization.
 import pytest
 import numpy as np
 from unittest.mock import Mock
-from src.evaluation.thresholds import optimize_thresholds
-from src.config.training_config import TrainingConfig
+from src.deployment.evaluation.thresholds import optimize_thresholds
+from src.deployment.config.training_config import TrainingConfig
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ Tests DataConfig class for data loading and splitting configuration.
 
 import pytest
 from pathlib import Path
-from src.config.data_config import DataConfig
+from src.deployment.config.data_config import DataConfig
 
 
 class TestDataConfig:
