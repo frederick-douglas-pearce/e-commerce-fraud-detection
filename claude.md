@@ -12,17 +12,21 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 
 ```
 .
-├── fd1_EDA_FE.ipynb                    # Notebook 1: EDA & feature engineering
-├── fd2_model_selection_tuning.ipynb    # Notebook 2: Model selection & hyperparameter tuning
-├── fd3_model_evaluation_deployment.ipynb # Notebook 3: Final evaluation & deployment
-├── best_params.json                    # Optimal hyperparameters (output from fd2, tracked)
-├── validation_metrics.json             # Validation performance metrics (output from fd2, tracked)
-├── train.py                            # Model training script
+├── train.py                         # Model training script
 ├── predict.py                       # FastAPI web service for real-time fraud prediction
-├── bias_variance_analysis.py        # Bias-variance diagnostics script
 ├── Dockerfile                       # Multi-stage Docker image definition
 ├── docker-compose.yml               # Docker Compose configuration for local deployment
 ├── requirements.txt                 # Python dependencies for Docker
+├── notebooks/                       # Jupyter notebooks
+│   ├── fd1_EDA_FE.ipynb             # Notebook 1: EDA & feature engineering
+│   ├── fd2_model_selection_tuning.ipynb    # Notebook 2: Model selection & tuning
+│   └── fd3_model_evaluation_deployment.ipynb # Notebook 3: Evaluation & deployment
+├── docs/                            # Supplementary documentation
+│   ├── CHANGES_SUMMARY.md           # Summary of major changes
+│   ├── GCP_DEPLOYMENT.md            # Google Cloud Platform deployment guide
+│   └── REFACTORING_SUMMARY.md       # Code refactoring documentation
+├── analysis/                        # Analysis scripts and outputs
+│   └── bias_variance_analysis.py    # Bias-variance diagnostics script
 ├── benchmarks/                      # Performance testing suite
 │   ├── benchmark.py                 # Custom benchmarking script
 │   ├── locustfile.py                # Locust load testing configuration
@@ -79,6 +83,8 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │   ├── threshold_config.json        # Fraud detection thresholds (tracked)
 │   ├── model_metadata.json          # Model version and performance metrics (tracked)
 │   ├── feature_lists.json           # Feature names and categories (tracked)
+│   ├── best_params.json             # Optimal hyperparameters (output from fd2)
+│   ├── validation_metrics.json      # Validation performance metrics (output from fd2)
 │   └── logs/                        # Hyperparameter tuning logs (gitignored)
 │       ├── *_tuning_*.log           # Timestamped CV progress logs
 │       └── *_cv_results_*.csv       # CV results for analysis
@@ -208,7 +214,7 @@ Provides unified data loading and splitting functionality.
 
 **`src/deployment/data/loader.py`**:
 - `load_and_split_data(data_path, random_seed, verbose)`: Loads raw CSV, performs stratified train/val/test splits, returns 3 DataFrames
-- Used by `train.py`, `bias_variance_analysis.py`, and can be used in notebooks
+- Used by `train.py`, `analysis/bias_variance_analysis.py`, and can be used in notebooks
 - Ensures consistent data splitting across all scripts
 
 #### 3. `src/deployment/preprocessing/` - Feature Engineering Pipeline
@@ -217,7 +223,7 @@ Production-ready feature engineering with sklearn compatibility.
 **`src/deployment/preprocessing/pipelines.py`**:
 - `PreprocessingPipelineFactory.create_logistic_pipeline()`: Creates pipeline with StandardScaler + OneHotEncoder
 - `PreprocessingPipelineFactory.create_tree_pipeline()`: Creates minimal pipeline (OrdinalEncoder only) for tree models
-- Used by `train.py` and `bias_variance_analysis.py` for consistent preprocessing
+- Used by `train.py` and `analysis/bias_variance_analysis.py` for consistent preprocessing
 
 **Other modules**: See "Production Feature Engineering Pipeline" section below for details on `config.py`, `features.py`, `transformer.py`.
 
@@ -228,7 +234,7 @@ Provides standardized model evaluation and threshold optimization.
 - `evaluate_model(model, X, y, model_name, dataset_name)`: Comprehensive evaluation with PR-AUC, ROC-AUC, F1, Precision, Recall
 - Prints formatted results with confusion matrix
 - Returns metrics dictionary
-- Used by `train.py` and `bias_variance_analysis.py`
+- Used by `train.py` and `analysis/bias_variance_analysis.py`
 
 **`src/deployment/evaluation/thresholds.py`**:
 - `optimize_thresholds(model, X_val, y_val)`: Finds optimal thresholds for 80%, 85%, 90% recall targets
@@ -272,7 +278,7 @@ Reserved for notebook 2 (Model Selection & Tuning) and notebook 3 (Evaluation & 
 
 ### Usage Example
 
-**From Production Scripts (train.py, predict.py, bias_variance_analysis.py):**
+**From Production Scripts (train.py, predict.py, analysis/bias_variance_analysis.py):**
 ```python
 # Import deployment modules
 from src.deployment.config import DataConfig, FeatureListsConfig, ModelConfig, TrainingConfig
@@ -528,7 +534,7 @@ uv run pytest tests/test_config/test_model_config.py -v
 
 ### Notebook Integration
 
-The EDA notebook (`fd1_EDA_FE.ipynb`) now includes a cell that automatically generates and saves the FeatureConfig:
+The EDA notebook (`notebooks/fd1_EDA_FE.ipynb`) now includes a cell that automatically generates and saves the FeatureConfig:
 
 ```python
 # Create and save feature configuration for deployment
@@ -1464,16 +1470,16 @@ The project uses a modular three-notebook workflow with clear separation of conc
 
 #### 8. Save Best Parameters
 **Output artifacts for next notebook**:
-1. **best_params.json** - Optimal hyperparameters from GridSearchCV
-2. **validation_metrics.json** - Validation set performance metrics
+1. **models/best_params.json** - Optimal hyperparameters from GridSearchCV
+2. **models/validation_metrics.json** - Validation set performance metrics
 
 **Handoff Mechanism**: These JSON files enable the next notebook to load the best model configuration without re-running hyperparameter tuning.
 
 ### Notebook 3: fd3_model_evaluation_deployment.ipynb (Final Evaluation & Deployment)
 
 #### 1. Load Best Parameters
-- Loads `best_params.json` from notebook 2
-- Loads `validation_metrics.json` for comparison
+- Loads `models/best_params.json` from notebook 2
+- Loads `models/validation_metrics.json` for comparison
 
 #### 2. Data Preparation
 - Recreates same train/val/test splits (same random seed)
@@ -1535,11 +1541,11 @@ The project uses a modular three-notebook workflow with clear separation of conc
 ### Notebook Workflow Summary
 
 ```
-fd1_EDA_FE.ipynb
-    ↓ (saves transformer_config.json)
-fd2_model_selection_tuning.ipynb
-    ↓ (saves best_params.json + validation_metrics.json)
-fd3_model_evaluation_deployment.ipynb
+notebooks/fd1_EDA_FE.ipynb
+    ↓ (saves models/transformer_config.json)
+notebooks/fd2_model_selection_tuning.ipynb
+    ↓ (saves models/best_params.json + models/validation_metrics.json)
+notebooks/fd3_model_evaluation_deployment.ipynb
     ↓ (saves models/*.joblib, models/*.json)
 Production Deployment
 ```
@@ -1660,9 +1666,9 @@ Each notebook should have a corresponding module in `src/`:
 
 | Notebook | Source Module | Purpose |
 |----------|---------------|---------|
-| `fd1_EDA_FE.ipynb` | `src/fd1_nb/` | EDA utilities, feature engineering |
-| `fd2_model_selection_tuning.ipynb` | `src/fd2_nb/` | Tuning utilities, comparison functions |
-| `fd3_model_evaluation_deployment.ipynb` | `src/fd3_nb/` | Evaluation, deployment prep |
+| `notebooks/fd1_EDA_FE.ipynb` | `src/fd1_nb/` | EDA utilities, feature engineering |
+| `notebooks/fd2_model_selection_tuning.ipynb` | `src/fd2_nb/` | Tuning utilities, comparison functions |
+| `notebooks/fd3_model_evaluation_deployment.ipynb` | `src/fd3_nb/` | Evaluation, deployment prep |
 
 #### Benefits
 
@@ -1829,10 +1835,10 @@ uv sync
 # Launch Jupyter Lab
 uv run --with jupyter jupyter lab
 
-# Run notebooks in sequence:
-# 1. fd1_EDA_FE.ipynb (EDA and feature engineering)
-# 2. fd2_model_selection_tuning.ipynb (model selection and tuning)
-# 3. fd3_model_evaluation_deployment.ipynb (final evaluation and deployment)
+# Run notebooks in sequence (in notebooks/ folder):
+# 1. notebooks/fd1_EDA_FE.ipynb (EDA and feature engineering)
+# 2. notebooks/fd2_model_selection_tuning.ipynb (model selection and tuning)
+# 3. notebooks/fd3_model_evaluation_deployment.ipynb (final evaluation and deployment)
 ```
 
 ### Run API server
