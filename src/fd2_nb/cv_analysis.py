@@ -696,14 +696,13 @@ def _plot_cv_gap_analysis(
     """Create visualization of train-validation gap across all candidates."""
     fig, axes = plt.subplots(1, 2, figsize=figsize)
 
-    # Sort by validation score for consistent visualization
-    sorted_results = cv_results.sort_values(mean_val_col, ascending=False).reset_index(drop=True)
-    best_sorted_idx = sorted_results[sorted_results.index == best_idx].index
-    if len(best_sorted_idx) == 0:
-        # Find best by rank
-        best_sorted_idx = sorted_results[rank_col].idxmin()
-    else:
-        best_sorted_idx = best_sorted_idx[0]
+    # Sort by validation score in descending order (best on left)
+    # Keep original index to track best model position after sorting
+    sorted_results = cv_results.sort_values(mean_val_col, ascending=False).reset_index()
+
+    # Find position of best model in the sorted dataframe
+    # The best model is the one with rank=1 (minimum rank)
+    best_sorted_idx = sorted_results[rank_col].idxmin()
 
     x = np.arange(len(sorted_results))
 
@@ -718,7 +717,7 @@ def _plot_cv_gap_analysis(
     ax1.axvline(x=best_sorted_idx, color='red', linestyle='--', linewidth=2,
                 label=f'Best Model (Rank 1)', alpha=0.8)
 
-    ax1.set_xlabel('Candidate (sorted by validation score)', fontsize=11)
+    ax1.set_xlabel('Candidate (sorted by validation score, best on left)', fontsize=11)
     ax1.set_ylabel(f'{refit_metric}', fontsize=11)
     ax1.set_title(f'{model_name}: Training vs Validation Scores', fontsize=12, fontweight='bold')
     ax1.legend(loc='lower left')
@@ -740,7 +739,7 @@ def _plot_cv_gap_analysis(
     ax2.bar(best_sorted_idx, gap_pcts.iloc[best_sorted_idx], color='purple',
             alpha=0.9, edgecolor='black', linewidth=2, label='Best Model')
 
-    ax2.set_xlabel('Candidate (sorted by validation score)', fontsize=11)
+    ax2.set_xlabel('Candidate (sorted by validation score, best on left)', fontsize=11)
     ax2.set_ylabel('Train-Val Gap (%)', fontsize=11)
     ax2.set_title(f'{model_name}: Overfitting Gap by Candidate', fontsize=12, fontweight='bold')
     ax2.legend(loc='upper right')
