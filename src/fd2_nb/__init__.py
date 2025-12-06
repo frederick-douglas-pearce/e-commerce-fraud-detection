@@ -36,6 +36,7 @@ from .bias_variance import (
     calculate_train_val_gap,
     analyze_train_val_gaps,
     track_xgboost_iterations,
+    track_estimator_iterations,
     analyze_cv_fold_variance,
     generate_bias_variance_report,
 )
@@ -59,6 +60,7 @@ __all__ = [
     'calculate_train_val_gap',
     'analyze_train_val_gaps',
     'track_xgboost_iterations',
+    'track_estimator_iterations',
     'analyze_cv_fold_variance',
     'generate_bias_variance_report',
 ]

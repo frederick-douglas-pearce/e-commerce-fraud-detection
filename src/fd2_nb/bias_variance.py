@@ -605,6 +605,406 @@ def _plot_cv_variance(variance_df: pd.DataFrame, figsize: Tuple[int, int]) -> No
     plt.show()
 
 
+def track_estimator_iterations(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    model_type: str,
+    model_params: Dict,
+    preprocessor: Any = None,
+    n_estimators_range: Optional[List[int]] = None,
+    cv_folds: int = 4,
+    random_seed: int = 1,
+    metric: str = 'pr_auc',
+    figsize: Tuple[int, int] = (12, 6),
+    verbose: bool = True
+) -> Tuple[int, pd.DataFrame]:
+    """
+    Track model performance across different n_estimators values.
+
+    This is a generalized version that works for both Random Forest and XGBoost.
+    For XGBoost, it uses the native eval_set for efficient per-iteration tracking.
+    For Random Forest, it trains separate models at each n_estimators value.
+
+    Args:
+        X_train: Training features
+        y_train: Training labels
+        X_val: Validation features (combined with X_train for CV)
+        y_val: Validation labels (combined with y_train for CV)
+        model_type: Either 'random_forest' or 'xgboost'
+        model_params: Model parameters dictionary (n_estimators will be varied)
+        preprocessor: Optional preprocessor (e.g., ColumnTransformer)
+        n_estimators_range: List of n_estimators values to test.
+            Default: [10, 25, 50, 75, 100, 150, 200, 300, 400, 500] for RF
+                     Uses native iteration tracking for XGBoost
+        cv_folds: Number of CV folds
+        random_seed: Random seed
+        metric: Metric to use ('pr_auc', 'roc_auc')
+        figsize: Figure size for iteration plot
+        verbose: If True, print analysis and create plot
+
+    Returns:
+        Tuple of (optimal_n_estimators, iteration_tracking_df)
+
+    Example:
+        >>> # Random Forest
+        >>> rf_params = {'max_depth': 20, 'min_samples_leaf': 5, 'class_weight': 'balanced'}
+        >>> optimal_n, tracking_df = track_estimator_iterations(
+        ...     X_train, y_train, X_val, y_val,
+        ...     model_type='random_forest',
+        ...     model_params=rf_params
+        ... )
+
+        >>> # XGBoost
+        >>> xgb_params = {'max_depth': 4, 'learning_rate': 0.1, 'scale_pos_weight': 8}
+        >>> optimal_n, tracking_df = track_estimator_iterations(
+        ...     X_train, y_train, X_val, y_val,
+        ...     model_type='xgboost',
+        ...     model_params=xgb_params
+        ... )
+    """
+    model_type = model_type.lower()
+
+    if model_type == 'xgboost':
+        # Use native XGBoost iteration tracking (more efficient)
+        return _track_xgboost_iterations_internal(
+            X_train, y_train, X_val, y_val,
+            model_params, preprocessor,
+            max_iterations=n_estimators_range[-1] if n_estimators_range else 200,
+            cv_folds=cv_folds, random_seed=random_seed,
+            figsize=figsize, verbose=verbose
+        )
+    elif model_type in ['random_forest', 'rf']:
+        return _track_rf_iterations(
+            X_train, y_train, X_val, y_val,
+            model_params, preprocessor,
+            n_estimators_range=n_estimators_range,
+            cv_folds=cv_folds, random_seed=random_seed,
+            metric=metric, figsize=figsize, verbose=verbose
+        )
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}. Use 'random_forest' or 'xgboost'")
+
+
+def _track_rf_iterations(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    rf_params: Dict,
+    preprocessor: Any = None,
+    n_estimators_range: Optional[List[int]] = None,
+    cv_folds: int = 4,
+    random_seed: int = 1,
+    metric: str = 'pr_auc',
+    figsize: Tuple[int, int] = (12, 6),
+    verbose: bool = True
+) -> Tuple[int, pd.DataFrame]:
+    """
+    Track Random Forest performance across different n_estimators values.
+
+    Since Random Forest builds trees independently (bagging), we can't track
+    per-iteration performance like XGBoost. Instead, we train separate models
+    with different n_estimators values.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.base import clone
+
+    # Default n_estimators range for Random Forest
+    if n_estimators_range is None:
+        n_estimators_range = [10, 25, 50, 75, 100, 150, 200, 300, 400, 500]
+
+    # Combine train and val for CV
+    X_combined = pd.concat([X_train, X_val])
+    y_combined = pd.concat([y_train, y_val])
+
+    # CV strategy
+    cv_strategy = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
+
+    if verbose:
+        print(f"\nTracking Random Forest performance across n_estimators values...")
+        print(f"Testing: {n_estimators_range}")
+        print(f"Using {cv_folds}-fold cross-validation...")
+
+    # Store results
+    all_train_scores = {n: [] for n in n_estimators_range}
+    all_val_scores = {n: [] for n in n_estimators_range}
+
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_combined, y_combined)):
+        if verbose:
+            print(f"  Processing fold {fold_idx + 1}/{cv_folds}...", end=" ", flush=True)
+
+        X_fold_train = X_combined.iloc[train_idx]
+        y_fold_train = y_combined.iloc[train_idx]
+        X_fold_val = X_combined.iloc[val_idx]
+        y_fold_val = y_combined.iloc[val_idx]
+
+        # Apply preprocessor if provided
+        if preprocessor is not None:
+            prep = clone(preprocessor)
+            X_fold_train_processed = prep.fit_transform(X_fold_train)
+            X_fold_val_processed = prep.transform(X_fold_val)
+        else:
+            X_fold_train_processed = X_fold_train
+            X_fold_val_processed = X_fold_val
+
+        # Train models with different n_estimators
+        for n_est in n_estimators_range:
+            params = rf_params.copy()
+            params['n_estimators'] = n_est
+            params['random_state'] = random_seed
+            if 'n_jobs' not in params:
+                params['n_jobs'] = -1
+
+            rf_model = RandomForestClassifier(**params)
+            rf_model.fit(X_fold_train_processed, y_fold_train)
+
+            # Get predictions
+            train_proba = rf_model.predict_proba(X_fold_train_processed)[:, 1]
+            val_proba = rf_model.predict_proba(X_fold_val_processed)[:, 1]
+
+            # Calculate scores
+            if metric == 'pr_auc':
+                train_score = average_precision_score(y_fold_train, train_proba)
+                val_score = average_precision_score(y_fold_val, val_proba)
+            elif metric == 'roc_auc':
+                train_score = roc_auc_score(y_fold_train, train_proba)
+                val_score = roc_auc_score(y_fold_val, val_proba)
+            else:
+                raise ValueError(f"Unknown metric: {metric}")
+
+            all_train_scores[n_est].append(train_score)
+            all_val_scores[n_est].append(val_score)
+
+        if verbose:
+            print("done")
+
+    # Compute mean and std across folds
+    train_means = np.array([np.mean(all_train_scores[n]) for n in n_estimators_range])
+    train_stds = np.array([np.std(all_train_scores[n]) for n in n_estimators_range])
+    val_means = np.array([np.mean(all_val_scores[n]) for n in n_estimators_range])
+    val_stds = np.array([np.std(all_val_scores[n]) for n in n_estimators_range])
+
+    # Find optimal n_estimators
+    optimal_idx = np.argmax(val_means)
+    optimal_n = n_estimators_range[optimal_idx]
+
+    # Check if specified n_estimators is in the range
+    if 'n_estimators' in rf_params and rf_params['n_estimators'] in n_estimators_range:
+        specified_n = rf_params['n_estimators']
+        specified_idx = n_estimators_range.index(specified_n)
+        if verbose:
+            print(f"\nSpecified n_estimators={specified_n} vs optimal={optimal_n}")
+
+    # Create tracking DataFrame
+    tracking_df = pd.DataFrame({
+        'n_estimators': n_estimators_range,
+        'train_score_mean': train_means,
+        'train_score_std': train_stds,
+        'val_score_mean': val_means,
+        'val_score_std': val_stds,
+        'gap': train_means - val_means,
+        'gap_pct': (train_means - val_means) / train_means * 100
+    })
+
+    if verbose:
+        print(f"\nOptimal n_estimators: {optimal_n}")
+        print(f"  Training {metric.upper()}:   {train_means[optimal_idx]:.4f} +/- {train_stds[optimal_idx]:.4f}")
+        print(f"  Validation {metric.upper()}: {val_means[optimal_idx]:.4f} +/- {val_stds[optimal_idx]:.4f}")
+        print(f"  Gap:               {train_means[optimal_idx] - val_means[optimal_idx]:.4f} "
+              f"({(train_means[optimal_idx] - val_means[optimal_idx]) / train_means[optimal_idx] * 100:.1f}%)")
+
+        _plot_rf_iteration_tracking(
+            n_estimators_range, train_means, val_means,
+            train_stds, val_stds, optimal_n, metric, figsize
+        )
+
+    return optimal_n, tracking_df
+
+
+def _track_xgboost_iterations_internal(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    xgb_params: Dict,
+    preprocessor: Any = None,
+    max_iterations: int = 200,
+    cv_folds: int = 4,
+    random_seed: int = 1,
+    figsize: Tuple[int, int] = (12, 6),
+    verbose: bool = True
+) -> Tuple[int, pd.DataFrame]:
+    """Internal XGBoost iteration tracking (called by track_estimator_iterations)."""
+    try:
+        import xgboost as xgb
+    except ImportError:
+        raise ImportError("xgboost is required for XGBoost iteration tracking")
+
+    from sklearn.base import clone
+
+    # Combine train and val for CV
+    X_combined = pd.concat([X_train, X_val])
+    y_combined = pd.concat([y_train, y_val])
+
+    # CV strategy
+    cv_strategy = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
+
+    # Prepare model parameters
+    model_params = xgb_params.copy()
+    model_params['n_estimators'] = max_iterations
+    model_params['random_state'] = random_seed
+    model_params['eval_metric'] = 'aucpr'
+    if 'n_jobs' not in model_params:
+        model_params['n_jobs'] = -1
+
+    if verbose:
+        print(f"\nTracking XGBoost iterations with {cv_folds}-fold CV...")
+        print(f"Training up to {max_iterations} iterations per fold...")
+
+    # Store iteration scores from all folds
+    all_fold_train_scores = []
+    all_fold_val_scores = []
+
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_strategy.split(X_combined, y_combined)):
+        if verbose:
+            print(f"  Processing fold {fold_idx + 1}/{cv_folds}...", end=" ", flush=True)
+
+        X_fold_train = X_combined.iloc[train_idx]
+        y_fold_train = y_combined.iloc[train_idx]
+        X_fold_val = X_combined.iloc[val_idx]
+        y_fold_val = y_combined.iloc[val_idx]
+
+        # Apply preprocessor if provided
+        if preprocessor is not None:
+            prep = clone(preprocessor)
+            X_fold_train_processed = prep.fit_transform(X_fold_train)
+            X_fold_val_processed = prep.transform(X_fold_val)
+        else:
+            X_fold_train_processed = X_fold_train
+            X_fold_val_processed = X_fold_val
+
+        # Create and train model with eval_set for iteration tracking
+        xgb_model = xgb.XGBClassifier(**model_params)
+        xgb_model.fit(
+            X_fold_train_processed, y_fold_train,
+            eval_set=[(X_fold_train_processed, y_fold_train),
+                      (X_fold_val_processed, y_fold_val)],
+            verbose=False
+        )
+
+        # Extract iteration-by-iteration scores
+        results = xgb_model.evals_result()
+        fold_train_scores = results['validation_0']['aucpr']
+        fold_val_scores = results['validation_1']['aucpr']
+
+        all_fold_train_scores.append(fold_train_scores)
+        all_fold_val_scores.append(fold_val_scores)
+
+        if verbose:
+            print("done")
+
+    # Average scores across folds
+    train_scores = np.mean(all_fold_train_scores, axis=0)
+    val_scores = np.mean(all_fold_val_scores, axis=0)
+    train_std = np.std(all_fold_train_scores, axis=0)
+    val_std = np.std(all_fold_val_scores, axis=0)
+    iterations = np.arange(1, len(train_scores) + 1)
+
+    # Determine optimal iteration
+    if 'n_estimators' in xgb_params and xgb_params['n_estimators'] <= max_iterations:
+        optimal_iter = xgb_params['n_estimators']
+        if verbose:
+            print(f"\nUsing specified n_estimators: {optimal_iter}")
+    else:
+        optimal_iter = int(np.argmax(val_scores) + 1)
+        if verbose:
+            print(f"\nBest validation score at iteration: {optimal_iter}")
+
+    # Create tracking DataFrame
+    tracking_df = pd.DataFrame({
+        'n_estimators': iterations,
+        'train_score_mean': train_scores,
+        'train_score_std': train_std,
+        'val_score_mean': val_scores,
+        'val_score_std': val_std,
+        'gap': train_scores - val_scores,
+        'gap_pct': (train_scores - val_scores) / train_scores * 100
+    })
+
+    if verbose:
+        optimal_val = val_scores[optimal_iter - 1]
+        optimal_train = train_scores[optimal_iter - 1]
+        print(f"\nAt iteration {optimal_iter} ({cv_folds}-fold average):")
+        print(f"  Training PR-AUC:   {optimal_train:.4f} +/- {train_std[optimal_iter - 1]:.4f}")
+        print(f"  Validation PR-AUC: {optimal_val:.4f} +/- {val_std[optimal_iter - 1]:.4f}")
+        print(f"  Gap:               {optimal_train - optimal_val:.4f}")
+
+        _plot_iteration_tracking(iterations, train_scores, val_scores,
+                                 train_std, val_std, optimal_iter, figsize)
+
+    return optimal_iter, tracking_df
+
+
+def _plot_rf_iteration_tracking(
+    n_estimators_range: List[int],
+    train_scores: np.ndarray,
+    val_scores: np.ndarray,
+    train_std: np.ndarray,
+    val_std: np.ndarray,
+    optimal_n: int,
+    metric: str,
+    figsize: Tuple[int, int]
+) -> None:
+    """Create Random Forest iteration tracking plot with confidence bands."""
+    fig, ax = plt.subplots(figsize=figsize)
+
+    x = np.array(n_estimators_range)
+
+    # Plot mean lines
+    ax.plot(x, train_scores, label=f'Training {metric.upper()} (mean)', linewidth=2,
+            color='#1f77b4', marker='o', markersize=6)
+    ax.plot(x, val_scores, label=f'Validation {metric.upper()} (mean)', linewidth=2,
+            color='#ff7f0e', marker='s', markersize=6)
+
+    # Add +/-1 std confidence bands
+    ax.fill_between(x, train_scores - train_std, train_scores + train_std,
+                    alpha=0.2, color='#1f77b4', label='Training +/-1 std')
+    ax.fill_between(x, val_scores - val_std, val_scores + val_std,
+                    alpha=0.2, color='#ff7f0e', label='Validation +/-1 std')
+
+    # Mark optimal n_estimators
+    optimal_idx = n_estimators_range.index(optimal_n)
+    ax.axvline(optimal_n, color='red', linestyle='--', alpha=0.5,
+               label=f'Optimal ({optimal_n})')
+    ax.scatter([optimal_n], [val_scores[optimal_idx]], color='red', s=150, zorder=5,
+               edgecolors='black', linewidths=2)
+
+    ax.set_xlabel('Number of Trees (n_estimators)')
+    ax.set_ylabel(metric.upper())
+    ax.set_title('Random Forest: Performance by Number of Trees (CV Average)')
+    ax.legend(loc='lower right')
+    ax.grid(alpha=0.3)
+
+    # Add diagnosis
+    gap_at_optimal = train_scores[optimal_idx] - val_scores[optimal_idx]
+    gap_pct = gap_at_optimal / train_scores[optimal_idx] * 100
+    if gap_pct > 10:
+        diagnosis = f"Overfitting detected ({gap_pct:.1f}% gap)"
+    elif gap_pct > 5:
+        diagnosis = f"Moderate overfitting ({gap_pct:.1f}% gap)"
+    else:
+        diagnosis = f"Good fit ({gap_pct:.1f}% gap)"
+
+    ax.text(0.02, 0.98, diagnosis, transform=ax.transAxes,
+            verticalalignment='top', horizontalalignment='left',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+    plt.tight_layout()
+    plt.show()
+
+
 def generate_bias_variance_report(
     gap_df: pd.DataFrame,
     optimal_xgb_iter: Optional[int] = None,
