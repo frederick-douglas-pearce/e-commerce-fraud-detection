@@ -185,6 +185,143 @@ def _plot_comparison_charts(
     plt.show()
 
 
+def plot_model_comparison(
+    comparison_df: pd.DataFrame,
+    plot_configs: Optional[List[Dict]] = None,
+    figsize: Tuple[int, int] = (16, 6),
+    suptitle: Optional[str] = None
+) -> None:
+    """
+    Create customizable comparison visualizations for model metrics.
+
+    Generates a multi-panel figure with configurable subplots. Each subplot can be
+    a grouped bar chart (for comparing two metrics side-by-side) or a simple bar chart
+    (for a single metric or multiple metrics stacked).
+
+    Args:
+        comparison_df: DataFrame with model comparison metrics (model names as index)
+        plot_configs: List of plot configuration dictionaries. Each dict can have:
+            - 'metrics': List of metric column names to plot (required)
+            - 'title': Subplot title (default: 'Metrics Comparison')
+            - 'labels': Display labels for metrics (default: uppercase metric names)
+            - 'colors': Colors for bars (default: ['steelblue', 'coral', 'lightgreen'])
+            - 'plot_type': 'grouped' for side-by-side bars, 'stacked' for grouped bars (default: 'stacked')
+            - 'show_values': Whether to show value labels on bars (default: True for grouped, False for stacked)
+            If None, uses default 2-panel layout: key metrics + precision vs recall
+        figsize: Figure size (width, height)
+        suptitle: Optional super title for the entire figure
+
+    Example:
+        >>> plot_configs = [
+        ...     {
+        ...         'metrics': ['roc_auc', 'pr_auc', 'f1'],
+        ...         'title': 'Key Metrics',
+        ...         'labels': ['ROC-AUC', 'PR-AUC', 'F1'],
+        ...         'colors': ['steelblue', 'coral', 'lightgreen']
+        ...     },
+        ...     {
+        ...         'metrics': ['precision', 'recall'],
+        ...         'title': 'Precision vs Recall',
+        ...         'plot_type': 'grouped',
+        ...         'show_values': True
+        ...     }
+        ... ]
+        >>> plot_model_comparison(comparison_df, plot_configs)
+    """
+    # Default configuration if none provided
+    if plot_configs is None:
+        plot_configs = [
+            {
+                'metrics': ['roc_auc', 'pr_auc', 'f1'],
+                'title': 'Key Metrics Comparison',
+                'labels': ['ROC-AUC', 'PR-AUC', 'F1 Score'],
+                'colors': ['steelblue', 'coral', 'lightgreen'],
+                'plot_type': 'stacked'
+            },
+            {
+                'metrics': ['precision', 'recall'],
+                'title': 'Precision vs Recall Tradeoff',
+                'labels': ['Precision', 'Recall'],
+                'colors': ['steelblue', 'coral'],
+                'plot_type': 'grouped',
+                'show_values': True
+            }
+        ]
+
+    n_plots = len(plot_configs)
+    fig, axes = plt.subplots(1, n_plots, figsize=figsize)
+
+    # Handle single plot case
+    if n_plots == 1:
+        axes = [axes]
+
+    for ax, config in zip(axes, plot_configs):
+        metrics = config['metrics']
+        title = config.get('title', 'Metrics Comparison')
+        labels = config.get('labels', [m.upper().replace('_', '-') for m in metrics])
+        colors = config.get('colors', ['steelblue', 'coral', 'lightgreen', 'gold'][:len(metrics)])
+        plot_type = config.get('plot_type', 'stacked')
+        show_values = config.get('show_values', plot_type == 'grouped')
+
+        # Filter to available metrics
+        available_metrics = [m for m in metrics if m in comparison_df.columns]
+        available_labels = [labels[i] for i, m in enumerate(metrics) if m in comparison_df.columns]
+        available_colors = [colors[i] for i, m in enumerate(metrics) if m in comparison_df.columns]
+
+        if not available_metrics:
+            ax.text(0.5, 0.5, 'No data available', ha='center', va='center')
+            ax.set_title(title, fontsize=14, fontweight='bold')
+            continue
+
+        if plot_type == 'grouped':
+            # Side-by-side grouped bars
+            x = np.arange(len(comparison_df))
+            width = 0.8 / len(available_metrics)
+
+            bars_list = []
+            for i, (metric, label, color) in enumerate(zip(available_metrics, available_labels, available_colors)):
+                offset = (i - len(available_metrics) / 2 + 0.5) * width
+                bars = ax.bar(x + offset, comparison_df[metric], width, label=label, color=color)
+                bars_list.append(bars)
+
+            ax.set_xticks(x)
+            ax.set_xticklabels(comparison_df.index, rotation=45, ha='right')
+
+            # Add value labels if requested
+            if show_values:
+                for bars in bars_list:
+                    for bar in bars:
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width() / 2., height,
+                                f'{height:.3f}',
+                                ha='center', va='bottom', fontsize=9)
+
+        else:
+            # Stacked/grouped bar chart (default matplotlib style)
+            comparison_df[available_metrics].plot(
+                kind='bar',
+                ax=ax,
+                color=available_colors
+            )
+            ax.set_xticklabels(comparison_df.index, rotation=45, ha='right')
+            ax.legend(available_labels, loc='lower right')
+
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_xlabel('Model', fontsize=12)
+        ax.set_ylabel('Score', fontsize=12)
+        ax.grid(axis='y', alpha=0.3)
+        ax.set_ylim([0, 1])
+
+        if plot_type == 'grouped':
+            ax.legend()
+
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=16, fontweight='bold', y=1.02)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def get_best_model(
     comparison_df: pd.DataFrame,
     primary_metric: str = 'pr_auc'

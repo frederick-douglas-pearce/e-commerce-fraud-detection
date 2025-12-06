@@ -15,11 +15,14 @@ Example:
 from .model_comparison import (
     compare_models,
     get_best_model,
+    plot_model_comparison,
 )
 
 from .hyperparameter_tuning import (
+    DEFAULT_SCORING,
     create_search_object,
     tune_with_logging,
+    extract_cv_metrics,
     get_best_params_summary,
 )
 
@@ -40,9 +43,12 @@ __all__ = [
     # Model comparison
     'compare_models',
     'get_best_model',
+    'plot_model_comparison',
     # Hyperparameter tuning
+    'DEFAULT_SCORING',
     'create_search_object',
     'tune_with_logging',
+    'extract_cv_metrics',
     'get_best_params_summary',
     # CV analysis
     'analyze_cv_results',

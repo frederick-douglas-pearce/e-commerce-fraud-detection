@@ -17,6 +17,7 @@ def analyze_cv_results(
     cv_results_path: str,
     top_n: int = 5,
     model_name: str = "Model",
+    refit_metric: str = 'pr_auc',
     figsize: Tuple[int, int] = (16, 12),
     stability_threshold: float = 0.01,
     verbose: bool = True
@@ -25,8 +26,8 @@ def analyze_cv_results(
     Analyze cross-validation results with focus on production deployment criteria.
 
     This function examines:
-    - Model stability (std_test_score) - RELIABLE: consistency across CV folds
-    - Performance (mean_test_score) - RELIABLE: metric for model selection
+    - Model stability (std_test_{metric}) - RELIABLE: consistency across CV folds
+    - Performance (mean_test_{metric}) - RELIABLE: metric for model selection
     - Prediction time (mean_score_time) - UNRELIABLE: affected by parallel processing
     - Training time (mean_fit_time) - UNRELIABLE: includes CV overhead
 
@@ -38,6 +39,9 @@ def analyze_cv_results(
         cv_results_path: Path to the CV results CSV file
         top_n: Number of top candidates to analyze in detail (default: 5)
         model_name: Name of the model for display purposes
+        refit_metric: The metric used for refit in multi-metric scoring (default: 'pr_auc').
+            With multi-metric scoring, columns are named 'mean_test_{metric}' instead of
+            'mean_test_score'. Set to None for single-metric scoring (legacy).
         figsize: Figure size for the 4-panel visualization
         stability_threshold: Threshold for std_test_score below which model is considered stable
         verbose: If True, display analysis and create visualizations
@@ -46,47 +50,79 @@ def analyze_cv_results(
         DataFrame with top N candidates and detailed metrics
 
     Example:
+        >>> # Multi-metric scoring (default)
         >>> top_candidates = analyze_cv_results(
         ...     'models/logs/random_forest_cv_results_20241201_120000.csv',
         ...     top_n=5,
-        ...     model_name='Random Forest'
+        ...     model_name='Random Forest',
+        ...     refit_metric='pr_auc'
         ... )
-        >>> print(top_candidates['mean_test_score'].iloc[0])  # Best score
+        >>> print(top_candidates['mean_test_pr_auc'].iloc[0])  # Best score
+
+        >>> # Single-metric scoring (legacy)
+        >>> top_candidates = analyze_cv_results(
+        ...     'models/logs/old_cv_results.csv',
+        ...     refit_metric=None  # Falls back to 'mean_test_score'
+        ... )
     """
     # Load CV results
     cv_results = pd.read_csv(cv_results_path)
 
+    # Determine column names based on scoring type (multi-metric vs single-metric)
+    if refit_metric and f'mean_test_{refit_metric}' in cv_results.columns:
+        # Multi-metric scoring
+        mean_score_col = f'mean_test_{refit_metric}'
+        std_score_col = f'std_test_{refit_metric}'
+        rank_col = f'rank_test_{refit_metric}'
+    else:
+        # Single-metric scoring (legacy) or fallback
+        mean_score_col = 'mean_test_score'
+        std_score_col = 'std_test_score'
+        rank_col = 'rank_test_score'
+
     # Extract key columns
-    key_cols = ['mean_test_score', 'std_test_score', 'mean_fit_time',
-                'std_fit_time', 'mean_score_time', 'std_score_time', 'rank_test_score']
+    key_cols = [mean_score_col, std_score_col, 'mean_fit_time',
+                'std_fit_time', 'mean_score_time', 'std_score_time', rank_col]
+
+    # Filter to only columns that exist in the results
+    key_cols = [c for c in key_cols if c in cv_results.columns]
 
     # Add parameter columns
     param_cols = [col for col in cv_results.columns if col.startswith('param_')]
     display_cols = key_cols + param_cols
 
     # Get top N candidates by test score
-    top_candidates = cv_results.nlargest(top_n, 'mean_test_score')[display_cols].copy()
+    top_candidates = cv_results.nlargest(top_n, mean_score_col)[display_cols].copy()
 
     # Get best model
-    best_idx = cv_results['rank_test_score'].idxmin()
+    best_idx = cv_results[rank_col].idxmin()
     best_model = cv_results.loc[best_idx]
 
+    # Create column name mapping for helper functions
+    col_mapping = {
+        'mean_score': mean_score_col,
+        'std_score': std_score_col,
+        'rank': rank_col
+    }
+
     if verbose:
-        _print_analysis_header(model_name)
-        _display_top_candidates(top_candidates, top_n)
-        _display_statistical_summary(cv_results, key_cols)
-        _display_best_model_details(best_model, stability_threshold)
-        _create_analysis_plots(cv_results, best_model, top_candidates, top_n, figsize)
-        _print_recommendations(best_model, top_candidates, stability_threshold)
+        _print_analysis_header(model_name, refit_metric)
+        _display_top_candidates(top_candidates, top_n, col_mapping)
+        _display_statistical_summary(cv_results, key_cols, col_mapping)
+        _display_best_model_details(best_model, stability_threshold, col_mapping)
+        _create_analysis_plots(cv_results, best_model, top_candidates, top_n, figsize, col_mapping)
+        _print_recommendations(best_model, top_candidates, stability_threshold, col_mapping)
 
     return top_candidates
 
 
-def _print_analysis_header(model_name: str) -> None:
+def _print_analysis_header(model_name: str, refit_metric: Optional[str] = None) -> None:
     """Print analysis header with timing caveat."""
     print("\n" + "=" * 100)
     print(f"{model_name} - Cross-Validation Results Analysis")
     print("=" * 100)
+    if refit_metric:
+        print(f"Refit metric: {refit_metric}")
     print("TIMING CAVEAT: Due to parallel processing (n_jobs=-1), timing measurements may be")
     print("   unreliable. Small differences (< 20-30%) are often just measurement noise.")
     print("   Focus on PR-AUC and stability for model selection. Production API testing will")
@@ -94,38 +130,53 @@ def _print_analysis_header(model_name: str) -> None:
     print("=" * 100)
 
 
-def _display_top_candidates(top_candidates: pd.DataFrame, top_n: int) -> None:
+def _display_top_candidates(
+    top_candidates: pd.DataFrame,
+    top_n: int,
+    col_mapping: Dict[str, str]
+) -> None:
     """Display top N candidates with styled formatting."""
+    mean_score_col = col_mapping['mean_score']
+    std_score_col = col_mapping['std_score']
+
     print(f"\nTop {top_n} Candidates by Test Score:")
     print("-" * 100)
 
-    # Format dictionary for display
+    # Format dictionary for display - use actual column names
     format_dict = {
-        'mean_test_score': '{:.6f}',
-        'std_test_score': '{:.6f}',
+        mean_score_col: '{:.6f}',
+        std_score_col: '{:.6f}',
         'mean_fit_time': '{:.2f}',
         'std_fit_time': '{:.2f}',
         'mean_score_time': '{:.4f}',
         'std_score_time': '{:.4f}'
     }
+    # Filter to only columns that exist
+    format_dict = {k: v for k, v in format_dict.items() if k in top_candidates.columns}
 
     try:
         from IPython.display import display
         styled = top_candidates.style.format(format_dict)
-        styled = styled.background_gradient(cmap='RdYlGn', subset=['mean_test_score'])
+        if mean_score_col in top_candidates.columns:
+            styled = styled.background_gradient(cmap='RdYlGn', subset=[mean_score_col])
         display(styled)
     except ImportError:
         print(top_candidates.to_string())
 
 
-def _display_statistical_summary(cv_results: pd.DataFrame, key_cols: List[str]) -> None:
+def _display_statistical_summary(
+    cv_results: pd.DataFrame,
+    key_cols: List[str],
+    col_mapping: Dict[str, str]
+) -> None:
     """Display statistical summary across all candidates."""
     print("\n" + "-" * 100)
     print("Statistical Summary Across All Candidates:")
     print("-" * 100)
 
     # Exclude rank column from statistics
-    stat_cols = [c for c in key_cols if c != 'rank_test_score']
+    rank_col = col_mapping['rank']
+    stat_cols = [c for c in key_cols if c != rank_col and c in cv_results.columns]
     summary_stats = cv_results[stat_cols].describe().loc[['mean', 'std', 'min', 'max']]
 
     try:
@@ -137,17 +188,28 @@ def _display_statistical_summary(cv_results: pd.DataFrame, key_cols: List[str]) 
 
 def _display_best_model_details(
     best_model: pd.Series,
-    stability_threshold: float = 0.01
+    stability_threshold: float = 0.01,
+    col_mapping: Optional[Dict[str, str]] = None
 ) -> None:
     """Display detailed metrics for best model."""
+    # Get column names from mapping or use defaults
+    if col_mapping:
+        mean_score_col = col_mapping['mean_score']
+        std_score_col = col_mapping['std_score']
+    else:
+        mean_score_col = 'mean_test_score'
+        std_score_col = 'std_test_score'
+
     print("\n" + "-" * 100)
     print("Best Model (Rank 1) - Detailed Metrics:")
     print("-" * 100)
 
-    stability_status = "Stable" if best_model['std_test_score'] < stability_threshold else "Variable"
+    std_score = best_model[std_score_col]
+    mean_score = best_model[mean_score_col]
+    stability_status = "Stable" if std_score < stability_threshold else "Variable"
 
-    print(f"  - Test Score (mean +/- std):    {best_model['mean_test_score']:.6f} +/- {best_model['std_test_score']:.6f}")
-    print(f"  - Stability (CV std):           {best_model['std_test_score']:.6f} ({stability_status})")
+    print(f"  - Test Score (mean +/- std):    {mean_score:.6f} +/- {std_score:.6f}")
+    print(f"  - Stability (CV std):           {std_score:.6f} ({stability_status})")
     print(f"  - Training time (mean +/- std): {best_model['mean_fit_time']:.2f}s +/- {best_model['std_fit_time']:.2f}s (unreliable)")
     print(f"  - Prediction time (mean +/- std): {best_model['mean_score_time']:.4f}s +/- {best_model['std_score_time']:.4f}s (unreliable)")
 
@@ -162,15 +224,16 @@ def _create_analysis_plots(
     best_model: pd.Series,
     top_candidates: pd.DataFrame,
     top_n: int,
-    figsize: Tuple[int, int]
+    figsize: Tuple[int, int],
+    col_mapping: Dict[str, str]
 ) -> None:
     """Create 4-panel analysis visualization."""
     fig, axes = plt.subplots(2, 2, figsize=figsize)
 
-    _plot_performance_vs_stability(cv_results, best_model, axes[0, 0])
-    _plot_performance_vs_time(cv_results, best_model, axes[0, 1])
-    _plot_top_candidates_comparison(cv_results, top_candidates, top_n, axes[1, 0])
-    _plot_training_vs_prediction_time(cv_results, best_model, axes[1, 1])
+    _plot_performance_vs_stability(cv_results, best_model, axes[0, 0], col_mapping)
+    _plot_performance_vs_time(cv_results, best_model, axes[0, 1], col_mapping)
+    _plot_top_candidates_comparison(cv_results, top_candidates, top_n, axes[1, 0], col_mapping)
+    _plot_training_vs_prediction_time(cv_results, best_model, axes[1, 1], col_mapping)
 
     plt.tight_layout()
     plt.show()
@@ -179,13 +242,18 @@ def _create_analysis_plots(
 def _plot_performance_vs_stability(
     cv_results: pd.DataFrame,
     best_model: pd.Series,
-    ax: plt.Axes
+    ax: plt.Axes,
+    col_mapping: Dict[str, str]
 ) -> None:
     """Plot 1: Performance vs Stability scatter plot."""
+    mean_score_col = col_mapping['mean_score']
+    std_score_col = col_mapping['std_score']
+    rank_col = col_mapping['rank']
+
     scatter = ax.scatter(
-        cv_results['mean_test_score'],
-        cv_results['std_test_score'],
-        c=cv_results['rank_test_score'],
+        cv_results[mean_score_col],
+        cv_results[std_score_col],
+        c=cv_results[rank_col],
         cmap='RdYlGn_r',
         s=100,
         alpha=0.6,
@@ -194,8 +262,8 @@ def _plot_performance_vs_stability(
 
     # Highlight best model
     ax.scatter(
-        best_model['mean_test_score'],
-        best_model['std_test_score'],
+        best_model[mean_score_col],
+        best_model[std_score_col],
         c='red',
         s=300,
         marker='*',
@@ -216,13 +284,17 @@ def _plot_performance_vs_stability(
 def _plot_performance_vs_time(
     cv_results: pd.DataFrame,
     best_model: pd.Series,
-    ax: plt.Axes
+    ax: plt.Axes,
+    col_mapping: Dict[str, str]
 ) -> None:
     """Plot 2: Performance vs Prediction Time scatter plot."""
+    mean_score_col = col_mapping['mean_score']
+    rank_col = col_mapping['rank']
+
     scatter = ax.scatter(
-        cv_results['mean_test_score'],
+        cv_results[mean_score_col],
         cv_results['mean_score_time'],
-        c=cv_results['rank_test_score'],
+        c=cv_results[rank_col],
         cmap='RdYlGn_r',
         s=100,
         alpha=0.6,
@@ -231,7 +303,7 @@ def _plot_performance_vs_time(
 
     # Highlight best model
     ax.scatter(
-        best_model['mean_test_score'],
+        best_model[mean_score_col],
         best_model['mean_score_time'],
         c='red',
         s=300,
@@ -254,19 +326,23 @@ def _plot_top_candidates_comparison(
     cv_results: pd.DataFrame,
     top_candidates: pd.DataFrame,
     top_n: int,
-    ax: plt.Axes
+    ax: plt.Axes,
+    col_mapping: Dict[str, str]
 ) -> None:
     """Plot 3: Top N Candidates normalized comparison."""
+    mean_score_col = col_mapping['mean_score']
+    rank_col = col_mapping['rank']
+
     x = np.arange(len(top_candidates))
     width = 0.35
 
     # Normalize scores for comparison
-    score_min = cv_results['mean_test_score'].min()
-    score_max = cv_results['mean_test_score'].max()
+    score_min = cv_results[mean_score_col].min()
+    score_max = cv_results[mean_score_col].max()
     time_min = cv_results['mean_score_time'].min()
     time_max = cv_results['mean_score_time'].max()
 
-    score_normalized = (top_candidates['mean_test_score'] - score_min) / (score_max - score_min + 1e-10)
+    score_normalized = (top_candidates[mean_score_col] - score_min) / (score_max - score_min + 1e-10)
     time_normalized = 1 - (top_candidates['mean_score_time'] - time_min) / (time_max - time_min + 1e-10)
 
     ax.bar(x - width/2, score_normalized, width, label='Performance (Reliable)', color='steelblue')
@@ -276,7 +352,7 @@ def _plot_top_candidates_comparison(
     ax.set_ylabel('Normalized Score', fontsize=12)
     ax.set_title(f'Top {top_n} Candidates: Performance vs Speed', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels([f"Rank {int(r)}" for r in top_candidates['rank_test_score']])
+    ax.set_xticklabels([f"Rank {int(r)}" for r in top_candidates[rank_col]])
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim([0, 1.1])
@@ -285,13 +361,16 @@ def _plot_top_candidates_comparison(
 def _plot_training_vs_prediction_time(
     cv_results: pd.DataFrame,
     best_model: pd.Series,
-    ax: plt.Axes
+    ax: plt.Axes,
+    col_mapping: Dict[str, str]
 ) -> None:
     """Plot 4: Training Time vs Prediction Time scatter plot."""
+    mean_score_col = col_mapping['mean_score']
+
     scatter = ax.scatter(
         cv_results['mean_fit_time'],
         cv_results['mean_score_time'],
-        c=cv_results['mean_test_score'],
+        c=cv_results[mean_score_col],
         cmap='RdYlGn',
         s=100,
         alpha=0.6,
@@ -322,23 +401,32 @@ def _plot_training_vs_prediction_time(
 def _print_recommendations(
     best_model: pd.Series,
     top_candidates: pd.DataFrame,
-    stability_threshold: float = 0.01
+    stability_threshold: float = 0.01,
+    col_mapping: Optional[Dict[str, str]] = None
 ) -> None:
     """Print model selection recommendations."""
+    # Get column names from mapping or use defaults
+    if col_mapping:
+        mean_score_col = col_mapping['mean_score']
+        std_score_col = col_mapping['std_score']
+    else:
+        mean_score_col = 'mean_test_score'
+        std_score_col = 'std_test_score'
+
     print("\n" + "=" * 100)
     print("Recommendations:")
     print("=" * 100)
 
     # Check stability
-    if best_model['std_test_score'] < stability_threshold:
+    if best_model[std_score_col] < stability_threshold:
         print("  - Best model shows good stability (low CV variance)")
     else:
         print(f"  - Best model shows some variance across folds (std > {stability_threshold})")
         print("    Consider if a more stable alternative in top candidates might be preferred")
 
     # Check if top candidates are close in performance
-    if len(top_candidates) > 1:
-        score_range = top_candidates['mean_test_score'].max() - top_candidates['mean_test_score'].min()
+    if len(top_candidates) > 1 and mean_score_col in top_candidates.columns:
+        score_range = top_candidates[mean_score_col].max() - top_candidates[mean_score_col].min()
         if score_range < 0.005:
             print("  - Top candidates have very similar performance (< 0.5% difference)")
             print("    Consider selecting based on model simplicity or inference speed")
@@ -348,31 +436,46 @@ def _print_recommendations(
     print("=" * 100)
 
 
-def get_cv_statistics(cv_results_path: str) -> Dict[str, float]:
+def get_cv_statistics(
+    cv_results_path: str,
+    refit_metric: str = 'pr_auc'
+) -> Dict[str, float]:
     """
     Get summary statistics from CV results file.
 
     Args:
         cv_results_path: Path to the CV results CSV file
+        refit_metric: The metric used for refit in multi-metric scoring (default: 'pr_auc').
+            Set to None for single-metric scoring (legacy).
 
     Returns:
         Dictionary with summary statistics
 
     Example:
-        >>> stats = get_cv_statistics('models/logs/rf_cv_results.csv')
+        >>> stats = get_cv_statistics('models/logs/rf_cv_results.csv', refit_metric='pr_auc')
         >>> print(f"Best score: {stats['best_score']:.4f}")
     """
     cv_results = pd.read_csv(cv_results_path)
 
-    best_idx = cv_results['rank_test_score'].idxmin()
+    # Determine column names based on scoring type (multi-metric vs single-metric)
+    if refit_metric and f'mean_test_{refit_metric}' in cv_results.columns:
+        mean_score_col = f'mean_test_{refit_metric}'
+        std_score_col = f'std_test_{refit_metric}'
+        rank_col = f'rank_test_{refit_metric}'
+    else:
+        mean_score_col = 'mean_test_score'
+        std_score_col = 'std_test_score'
+        rank_col = 'rank_test_score'
+
+    best_idx = cv_results[rank_col].idxmin()
     best_model = cv_results.loc[best_idx]
 
     return {
-        'best_score': best_model['mean_test_score'],
-        'best_std': best_model['std_test_score'],
+        'best_score': best_model[mean_score_col],
+        'best_std': best_model[std_score_col],
         'n_candidates': len(cv_results),
-        'mean_score_all': cv_results['mean_test_score'].mean(),
-        'std_score_all': cv_results['mean_test_score'].std(),
+        'mean_score_all': cv_results[mean_score_col].mean(),
+        'std_score_all': cv_results[mean_score_col].std(),
         'best_fit_time': best_model['mean_fit_time'],
         'best_score_time': best_model['mean_score_time']
     }

@@ -478,6 +478,7 @@ def _plot_iteration_tracking(
 
 def analyze_cv_fold_variance(
     cv_results_paths: Dict[str, str],
+    refit_metric: str = 'pr_auc',
     figsize: Tuple[int, int] = (14, 5),
     verbose: bool = True
 ) -> pd.DataFrame:
@@ -492,6 +493,9 @@ def analyze_cv_fold_variance(
     Args:
         cv_results_paths: Dictionary mapping model names to CV results CSV paths.
             Supports glob patterns (e.g., 'models/logs/rf_cv_results_*.csv')
+        refit_metric: The metric used for refit in multi-metric scoring (default: 'pr_auc').
+            With multi-metric scoring, columns are named 'mean_test_{metric}' instead of
+            'mean_test_score'. Set to None for single-metric scoring (legacy).
         figsize: Figure size for variance plot
         verbose: If True, print analysis and create plots
 
@@ -502,7 +506,7 @@ def analyze_cv_fold_variance(
         >>> variance_df = analyze_cv_fold_variance({
         ...     'Random Forest': 'models/logs/random_forest_cv_results_*.csv',
         ...     'XGBoost': 'models/logs/xgboost_cv_results_*.csv'
-        ... })
+        ... }, refit_metric='pr_auc')
     """
     results = []
 
@@ -526,11 +530,22 @@ def analyze_cv_fold_variance(
 
         # Load and analyze
         cv_results = pd.read_csv(cv_path)
-        best_idx = cv_results['rank_test_score'].idxmin()
+
+        # Determine column names based on scoring type (multi-metric vs single-metric)
+        if refit_metric and f'mean_test_{refit_metric}' in cv_results.columns:
+            mean_score_col = f'mean_test_{refit_metric}'
+            std_score_col = f'std_test_{refit_metric}'
+            rank_col = f'rank_test_{refit_metric}'
+        else:
+            mean_score_col = 'mean_test_score'
+            std_score_col = 'std_test_score'
+            rank_col = 'rank_test_score'
+
+        best_idx = cv_results[rank_col].idxmin()
         best_row = cv_results.loc[best_idx]
 
-        mean_score = best_row['mean_test_score']
-        std_score = best_row['std_test_score']
+        mean_score = best_row[mean_score_col]
+        std_score = best_row[std_score_col]
         cv_coef = (std_score / mean_score) * 100 if mean_score > 0 else 0
 
         results.append({

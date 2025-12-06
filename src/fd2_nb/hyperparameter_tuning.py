@@ -9,17 +9,29 @@ to be reusable across different models and projects.
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+
+# Default multi-metric scoring for fraud detection
+DEFAULT_SCORING = {
+    'pr_auc': 'average_precision',
+    'roc_auc': 'roc_auc',
+    'f1': 'f1',
+    'precision': 'precision',
+    'recall': 'recall',
+    'accuracy': 'accuracy'
+}
 
 
 def create_search_object(
     search_type: str,
     estimator: Any,
     param_grid: Dict,
-    scoring: str = 'average_precision',
+    scoring: Union[str, Dict, List] = None,
+    refit: Union[str, bool] = 'pr_auc',
     cv: Any = None,
     n_iter: Optional[int] = None,
     verbose: int = 1,
@@ -31,13 +43,23 @@ def create_search_object(
 
     Factory function that abstracts the creation of hyperparameter search objects,
     providing a unified interface for both grid and random search strategies.
+    Supports multi-metric scoring for comprehensive model evaluation.
 
     Args:
         search_type: Type of search - 'grid' for GridSearchCV, 'random' for RandomizedSearchCV
         estimator: The estimator object to fit (e.g., Pipeline, classifier)
         param_grid: Dictionary with parameter names as keys and lists of settings.
             For RandomizedSearchCV, can include distributions.
-        scoring: Strategy to evaluate performance (default: 'average_precision' for PR-AUC)
+        scoring: Strategy to evaluate performance. Can be:
+            - None: Uses DEFAULT_SCORING (pr_auc, roc_auc, f1, precision, recall, accuracy)
+            - str: Single metric (e.g., 'average_precision')
+            - dict: Multiple metrics (e.g., {'pr_auc': 'average_precision', 'f1': 'f1'})
+            - list: Multiple metric names
+        refit: Which metric to use for selecting best model and refitting.
+            - str: Metric name (must be key in scoring dict if scoring is dict)
+            - True: Use first/only metric (only valid with single metric scoring)
+            - False: Don't refit (best_estimator_ won't be available)
+            Default: 'pr_auc' (for fraud detection optimization)
         cv: Cross-validation splitting strategy. If None, uses 5-fold.
         n_iter: Number of parameter settings to sample (RandomizedSearchCV only).
             If None and search_type='random', defaults to 10.
@@ -52,25 +74,30 @@ def create_search_object(
         ValueError: If search_type is not 'grid' or 'random'
 
     Example:
-        >>> # GridSearchCV - exhaustive search
+        >>> # Multi-metric scoring (recommended)
         >>> search = create_search_object(
         ...     search_type='grid',
         ...     estimator=pipeline,
-        ...     param_grid={'classifier__n_estimators': [100, 200], 'classifier__max_depth': [10, 20]},
-        ...     scoring='average_precision',
+        ...     param_grid={'classifier__n_estimators': [100, 200]},
+        ...     scoring=None,  # Uses default multi-metric
+        ...     refit='pr_auc',  # Select best by PR-AUC
         ...     cv=cv_strategy
         ... )
 
-        >>> # RandomizedSearchCV - random sampling
+        >>> # Single metric scoring (legacy)
         >>> search = create_search_object(
-        ...     search_type='random',
+        ...     search_type='grid',
         ...     estimator=pipeline,
-        ...     param_grid={'classifier__n_estimators': [100, 200, 300]},
+        ...     param_grid={'classifier__n_estimators': [100, 200]},
         ...     scoring='average_precision',
-        ...     cv=cv_strategy,
-        ...     n_iter=40
+        ...     refit=True,
+        ...     cv=cv_strategy
         ... )
     """
+    # Use default multi-metric scoring if not specified
+    if scoring is None:
+        scoring = DEFAULT_SCORING.copy()
+
     search_type_lower = search_type.lower()
 
     if search_type_lower == 'grid':
@@ -78,6 +105,7 @@ def create_search_object(
             estimator=estimator,
             param_grid=param_grid,
             scoring=scoring,
+            refit=refit,
             cv=cv,
             verbose=verbose,
             n_jobs=n_jobs
@@ -95,6 +123,7 @@ def create_search_object(
             param_distributions=param_grid,
             n_iter=n_iter,
             scoring=scoring,
+            refit=refit,
             cv=cv,
             verbose=verbose,
             random_state=random_state,
@@ -105,6 +134,13 @@ def create_search_object(
 
     else:
         raise ValueError(f"search_type must be 'grid' or 'random', got '{search_type}'")
+
+    # Print scoring info
+    if isinstance(scoring, dict):
+        print(f"Multi-metric scoring: {list(scoring.keys())}")
+        print(f"Refit metric: {refit}")
+    else:
+        print(f"Single-metric scoring: {scoring}")
 
     return search_object
 
@@ -214,25 +250,70 @@ def tune_with_logging(
     return search_object, str(log_path), str(csv_path)
 
 
+def extract_cv_metrics(
+    search_object: Union[GridSearchCV, RandomizedSearchCV]
+) -> Dict[str, float]:
+    """
+    Extract all CV metrics for the best model from cv_results_.
+
+    Works with both single-metric and multi-metric scoring. For multi-metric,
+    extracts all metrics for the parameter combination that was best according
+    to the refit metric (determined by best_index_ from the search object).
+
+    Args:
+        search_object: Fitted GridSearchCV or RandomizedSearchCV
+
+    Returns:
+        Dictionary mapping metric names to their CV scores for the best model.
+        For multi-metric: {'pr_auc': 0.87, 'roc_auc': 0.98, 'f1': 0.78, ...}
+        For single-metric: {'score': 0.87}
+
+    Example:
+        >>> metrics = extract_cv_metrics(fitted_search)
+        >>> print(f"Best PR-AUC: {metrics['pr_auc']:.4f}")
+        >>> print(f"Best F1: {metrics['f1']:.4f}")
+    """
+    best_idx = search_object.best_index_
+    cv_results = search_object.cv_results_
+
+    metrics = {}
+    for key in cv_results:
+        if key.startswith('mean_test_'):
+            metric_name = key.replace('mean_test_', '')
+            metrics[metric_name] = float(cv_results[key][best_idx])
+
+    # If no mean_test_* columns found (single metric with old naming)
+    if not metrics and 'mean_test_score' in cv_results:
+        metrics['score'] = float(cv_results['mean_test_score'][best_idx])
+
+    return metrics
+
+
 def get_best_params_summary(
     search_object: Union[GridSearchCV, RandomizedSearchCV],
     model_name: str = "Model",
+    refit_metric: Optional[str] = None,
     verbose: bool = True
 ) -> Dict[str, Any]:
     """
     Extract and display best parameters from fitted search object.
 
+    Handles both single-metric and multi-metric scoring. For multi-metric,
+    uses the refit_metric to identify the correct rank column.
+
     Args:
         search_object: Fitted GridSearchCV or RandomizedSearchCV
         model_name: Name of model for display
+        refit_metric: The metric used for refit (for multi-metric scoring).
+            If None, assumes single-metric scoring.
         verbose: If True, print formatted summary
 
     Returns:
-        Dictionary with 'best_params', 'best_score', and 'cv_results_summary'
+        Dictionary with 'best_params', 'best_score', 'cv_metrics', and 'cv_results_summary'
 
     Example:
-        >>> summary = get_best_params_summary(fitted_search, "Random Forest")
-        >>> print(f"Best score: {summary['best_score']:.4f}")
+        >>> summary = get_best_params_summary(fitted_search, "Random Forest", refit_metric='pr_auc')
+        >>> print(f"Best PR-AUC: {summary['cv_metrics']['pr_auc']:.4f}")
     """
     # Extract best parameters (removing 'classifier__' prefix)
     best_params_clean = {
@@ -240,18 +321,37 @@ def get_best_params_summary(
         for k, v in search_object.best_params_.items()
     }
 
-    # Get CV results summary
+    # Extract all CV metrics for best model
+    cv_metrics = extract_cv_metrics(search_object)
+
+    # Get CV results summary - handle multi-metric column naming
     cv_results = pd.DataFrame(search_object.cv_results_)
+
+    # Determine rank and score column names based on scoring type
+    if refit_metric and f'rank_test_{refit_metric}' in cv_results.columns:
+        rank_col = f'rank_test_{refit_metric}'
+        score_col = f'mean_test_{refit_metric}'
+    else:
+        rank_col = 'rank_test_score'
+        score_col = 'mean_test_score'
+
     cv_summary = {
         'n_candidates': len(cv_results),
-        'best_rank': int(cv_results['rank_test_score'].min()),
-        'mean_score_all': cv_results['mean_test_score'].mean(),
-        'std_score_all': cv_results['mean_test_score'].std(),
     }
+
+    # Add rank info if available
+    if rank_col in cv_results.columns:
+        cv_summary['best_rank'] = int(cv_results[rank_col].min())
+
+    # Add score stats if available
+    if score_col in cv_results.columns:
+        cv_summary['mean_score_all'] = cv_results[score_col].mean()
+        cv_summary['std_score_all'] = cv_results[score_col].std()
 
     result = {
         'best_params': best_params_clean,
         'best_score': search_object.best_score_,
+        'cv_metrics': cv_metrics,
         'cv_results_summary': cv_summary
     }
 
@@ -259,14 +359,22 @@ def get_best_params_summary(
         print(f"\n{'=' * 80}")
         print(f"{model_name} - Best Parameters Summary")
         print("=" * 80)
-        print(f"Best cross-validation score: {search_object.best_score_:.4f}")
+        print(f"Best cross-validation score ({refit_metric or 'primary'}): {search_object.best_score_:.4f}")
+
+        if len(cv_metrics) > 1:
+            print(f"\nAll CV metrics for best model:")
+            for metric, value in cv_metrics.items():
+                print(f"  - {metric}: {value:.4f}")
+
         print(f"\nBest hyperparameters:")
         for param, value in best_params_clean.items():
             print(f"  - {param}: {value}")
+
         print(f"\nSearch summary:")
         print(f"  - Total candidates evaluated: {cv_summary['n_candidates']}")
-        print(f"  - Mean score across all candidates: {cv_summary['mean_score_all']:.4f}")
-        print(f"  - Std score across all candidates: {cv_summary['std_score_all']:.4f}")
+        if 'mean_score_all' in cv_summary:
+            print(f"  - Mean {refit_metric or 'score'} across all candidates: {cv_summary['mean_score_all']:.4f}")
+            print(f"  - Std {refit_metric or 'score'} across all candidates: {cv_summary['std_score_all']:.4f}")
         print("=" * 80)
 
     return result

@@ -1,12 +1,21 @@
 {
   "xgboost_tuned": {
-    "roc_auc": 0.9838250071877166,
-    "pr_auc": 0.8807333010954098,
-    "f1": 0.7774294670846394,
-    "precision": 0.7209302325581395,
-    "recall": 0.8435374149659864,
-    "accuracy": 0.9893391614808389
+    "roc_auc": 0.9770754975204528,
+    "pr_auc": 0.8681639277310786,
+    "f1": 0.780514037841125,
+    "precision": 0.7349672515545618,
+    "recall": 0.8323271904155847,
+    "accuracy": 0.9896728340479487
   },
-  "cv_best_score": 0.8684399245510874,
-  "note": "Validation performance from model trained on train set only (for comparison with test set)"
+  "random_forest_tuned": {
+    "roc_auc": 0.9741978743046003,
+    "pr_auc": 0.8522740462615039,
+    "f1": 0.8028540441111872,
+    "precision": 0.7834179394694191,
+    "recall": 0.8234431442773782,
+    "accuracy": 0.9910784297368993
+  },
+  "cv_folds": 4,
+  "refit_metric": "pr_auc",
+  "note": "All metrics from 4-fold stratified CV on train+val combined (80% of data)"
 }
