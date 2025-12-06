@@ -28,6 +28,7 @@ from .hyperparameter_tuning import (
 
 from .cv_analysis import (
     analyze_cv_results,
+    analyze_cv_train_val_gap,
     get_cv_statistics,
 )
 
@@ -52,6 +53,7 @@ __all__ = [
     'get_best_params_summary',
     # CV analysis
     'analyze_cv_results',
+    'analyze_cv_train_val_gap',
     'get_cv_statistics',
     # Bias-variance
     'calculate_train_val_gap',

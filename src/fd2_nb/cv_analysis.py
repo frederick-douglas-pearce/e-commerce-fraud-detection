@@ -6,7 +6,7 @@ results from hyperparameter tuning, with focus on production deployment criteria
 All functions are designed to be reusable across different models and projects.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import numpy as np
@@ -479,3 +479,272 @@ def get_cv_statistics(
         'best_fit_time': best_model['mean_fit_time'],
         'best_score_time': best_model['mean_score_time']
     }
+
+
+def analyze_cv_train_val_gap(
+    cv_results_path: str,
+    refit_metric: str = 'pr_auc',
+    gap_threshold_warning: float = 0.05,
+    gap_threshold_severe: float = 0.10,
+    model_name: str = "Model",
+    figsize: Tuple[int, int] = (14, 5),
+    verbose: bool = True
+) -> Dict[str, Any]:
+    """
+    Analyze train-validation gap from GridSearchCV/RandomizedSearchCV results.
+
+    This function examines the difference between training and validation scores
+    to detect overfitting. Requires that the search object was created with
+    `return_train_score=True`.
+
+    Args:
+        cv_results_path: Path to the CV results CSV file
+        refit_metric: The metric used for refit (default: 'pr_auc')
+        gap_threshold_warning: Gap percentage above which to show warning (default: 0.05 = 5%)
+        gap_threshold_severe: Gap percentage above which to show severe warning (default: 0.10 = 10%)
+        model_name: Name of the model for display purposes
+        figsize: Figure size for visualization
+        verbose: If True, display analysis and create visualizations
+
+    Returns:
+        Dictionary with:
+        - best_train_score: Training score for best model
+        - best_val_score: Validation score for best model
+        - gap: Absolute gap (train - val)
+        - gap_pct: Gap as percentage of training score
+        - diagnosis: 'Good fit', 'MODERATE OVERFITTING', or 'SEVERE OVERFITTING'
+        - overfitting_detected: Boolean flag
+        - recommendation: Actionable recommendation string
+
+    Example:
+        >>> gap_analysis = analyze_cv_train_val_gap(
+        ...     'models/logs/random_forest_cv_results.csv',
+        ...     refit_metric='pr_auc',
+        ...     model_name='Random Forest'
+        ... )
+        >>> if gap_analysis['overfitting_detected']:
+        ...     print(gap_analysis['recommendation'])
+    """
+    # Load CV results
+    cv_results = pd.read_csv(cv_results_path)
+
+    # Determine column names based on scoring type
+    if refit_metric and f'mean_test_{refit_metric}' in cv_results.columns:
+        mean_train_col = f'mean_train_{refit_metric}'
+        mean_val_col = f'mean_test_{refit_metric}'
+        rank_col = f'rank_test_{refit_metric}'
+    else:
+        mean_train_col = 'mean_train_score'
+        mean_val_col = 'mean_test_score'
+        rank_col = 'rank_test_score'
+
+    # Check if training scores are available
+    if mean_train_col not in cv_results.columns:
+        raise ValueError(
+            f"Training scores not found in CV results. "
+            f"Column '{mean_train_col}' not found. "
+            f"Ensure GridSearchCV/RandomizedSearchCV was created with return_train_score=True."
+        )
+
+    # Get best model index
+    best_idx = cv_results[rank_col].idxmin()
+    best_model = cv_results.loc[best_idx]
+
+    # Calculate gap metrics
+    best_train_score = best_model[mean_train_col]
+    best_val_score = best_model[mean_val_col]
+    gap = best_train_score - best_val_score
+    gap_pct = gap / best_train_score if best_train_score > 0 else 0
+
+    # Determine diagnosis
+    if gap_pct >= gap_threshold_severe:
+        diagnosis = 'SEVERE OVERFITTING'
+        overfitting_detected = True
+    elif gap_pct >= gap_threshold_warning:
+        diagnosis = 'MODERATE OVERFITTING'
+        overfitting_detected = True
+    else:
+        diagnosis = 'Good fit'
+        overfitting_detected = False
+
+    # Generate recommendation
+    recommendation = _generate_gap_recommendation(
+        model_name, gap_pct, diagnosis, gap_threshold_warning, gap_threshold_severe
+    )
+
+    result = {
+        'best_train_score': float(best_train_score),
+        'best_val_score': float(best_val_score),
+        'gap': float(gap),
+        'gap_pct': float(gap_pct),
+        'diagnosis': diagnosis,
+        'overfitting_detected': overfitting_detected,
+        'recommendation': recommendation,
+        'model_name': model_name,
+        'refit_metric': refit_metric
+    }
+
+    if verbose:
+        _print_cv_gap_analysis(result, gap_threshold_warning, gap_threshold_severe)
+        _plot_cv_gap_analysis(cv_results, best_idx, mean_train_col, mean_val_col,
+                              rank_col, model_name, refit_metric, figsize)
+
+    return result
+
+
+def _generate_gap_recommendation(
+    model_name: str,
+    gap_pct: float,
+    diagnosis: str,
+    gap_threshold_warning: float,
+    gap_threshold_severe: float
+) -> str:
+    """Generate actionable recommendation based on gap analysis."""
+    if diagnosis == 'Good fit':
+        return f"{model_name} shows healthy generalization with minimal overfitting."
+
+    if 'Random Forest' in model_name or 'RF' in model_name:
+        if diagnosis == 'SEVERE OVERFITTING':
+            return (
+                f"{model_name} shows severe overfitting ({gap_pct:.1%} train-val gap).\n"
+                "RECOMMENDED ACTIONS:\n"
+                "  1. Reduce model complexity:\n"
+                "     - Decrease max_depth (e.g., 20 -> 15 or 10)\n"
+                "     - Increase min_samples_leaf (e.g., 5 -> 10 or 20)\n"
+                "  2. Increase regularization:\n"
+                "     - Increase min_samples_split (e.g., 10 -> 20)\n"
+                "  3. Consider using XGBoost instead (typically better regularization)"
+            )
+        else:
+            return (
+                f"{model_name} shows moderate overfitting ({gap_pct:.1%} train-val gap).\n"
+                "RECOMMENDED ACTIONS:\n"
+                "  1. Consider reducing max_depth slightly\n"
+                "  2. Increase min_samples_leaf if possible"
+            )
+    elif 'XGBoost' in model_name or 'XGB' in model_name:
+        if diagnosis == 'SEVERE OVERFITTING':
+            return (
+                f"{model_name} shows severe overfitting ({gap_pct:.1%} train-val gap).\n"
+                "RECOMMENDED ACTIONS:\n"
+                "  1. Increase regularization:\n"
+                "     - Increase reg_alpha (L1) or reg_lambda (L2)\n"
+                "     - Decrease learning_rate (and increase n_estimators)\n"
+                "  2. Reduce model complexity:\n"
+                "     - Decrease max_depth\n"
+                "     - Increase min_child_weight\n"
+                "  3. Use early stopping with more patience"
+            )
+        else:
+            return (
+                f"{model_name} shows moderate overfitting ({gap_pct:.1%} train-val gap).\n"
+                "RECOMMENDED ACTIONS:\n"
+                "  1. Consider increasing regularization slightly\n"
+                "  2. Monitor validation loss during training"
+            )
+    else:
+        return (
+            f"{model_name} shows {diagnosis.lower()} ({gap_pct:.1%} train-val gap).\n"
+            "Consider reducing model complexity or increasing regularization."
+        )
+
+
+def _print_cv_gap_analysis(
+    result: Dict[str, Any],
+    gap_threshold_warning: float,
+    gap_threshold_severe: float
+) -> None:
+    """Print formatted train-validation gap analysis."""
+    model_name = result['model_name']
+    refit_metric = result['refit_metric']
+    gap_pct = result['gap_pct']
+    diagnosis = result['diagnosis']
+
+    print("\n" + "=" * 80)
+
+    if result['overfitting_detected']:
+        print(f"!!! OVERFITTING WARNING - {model_name} !!!")
+    else:
+        print(f"{model_name} - Train-Validation Gap Analysis")
+
+    print("=" * 80)
+    print(f"\nMetric: {refit_metric}")
+    print(f"  Training score:   {result['best_train_score']:.4f}")
+    print(f"  Validation score: {result['best_val_score']:.4f}")
+    print(f"  Gap:              {result['gap']:.4f} ({gap_pct:.1%})")
+    print(f"\nDiagnosis: {diagnosis}")
+    print(f"  (Warning threshold: {gap_threshold_warning:.0%}, Severe threshold: {gap_threshold_severe:.0%})")
+
+    if result['overfitting_detected']:
+        print("\n" + "-" * 80)
+        print(result['recommendation'])
+        print("-" * 80)
+
+    print("=" * 80)
+
+
+def _plot_cv_gap_analysis(
+    cv_results: pd.DataFrame,
+    best_idx: int,
+    mean_train_col: str,
+    mean_val_col: str,
+    rank_col: str,
+    model_name: str,
+    refit_metric: str,
+    figsize: Tuple[int, int]
+) -> None:
+    """Create visualization of train-validation gap across all candidates."""
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    # Sort by validation score for consistent visualization
+    sorted_results = cv_results.sort_values(mean_val_col, ascending=False).reset_index(drop=True)
+    best_sorted_idx = sorted_results[sorted_results.index == best_idx].index
+    if len(best_sorted_idx) == 0:
+        # Find best by rank
+        best_sorted_idx = sorted_results[rank_col].idxmin()
+    else:
+        best_sorted_idx = best_sorted_idx[0]
+
+    x = np.arange(len(sorted_results))
+
+    # Plot 1: Train vs Validation scores
+    ax1 = axes[0]
+    ax1.plot(x, sorted_results[mean_train_col], 'b-', label='Training', alpha=0.7, linewidth=2)
+    ax1.plot(x, sorted_results[mean_val_col], 'g-', label='Validation', alpha=0.7, linewidth=2)
+    ax1.fill_between(x, sorted_results[mean_val_col], sorted_results[mean_train_col],
+                     alpha=0.3, color='red', label='Gap (Overfitting)')
+
+    # Highlight best model
+    ax1.axvline(x=best_sorted_idx, color='red', linestyle='--', linewidth=2,
+                label=f'Best Model (Rank 1)', alpha=0.8)
+
+    ax1.set_xlabel('Candidate (sorted by validation score)', fontsize=11)
+    ax1.set_ylabel(f'{refit_metric}', fontsize=11)
+    ax1.set_title(f'{model_name}: Training vs Validation Scores', fontsize=12, fontweight='bold')
+    ax1.legend(loc='lower left')
+    ax1.grid(alpha=0.3)
+
+    # Plot 2: Gap distribution
+    ax2 = axes[1]
+    gaps = sorted_results[mean_train_col] - sorted_results[mean_val_col]
+    gap_pcts = gaps / sorted_results[mean_train_col] * 100
+
+    colors = ['green' if g < 5 else 'orange' if g < 10 else 'red' for g in gap_pcts]
+    ax2.bar(x, gap_pcts, color=colors, alpha=0.7, edgecolor='black', linewidth=0.5)
+
+    # Add threshold lines
+    ax2.axhline(y=5, color='orange', linestyle='--', linewidth=2, label='Warning (5%)')
+    ax2.axhline(y=10, color='red', linestyle='--', linewidth=2, label='Severe (10%)')
+
+    # Highlight best model
+    ax2.bar(best_sorted_idx, gap_pcts.iloc[best_sorted_idx], color='purple',
+            alpha=0.9, edgecolor='black', linewidth=2, label='Best Model')
+
+    ax2.set_xlabel('Candidate (sorted by validation score)', fontsize=11)
+    ax2.set_ylabel('Train-Val Gap (%)', fontsize=11)
+    ax2.set_title(f'{model_name}: Overfitting Gap by Candidate', fontsize=12, fontweight='bold')
+    ax2.legend(loc='upper right')
+    ax2.grid(alpha=0.3, axis='y')
+
+    plt.tight_layout()
+    plt.show()

@@ -108,7 +108,8 @@ def create_search_object(
             refit=refit,
             cv=cv,
             verbose=verbose,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            return_train_score=True
         )
         total_combinations = _calculate_total_combinations(param_grid)
         print(f"Using GridSearchCV - will test all {total_combinations:,} combinations")
@@ -127,7 +128,8 @@ def create_search_object(
             cv=cv,
             verbose=verbose,
             random_state=random_state,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            return_train_score=True
         )
         total_combinations = _calculate_total_combinations(param_grid)
         print(f"Using RandomizedSearchCV - sampling {n_iter} from {total_combinations:,} possible combinations")
