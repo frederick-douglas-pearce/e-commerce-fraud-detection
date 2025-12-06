@@ -720,7 +720,7 @@ def _plot_cv_gap_analysis(
     ax1.set_xlabel('Candidate (sorted by validation score, best on left)', fontsize=11)
     ax1.set_ylabel(f'{refit_metric}', fontsize=11)
     ax1.set_title(f'{model_name}: Training vs Validation Scores', fontsize=12, fontweight='bold')
-    ax1.legend(loc='lower left')
+    ax1.legend(loc='upper right')
     ax1.grid(alpha=0.3)
 
     # Plot 2: Gap distribution
