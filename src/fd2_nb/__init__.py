@@ -9,7 +9,7 @@ This module provides functions for:
 
 Example:
     >>> from src.fd2_nb import compare_models, create_search_object, analyze_cv_results
-    >>> from src.fd2_nb import analyze_train_val_gaps, track_xgboost_iterations
+    >>> from src.fd2_nb import analyze_cv_train_val_gap, analyze_iteration_performance
 """
 
 from .model_comparison import (
@@ -35,10 +35,7 @@ from .cv_analysis import (
 )
 
 from .bias_variance import (
-    calculate_train_val_gap,
-    analyze_train_val_gaps,
     analyze_cv_fold_variance,
-    generate_bias_variance_report,
 )
 
 __all__ = [
@@ -59,8 +56,5 @@ __all__ = [
     'analyze_iteration_performance',
     'get_cv_statistics',
     # Bias-variance
-    'calculate_train_val_gap',
-    'analyze_train_val_gaps',
     'analyze_cv_fold_variance',
-    'generate_bias_variance_report',
 ]
