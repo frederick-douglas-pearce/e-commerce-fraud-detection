@@ -1,11 +1,11 @@
 {
   "random_forest": {
     "classifier__class_weight": "balanced_subsample",
-    "classifier__max_depth": 20,
+    "classifier__max_depth": 15,
     "classifier__max_features": "sqrt",
-    "classifier__min_samples_leaf": 5,
-    "classifier__min_samples_split": 10,
-    "classifier__n_estimators": 450
+    "classifier__min_samples_leaf": 10,
+    "classifier__min_samples_split": 20,
+    "classifier__n_estimators": 350
   },
   "xgboost": {
     "classifier__colsample_bytree": 0.9,

@@ -434,10 +434,11 @@ def _plot_iteration_tracking(
     train_std: np.ndarray,
     val_std: np.ndarray,
     optimal_iter: int,
-    figsize: Tuple[int, int]
+    figsize: Tuple[int, int],
+    tuned_n_estimators: Optional[int] = None
 ) -> None:
     """Create iteration tracking plot with confidence bands."""
-    fig, ax = plt.subplots(figsize=figsize)
+    _, ax = plt.subplots(figsize=figsize)
 
     # Plot mean lines
     ax.plot(iterations, train_scores, label='Training PR-AUC (mean)', linewidth=2, color='#1f77b4')
@@ -449,10 +450,18 @@ def _plot_iteration_tracking(
     ax.fill_between(iterations, val_scores - val_std, val_scores + val_std,
                     alpha=0.2, color='#ff7f0e', label='Validation +/-1 std')
 
-    # Mark optimal iteration
-    ax.axvline(optimal_iter, color='red', linestyle='--', alpha=0.5,
-               label=f'Selected ({optimal_iter})')
-    ax.scatter([optimal_iter], [val_scores[optimal_iter - 1]], color='red', s=100, zorder=5)
+    # Mark optimal iteration (best validation score)
+    ax.axvline(optimal_iter, color='green', linestyle='--', alpha=0.7,
+               label=f'Best Val Score ({optimal_iter})')
+    ax.scatter([optimal_iter], [val_scores[optimal_iter - 1]], color='green', s=150, zorder=5,
+               edgecolors='black', linewidths=2)
+
+    # Mark tuned n_estimators from GridSearchCV if provided
+    if tuned_n_estimators is not None and tuned_n_estimators <= len(iterations):
+        ax.axvline(tuned_n_estimators, color='purple', linestyle=':', alpha=0.7,
+                   label=f'GridSearchCV ({tuned_n_estimators})')
+        ax.scatter([tuned_n_estimators], [val_scores[tuned_n_estimators - 1]], color='purple',
+                   s=100, zorder=5, edgecolors='black', linewidths=2, marker='D')
 
     ax.set_xlabel('Boosting Iteration')
     ax.set_ylabel('PR-AUC')
@@ -463,10 +472,15 @@ def _plot_iteration_tracking(
     # Add diagnosis
     final_val = val_scores[-1]
     optimal_val = val_scores[optimal_iter - 1]
-    if final_val < optimal_val - 0.01:
-        diagnosis = f"Overfitting after iteration {optimal_iter}"
+    gap_at_optimal = train_scores[optimal_iter - 1] - val_scores[optimal_iter - 1]
+    gap_pct = gap_at_optimal / train_scores[optimal_iter - 1] * 100
+
+    if gap_pct > 10:
+        diagnosis = f"Overfitting detected ({gap_pct:.1f}% gap at n={optimal_iter})"
+    elif gap_pct > 5:
+        diagnosis = f"Moderate overfitting ({gap_pct:.1f}% gap at n={optimal_iter})"
     else:
-        diagnosis = "No severe overfitting detected"
+        diagnosis = f"Good fit ({gap_pct:.1f}% gap at n={optimal_iter})"
 
     ax.text(0.02, 0.98, diagnosis, transform=ax.transAxes,
             verticalalignment='top', horizontalalignment='left',
@@ -614,6 +628,7 @@ def track_estimator_iterations(
     model_params: Dict,
     preprocessor: Any = None,
     n_estimators_range: Optional[List[int]] = None,
+    tuned_n_estimators: Optional[int] = None,
     cv_folds: int = 4,
     random_seed: int = 1,
     metric: str = 'pr_auc',
@@ -638,6 +653,8 @@ def track_estimator_iterations(
         n_estimators_range: List of n_estimators values to test.
             Default: [10, 25, 50, 75, 100, 150, 200, 300, 400, 500] for RF
                      Uses native iteration tracking for XGBoost
+        tuned_n_estimators: Optional n_estimators value from GridSearchCV tuning.
+            If provided, will be marked on the plot for comparison.
         cv_folds: Number of CV folds
         random_seed: Random seed
         metric: Metric to use ('pr_auc', 'roc_auc')
@@ -672,6 +689,7 @@ def track_estimator_iterations(
             X_train, y_train, X_val, y_val,
             model_params, preprocessor,
             max_iterations=n_estimators_range[-1] if n_estimators_range else 200,
+            tuned_n_estimators=tuned_n_estimators,
             cv_folds=cv_folds, random_seed=random_seed,
             figsize=figsize, verbose=verbose
         )
@@ -680,6 +698,7 @@ def track_estimator_iterations(
             X_train, y_train, X_val, y_val,
             model_params, preprocessor,
             n_estimators_range=n_estimators_range,
+            tuned_n_estimators=tuned_n_estimators,
             cv_folds=cv_folds, random_seed=random_seed,
             metric=metric, figsize=figsize, verbose=verbose
         )
@@ -695,6 +714,7 @@ def _track_rf_iterations(
     rf_params: Dict,
     preprocessor: Any = None,
     n_estimators_range: Optional[List[int]] = None,
+    tuned_n_estimators: Optional[int] = None,
     cv_folds: int = 4,
     random_seed: int = 1,
     metric: str = 'pr_auc',
@@ -817,7 +837,8 @@ def _track_rf_iterations(
 
         _plot_rf_iteration_tracking(
             n_estimators_range, train_means, val_means,
-            train_stds, val_stds, optimal_n, metric, figsize
+            train_stds, val_stds, optimal_n, metric, figsize,
+            tuned_n_estimators=tuned_n_estimators
         )
 
     return optimal_n, tracking_df
@@ -831,6 +852,7 @@ def _track_xgboost_iterations_internal(
     xgb_params: Dict,
     preprocessor: Any = None,
     max_iterations: int = 200,
+    tuned_n_estimators: Optional[int] = None,
     cv_folds: int = 4,
     random_seed: int = 1,
     figsize: Tuple[int, int] = (12, 6),
@@ -942,7 +964,8 @@ def _track_xgboost_iterations_internal(
         print(f"  Gap:               {optimal_train - optimal_val:.4f}")
 
         _plot_iteration_tracking(iterations, train_scores, val_scores,
-                                 train_std, val_std, optimal_iter, figsize)
+                                 train_std, val_std, optimal_iter, figsize,
+                                 tuned_n_estimators=tuned_n_estimators)
 
     return optimal_iter, tracking_df
 
@@ -955,7 +978,8 @@ def _plot_rf_iteration_tracking(
     val_std: np.ndarray,
     optimal_n: int,
     metric: str,
-    figsize: Tuple[int, int]
+    figsize: Tuple[int, int],
+    tuned_n_estimators: Optional[int] = None
 ) -> None:
     """Create Random Forest iteration tracking plot with confidence bands."""
     fig, ax = plt.subplots(figsize=figsize)
@@ -974,12 +998,20 @@ def _plot_rf_iteration_tracking(
     ax.fill_between(x, val_scores - val_std, val_scores + val_std,
                     alpha=0.2, color='#ff7f0e', label='Validation +/-1 std')
 
-    # Mark optimal n_estimators
+    # Mark optimal n_estimators (best validation score)
     optimal_idx = n_estimators_range.index(optimal_n)
-    ax.axvline(optimal_n, color='red', linestyle='--', alpha=0.5,
-               label=f'Optimal ({optimal_n})')
-    ax.scatter([optimal_n], [val_scores[optimal_idx]], color='red', s=150, zorder=5,
+    ax.axvline(optimal_n, color='green', linestyle='--', alpha=0.7,
+               label=f'Best Val Score ({optimal_n})')
+    ax.scatter([optimal_n], [val_scores[optimal_idx]], color='green', s=150, zorder=5,
                edgecolors='black', linewidths=2)
+
+    # Mark tuned n_estimators from GridSearchCV if provided
+    if tuned_n_estimators is not None and tuned_n_estimators in n_estimators_range:
+        tuned_idx = n_estimators_range.index(tuned_n_estimators)
+        ax.axvline(tuned_n_estimators, color='purple', linestyle=':', alpha=0.7,
+                   label=f'GridSearchCV ({tuned_n_estimators})')
+        ax.scatter([tuned_n_estimators], [val_scores[tuned_idx]], color='purple', s=100, zorder=5,
+                   edgecolors='black', linewidths=2, marker='D')
 
     ax.set_xlabel('Number of Trees (n_estimators)')
     ax.set_ylabel(metric.upper())
@@ -991,11 +1023,11 @@ def _plot_rf_iteration_tracking(
     gap_at_optimal = train_scores[optimal_idx] - val_scores[optimal_idx]
     gap_pct = gap_at_optimal / train_scores[optimal_idx] * 100
     if gap_pct > 10:
-        diagnosis = f"Overfitting detected ({gap_pct:.1f}% gap)"
+        diagnosis = f"Overfitting detected ({gap_pct:.1f}% gap at n={optimal_n})"
     elif gap_pct > 5:
-        diagnosis = f"Moderate overfitting ({gap_pct:.1f}% gap)"
+        diagnosis = f"Moderate overfitting ({gap_pct:.1f}% gap at n={optimal_n})"
     else:
-        diagnosis = f"Good fit ({gap_pct:.1f}% gap)"
+        diagnosis = f"Good fit ({gap_pct:.1f}% gap at n={optimal_n})"
 
     ax.text(0.02, 0.98, diagnosis, transform=ax.transAxes,
             verticalalignment='top', horizontalalignment='left',
