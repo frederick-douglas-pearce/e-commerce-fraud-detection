@@ -747,3 +747,207 @@ def _plot_cv_gap_analysis(
 
     plt.tight_layout()
     plt.show()
+
+
+def analyze_iteration_performance(
+    cv_results_path: str,
+    n_estimators_param: str = 'param_classifier__n_estimators',
+    refit_metric: str = 'pr_auc',
+    tuned_n_estimators: Optional[int] = None,
+    model_name: str = "Model",
+    figsize: Tuple[int, int] = (12, 6),
+    verbose: bool = True
+) -> Dict[str, Any]:
+    """
+    Analyze model performance across different n_estimators values from GridSearchCV results.
+
+    This function examines how training and validation scores change as n_estimators
+    increases, helping identify the optimal number of estimators and detect overfitting.
+    Uses GridSearchCV results which ensures consistent methodology with hyperparameter tuning.
+
+    Args:
+        cv_results_path: Path to the CV results CSV file from GridSearchCV
+        n_estimators_param: Column name for n_estimators parameter in cv_results
+        refit_metric: The metric used for evaluation (default: 'pr_auc')
+        tuned_n_estimators: Optional n_estimators value from main hyperparameter tuning
+            to mark on the plot for comparison
+        model_name: Name of the model for display purposes
+        figsize: Figure size for visualization
+        verbose: If True, display analysis and create visualizations
+
+    Returns:
+        Dictionary with:
+        - optimal_n_estimators: n_estimators with best validation score
+        - optimal_train_score: Training score at optimal n_estimators
+        - optimal_val_score: Validation score at optimal n_estimators
+        - optimal_gap: Train-val gap at optimal n_estimators
+        - optimal_gap_pct: Gap as percentage at optimal n_estimators
+        - tracking_df: DataFrame with all iteration results
+        - tuned_n_estimators: The tuned value if provided
+
+    Example:
+        >>> # Run GridSearchCV with n_estimators as the varying parameter
+        >>> result = analyze_iteration_performance(
+        ...     'models/logs/rf_iteration_cv_results.csv',
+        ...     model_name='Random Forest',
+        ...     tuned_n_estimators=350
+        ... )
+        >>> print(f"Optimal n_estimators: {result['optimal_n_estimators']}")
+    """
+    # Load CV results
+    cv_results = pd.read_csv(cv_results_path)
+
+    # Determine column names
+    mean_train_col = f'mean_train_{refit_metric}'
+    mean_val_col = f'mean_test_{refit_metric}'
+    std_train_col = f'std_train_{refit_metric}'
+    std_val_col = f'std_test_{refit_metric}'
+
+    # Check required columns exist
+    if mean_train_col not in cv_results.columns:
+        raise ValueError(
+            f"Training scores not found. Column '{mean_train_col}' not found. "
+            f"Ensure GridSearchCV was created with return_train_score=True."
+        )
+
+    if n_estimators_param not in cv_results.columns:
+        raise ValueError(
+            f"n_estimators parameter not found. Column '{n_estimators_param}' not found. "
+            f"Available columns: {[c for c in cv_results.columns if c.startswith('param_')]}"
+        )
+
+    # Extract n_estimators values and sort by them
+    cv_results = cv_results.sort_values(n_estimators_param)
+    n_estimators_values = cv_results[n_estimators_param].values
+
+    # Extract scores
+    train_scores = cv_results[mean_train_col].values
+    val_scores = cv_results[mean_val_col].values
+    train_stds = cv_results[std_train_col].values if std_train_col in cv_results.columns else np.zeros_like(train_scores)
+    val_stds = cv_results[std_val_col].values if std_val_col in cv_results.columns else np.zeros_like(val_scores)
+
+    # Calculate gaps
+    gaps = train_scores - val_scores
+    gap_pcts = gaps / train_scores * 100
+
+    # Find optimal n_estimators (best validation score)
+    optimal_idx = np.argmax(val_scores)
+    optimal_n = int(n_estimators_values[optimal_idx])
+
+    # Create tracking DataFrame
+    tracking_df = pd.DataFrame({
+        'n_estimators': n_estimators_values,
+        'train_score_mean': train_scores,
+        'train_score_std': train_stds,
+        'val_score_mean': val_scores,
+        'val_score_std': val_stds,
+        'gap': gaps,
+        'gap_pct': gap_pcts
+    })
+
+    result = {
+        'optimal_n_estimators': optimal_n,
+        'optimal_train_score': float(train_scores[optimal_idx]),
+        'optimal_val_score': float(val_scores[optimal_idx]),
+        'optimal_gap': float(gaps[optimal_idx]),
+        'optimal_gap_pct': float(gap_pcts[optimal_idx]),
+        'tracking_df': tracking_df,
+        'tuned_n_estimators': tuned_n_estimators
+    }
+
+    if verbose:
+        _print_iteration_analysis(result, model_name, refit_metric)
+        _plot_iteration_performance(
+            n_estimators_values, train_scores, val_scores,
+            train_stds, val_stds, optimal_n, tuned_n_estimators,
+            model_name, refit_metric, figsize
+        )
+
+    return result
+
+
+def _print_iteration_analysis(
+    result: Dict[str, Any],
+    model_name: str,
+    refit_metric: str
+) -> None:
+    """Print formatted iteration analysis."""
+    print(f"\n{'=' * 80}")
+    print(f"{model_name} - Iteration Performance Analysis")
+    print("=" * 80)
+    print(f"\nMetric: {refit_metric}")
+    print(f"\nOptimal n_estimators: {result['optimal_n_estimators']}")
+    print(f"  Training {refit_metric.upper()}:   {result['optimal_train_score']:.4f}")
+    print(f"  Validation {refit_metric.upper()}: {result['optimal_val_score']:.4f}")
+    print(f"  Gap:               {result['optimal_gap']:.4f} ({result['optimal_gap_pct']:.1f}%)")
+
+    if result['tuned_n_estimators'] is not None:
+        tuned_n = result['tuned_n_estimators']
+        df = result['tracking_df']
+        tuned_row = df[df['n_estimators'] == tuned_n]
+        if len(tuned_row) > 0:
+            tuned_row = tuned_row.iloc[0]
+            print(f"\nTuned n_estimators from hyperparameter search: {tuned_n}")
+            print(f"  Training {refit_metric.upper()}:   {tuned_row['train_score_mean']:.4f}")
+            print(f"  Validation {refit_metric.upper()}: {tuned_row['val_score_mean']:.4f}")
+            print(f"  Gap:               {tuned_row['gap']:.4f} ({tuned_row['gap_pct']:.1f}%)")
+
+    print("=" * 80)
+
+
+def _plot_iteration_performance(
+    n_estimators: np.ndarray,
+    train_scores: np.ndarray,
+    val_scores: np.ndarray,
+    train_stds: np.ndarray,
+    val_stds: np.ndarray,
+    optimal_n: int,
+    tuned_n: Optional[int],
+    model_name: str,
+    refit_metric: str,
+    figsize: Tuple[int, int]
+) -> None:
+    """Create iteration performance visualization."""
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot training and validation curves with confidence bands
+    ax.plot(n_estimators, train_scores, 'b-', label='Training', linewidth=2, marker='o', markersize=6)
+    ax.fill_between(n_estimators, train_scores - train_stds, train_scores + train_stds,
+                    alpha=0.2, color='blue')
+
+    ax.plot(n_estimators, val_scores, 'g-', label='Validation', linewidth=2, marker='s', markersize=6)
+    ax.fill_between(n_estimators, val_scores - val_stds, val_scores + val_stds,
+                    alpha=0.2, color='green')
+
+    # Mark optimal n_estimators (best validation)
+    optimal_idx = np.where(n_estimators == optimal_n)[0][0]
+    ax.axvline(x=optimal_n, color='green', linestyle='--', linewidth=2, alpha=0.7)
+    ax.scatter([optimal_n], [val_scores[optimal_idx]], color='green', s=150, zorder=5,
+               edgecolors='black', linewidths=2, label=f'Best Val (n={optimal_n})')
+
+    # Mark tuned n_estimators if provided and different from optimal
+    if tuned_n is not None and tuned_n != optimal_n:
+        tuned_idx_arr = np.where(n_estimators == tuned_n)[0]
+        if len(tuned_idx_arr) > 0:
+            tuned_idx = tuned_idx_arr[0]
+            ax.axvline(x=tuned_n, color='purple', linestyle=':', linewidth=2, alpha=0.7)
+            ax.scatter([tuned_n], [val_scores[tuned_idx]], color='purple', s=150, zorder=5,
+                       edgecolors='black', linewidths=2, marker='D', label=f'Tuned (n={tuned_n})')
+
+    ax.set_xlabel('n_estimators', fontsize=12)
+    ax.set_ylabel(f'{refit_metric.upper()}', fontsize=12)
+    ax.set_title(f'{model_name}: Performance by n_estimators', fontsize=14, fontweight='bold')
+    ax.legend(loc='lower right')
+    ax.grid(alpha=0.3)
+
+    # Add gap annotation at optimal point
+    gap_at_optimal = train_scores[optimal_idx] - val_scores[optimal_idx]
+    gap_pct = gap_at_optimal / train_scores[optimal_idx] * 100
+    ax.annotate(f'Gap: {gap_pct:.1f}%',
+                xy=(optimal_n, (train_scores[optimal_idx] + val_scores[optimal_idx]) / 2),
+                xytext=(10, 0), textcoords='offset points',
+                fontsize=10, color='red',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
+
+    plt.tight_layout()
+    plt.show()

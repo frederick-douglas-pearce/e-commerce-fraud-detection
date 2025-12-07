@@ -29,14 +29,13 @@ from .hyperparameter_tuning import (
 from .cv_analysis import (
     analyze_cv_results,
     analyze_cv_train_val_gap,
+    analyze_iteration_performance,
     get_cv_statistics,
 )
 
 from .bias_variance import (
     calculate_train_val_gap,
     analyze_train_val_gaps,
-    track_xgboost_iterations,
-    track_estimator_iterations,
     analyze_cv_fold_variance,
     generate_bias_variance_report,
 )
@@ -55,12 +54,11 @@ __all__ = [
     # CV analysis
     'analyze_cv_results',
     'analyze_cv_train_val_gap',
+    'analyze_iteration_performance',
     'get_cv_statistics',
     # Bias-variance
     'calculate_train_val_gap',
     'analyze_train_val_gaps',
-    'track_xgboost_iterations',
-    'track_estimator_iterations',
     'analyze_cv_fold_variance',
     'generate_bias_variance_report',
 ]
