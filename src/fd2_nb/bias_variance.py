@@ -743,9 +743,12 @@ def _track_rf_iterations(
     cv_strategy = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
 
     if verbose:
+        import os
+        import joblib
         print(f"\nTracking Random Forest performance across n_estimators values...")
         print(f"Testing: {n_estimators_range}")
         print(f"Using {cv_folds}-fold cross-validation...")
+        print(f"CPU count: {os.cpu_count()}, joblib effective n_jobs(-1): {joblib.effective_n_jobs(-1)}")
 
     # Store results
     all_train_scores = {n: [] for n in n_estimators_range}
@@ -770,12 +773,16 @@ def _track_rf_iterations(
             X_fold_val_processed = X_fold_val
 
         # Train models with different n_estimators
-        for n_est in n_estimators_range:
+        for n_est_idx, n_est in enumerate(n_estimators_range):
             params = rf_params.copy()
             params['n_estimators'] = n_est
             params['random_state'] = random_seed
             if 'n_jobs' not in params:
                 params['n_jobs'] = -1
+
+            # Debug output for first model only
+            if verbose and fold_idx == 0 and n_est_idx == 0:
+                print(f"  First RF model params: n_jobs={params.get('n_jobs')}, n_estimators={n_est}")
 
             rf_model = RandomForestClassifier(**params)
             rf_model.fit(X_fold_train_processed, y_fold_train)
