@@ -6,11 +6,21 @@ results from hyperparameter tuning, with focus on production deployment criteria
 All functions are designed to be reusable across different models and projects.
 """
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+
+def _save_figure(fig: plt.Figure, save_path: Optional[str], dpi: int = 150) -> None:
+    """Save figure to path if provided, creating directories as needed."""
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches='tight', facecolor='white')
+        print(f"  Figure saved: {save_path}")
 
 
 def analyze_cv_results(
@@ -20,7 +30,8 @@ def analyze_cv_results(
     refit_metric: str = 'pr_auc',
     figsize: Tuple[int, int] = (16, 12),
     stability_threshold: float = 0.01,
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Analyze cross-validation results with focus on production deployment criteria.
@@ -45,6 +56,7 @@ def analyze_cv_results(
         figsize: Figure size for the 4-panel visualization
         stability_threshold: Threshold for std_test_score below which model is considered stable
         verbose: If True, display analysis and create visualizations
+        save_path: Optional path to save the figure (e.g., 'images/fd2/cv_analysis.png')
 
     Returns:
         DataFrame with top N candidates and detailed metrics
@@ -110,7 +122,7 @@ def analyze_cv_results(
         _display_top_candidates(top_candidates, top_n, col_mapping)
         _display_statistical_summary(cv_results, key_cols, col_mapping)
         _display_best_model_details(best_model, stability_threshold, col_mapping)
-        _create_analysis_plots(cv_results, best_model, top_candidates, top_n, figsize, col_mapping)
+        _create_analysis_plots(cv_results, best_model, top_candidates, top_n, figsize, col_mapping, save_path)
         _print_recommendations(best_model, top_candidates, stability_threshold, col_mapping)
 
     return top_candidates
@@ -225,7 +237,8 @@ def _create_analysis_plots(
     top_candidates: pd.DataFrame,
     top_n: int,
     figsize: Tuple[int, int],
-    col_mapping: Dict[str, str]
+    col_mapping: Dict[str, str],
+    save_path: Optional[str] = None
 ) -> None:
     """Create 4-panel analysis visualization."""
     fig, axes = plt.subplots(2, 2, figsize=figsize)
@@ -236,6 +249,7 @@ def _create_analysis_plots(
     _plot_training_vs_prediction_time(cv_results, best_model, axes[1, 1], col_mapping)
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
 
@@ -488,7 +502,8 @@ def analyze_cv_train_val_gap(
     gap_threshold_severe: float = 0.10,
     model_name: str = "Model",
     figsize: Tuple[int, int] = (14, 5),
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Analyze train-validation gap from GridSearchCV/RandomizedSearchCV results.
@@ -505,6 +520,7 @@ def analyze_cv_train_val_gap(
         model_name: Name of the model for display purposes
         figsize: Figure size for visualization
         verbose: If True, display analysis and create visualizations
+        save_path: Optional path to save the figure (e.g., 'images/fd2/gap_analysis.png')
 
     Returns:
         Dictionary with:
@@ -587,7 +603,7 @@ def analyze_cv_train_val_gap(
     if verbose:
         _print_cv_gap_analysis(result, gap_threshold_warning, gap_threshold_severe)
         _plot_cv_gap_analysis(cv_results, best_idx, mean_train_col, mean_val_col,
-                              rank_col, model_name, refit_metric, figsize)
+                              rank_col, model_name, refit_metric, figsize, save_path)
 
     return result
 
@@ -691,7 +707,8 @@ def _plot_cv_gap_analysis(
     rank_col: str,
     model_name: str,
     refit_metric: str,
-    figsize: Tuple[int, int]
+    figsize: Tuple[int, int],
+    save_path: Optional[str] = None
 ) -> None:
     """Create visualization of train-validation gap across all candidates."""
     fig, axes = plt.subplots(1, 2, figsize=figsize)
@@ -746,6 +763,7 @@ def _plot_cv_gap_analysis(
     ax2.grid(alpha=0.3, axis='y')
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
 
@@ -756,7 +774,8 @@ def analyze_iteration_performance(
     tuned_n_estimators: Optional[int] = None,
     model_name: str = "Model",
     figsize: Tuple[int, int] = (12, 6),
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Analyze model performance across different n_estimators values from GridSearchCV results.
@@ -774,6 +793,7 @@ def analyze_iteration_performance(
         model_name: Name of the model for display purposes
         figsize: Figure size for visualization
         verbose: If True, display analysis and create visualizations
+        save_path: Optional path to save the figure (e.g., 'images/fd2/iteration_perf.png')
 
     Returns:
         Dictionary with:
@@ -860,7 +880,7 @@ def analyze_iteration_performance(
         _plot_iteration_performance(
             n_estimators_values, train_scores, val_scores,
             train_stds, val_stds, optimal_n, tuned_n_estimators,
-            model_name, refit_metric, figsize
+            model_name, refit_metric, figsize, save_path
         )
 
     return result
@@ -905,7 +925,8 @@ def _plot_iteration_performance(
     tuned_n: Optional[int],
     model_name: str,
     refit_metric: str,
-    figsize: Tuple[int, int]
+    figsize: Tuple[int, int],
+    save_path: Optional[str] = None
 ) -> None:
     """Create iteration performance visualization."""
     fig, ax = plt.subplots(figsize=figsize)
@@ -950,4 +971,5 @@ def _plot_iteration_performance(
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()

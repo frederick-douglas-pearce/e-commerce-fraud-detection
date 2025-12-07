@@ -6,11 +6,21 @@ on key metrics, creating comparison tables, and visualizing performance differen
 All functions are designed to be reusable across different datasets and projects.
 """
 
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+
+def _save_figure(fig: plt.Figure, save_path: Optional[str], dpi: int = 150) -> None:
+    """Save figure to path if provided, creating directories as needed."""
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches='tight', facecolor='white')
+        print(f"  Figure saved: {save_path}")
 
 
 def compare_models(
@@ -19,7 +29,8 @@ def compare_models(
     metrics_to_highlight: Optional[List[str]] = None,
     title: str = "Model Comparison",
     figsize: Tuple[int, int] = (16, 6),
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Compare multiple models on key metrics with visualization.
@@ -35,6 +46,7 @@ def compare_models(
         title: Title for the comparison display
         figsize: Figure size for visualization plots
         verbose: If True, display styled table and create visualization
+        save_path: Optional path to save the figure (e.g., 'images/fd2/comparison.png')
 
     Returns:
         pd.DataFrame: Comparison DataFrame with model names as index
@@ -67,7 +79,7 @@ def compare_models(
 
     if verbose:
         _display_comparison_table(comparison_df, metrics_to_highlight, title)
-        _plot_comparison_charts(comparison_df, figsize)
+        _plot_comparison_charts(comparison_df, figsize, save_path)
 
     return comparison_df
 
@@ -123,7 +135,8 @@ def _display_comparison_table(
 
 def _plot_comparison_charts(
     comparison_df: pd.DataFrame,
-    figsize: Tuple[int, int] = (16, 6)
+    figsize: Tuple[int, int] = (16, 6),
+    save_path: Optional[str] = None
 ) -> None:
     """
     Create comparison bar charts for model metrics.
@@ -131,6 +144,7 @@ def _plot_comparison_charts(
     Args:
         comparison_df: DataFrame with model comparison metrics
         figsize: Figure size for the plots
+        save_path: Optional path to save the figure
     """
     fig, axes = plt.subplots(1, 2, figsize=figsize)
 
@@ -182,6 +196,7 @@ def _plot_comparison_charts(
                         ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
 
@@ -189,7 +204,8 @@ def plot_model_comparison(
     comparison_df: pd.DataFrame,
     plot_configs: Optional[List[Dict]] = None,
     figsize: Tuple[int, int] = (16, 6),
-    suptitle: Optional[str] = None
+    suptitle: Optional[str] = None,
+    save_path: Optional[str] = None
 ) -> None:
     """
     Create customizable comparison visualizations for model metrics.
@@ -210,6 +226,7 @@ def plot_model_comparison(
             If None, uses default 2-panel layout: key metrics + precision vs recall
         figsize: Figure size (width, height)
         suptitle: Optional super title for the entire figure
+        save_path: Optional path to save the figure (e.g., 'images/fd2/comparison.png')
 
     Example:
         >>> plot_configs = [
@@ -319,6 +336,7 @@ def plot_model_comparison(
         fig.suptitle(suptitle, fontsize=16, fontweight='bold', y=1.02)
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
 
@@ -327,7 +345,8 @@ def plot_comprehensive_comparison(
     figsize: Tuple[int, int] = (18, 12),
     metrics: Optional[List[str]] = None,
     colors: Optional[List[str]] = None,
-    titles: Optional[List[str]] = None
+    titles: Optional[List[str]] = None,
+    save_path: Optional[str] = None
 ) -> None:
     """
     Create a 2x2 grid of horizontal bar charts for comprehensive model comparison.
@@ -341,6 +360,7 @@ def plot_comprehensive_comparison(
         metrics: List of 4 metric column names to plot. Default: ['pr_auc', 'f1', 'precision', 'recall']
         colors: List of 4 colors for each subplot. Default: ['coral', 'lightgreen', 'steelblue', 'gold']
         titles: List of 4 subplot titles. Default: metric-specific titles
+        save_path: Optional path to save the figure (e.g., 'images/fd2/comprehensive.png')
 
     Example:
         >>> plot_comprehensive_comparison(all_models_comparison)
@@ -388,6 +408,7 @@ def plot_comprehensive_comparison(
             ax.text(v + 0.01, i, f'{v:.4f}', va='center', fontsize=10)
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
 

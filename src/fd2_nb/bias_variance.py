@@ -10,18 +10,28 @@ analyze_iteration_performance) which leverage GridSearchCV results directly.
 """
 
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
 
+def _save_figure(fig: plt.Figure, save_path: Optional[str], dpi: int = 150) -> None:
+    """Save figure to path if provided, creating directories as needed."""
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches='tight', facecolor='white')
+        print(f"  Figure saved: {save_path}")
+
+
 def analyze_cv_fold_variance(
     cv_results_paths: Dict[str, str],
     refit_metric: str = 'pr_auc',
     figsize: Tuple[int, int] = (14, 5),
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Analyze variance across CV folds from saved CV results.
@@ -39,6 +49,7 @@ def analyze_cv_fold_variance(
             'mean_test_score'. Set to None for single-metric scoring (legacy).
         figsize: Figure size for variance plot
         verbose: If True, print analysis and create plots
+        save_path: Optional path to save the figure (e.g., 'images/fd2/cv_variance.png')
 
     Returns:
         DataFrame with variance analysis for each model
@@ -115,12 +126,16 @@ def analyze_cv_fold_variance(
                 diag = "Low variance (stable)"
             print(f"  {row['model']}: {diag}")
 
-        _plot_cv_variance(variance_df, figsize)
+        _plot_cv_variance(variance_df, figsize, save_path)
 
     return variance_df
 
 
-def _plot_cv_variance(variance_df: pd.DataFrame, figsize: Tuple[int, int]) -> None:
+def _plot_cv_variance(
+    variance_df: pd.DataFrame,
+    figsize: Tuple[int, int],
+    save_path: Optional[str] = None
+) -> None:
     """Create CV variance visualization."""
     fig, axes = plt.subplots(1, 2, figsize=figsize)
 
@@ -143,4 +158,5 @@ def _plot_cv_variance(variance_df: pd.DataFrame, figsize: Tuple[int, int]) -> No
     axes[1].grid(axis='y', alpha=0.3)
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
