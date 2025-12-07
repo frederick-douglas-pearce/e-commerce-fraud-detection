@@ -15,6 +15,7 @@ Example:
 from .model_comparison import (
     compare_models,
     get_best_model,
+    plot_comprehensive_comparison,
     plot_model_comparison,
 )
 
@@ -44,6 +45,7 @@ __all__ = [
     # Model comparison
     'compare_models',
     'get_best_model',
+    'plot_comprehensive_comparison',
     'plot_model_comparison',
     # Hyperparameter tuning
     'DEFAULT_SCORING',

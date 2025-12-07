@@ -322,6 +322,75 @@ def plot_model_comparison(
     plt.show()
 
 
+def plot_comprehensive_comparison(
+    comparison_df: pd.DataFrame,
+    figsize: Tuple[int, int] = (18, 12),
+    metrics: Optional[List[str]] = None,
+    colors: Optional[List[str]] = None,
+    titles: Optional[List[str]] = None
+) -> None:
+    """
+    Create a 2x2 grid of horizontal bar charts for comprehensive model comparison.
+
+    Displays four metrics (default: PR-AUC, F1, Precision, Recall) as horizontal
+    bar charts with value labels, designed for easy visual comparison across models.
+
+    Args:
+        comparison_df: DataFrame with model names as index and metrics as columns
+        figsize: Figure size (width, height)
+        metrics: List of 4 metric column names to plot. Default: ['pr_auc', 'f1', 'precision', 'recall']
+        colors: List of 4 colors for each subplot. Default: ['coral', 'lightgreen', 'steelblue', 'gold']
+        titles: List of 4 subplot titles. Default: metric-specific titles
+
+    Example:
+        >>> plot_comprehensive_comparison(all_models_comparison)
+        >>> # Or with custom metrics:
+        >>> plot_comprehensive_comparison(df, metrics=['roc_auc', 'pr_auc', 'f1', 'accuracy'])
+    """
+    # Defaults
+    if metrics is None:
+        metrics = ['pr_auc', 'f1', 'precision', 'recall']
+
+    if colors is None:
+        colors = ['coral', 'lightgreen', 'steelblue', 'gold']
+
+    if titles is None:
+        titles = [
+            'PR-AUC Comparison (Primary Metric)',
+            'F1 Score Comparison',
+            'Precision Comparison (Minimize False Positives)',
+            'Recall Comparison (Catch More Fraud)'
+        ]
+
+    # Validate we have exactly 4 metrics for 2x2 grid
+    if len(metrics) != 4:
+        raise ValueError(f"Expected 4 metrics for 2x2 grid, got {len(metrics)}")
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    axes_flat = axes.flatten()
+
+    for ax, metric, color, title in zip(axes_flat, metrics, colors, titles):
+        if metric not in comparison_df.columns:
+            ax.text(0.5, 0.5, f'Metric "{metric}" not available',
+                    ha='center', va='center', transform=ax.transAxes)
+            ax.set_title(title, fontsize=14, fontweight='bold')
+            continue
+
+        comparison_df[metric].plot(kind='barh', ax=ax, color=color)
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_xlabel(metric.replace('_', ' ').title(), fontsize=12)
+        ax.set_ylabel('Model', fontsize=12)
+        ax.grid(axis='x', alpha=0.3)
+        ax.set_xlim([0, 1])
+
+        # Add value labels
+        for i, v in enumerate(comparison_df[metric]):
+            ax.text(v + 0.01, i, f'{v:.4f}', va='center', fontsize=10)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def get_best_model(
     comparison_df: pd.DataFrame,
     primary_metric: str = 'pr_auc'
