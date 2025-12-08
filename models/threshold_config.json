@@ -2,36 +2,36 @@
   "default_threshold": 0.5,
   "optimized_thresholds": {
     "optimal_f1": {
-      "threshold": 0.8070542216300964,
-      "precision": 0.9159472966833258,
-      "recall": 0.7621928166351607,
-      "f1": 0.8320264134873574,
+      "threshold": 0.8155097961425781,
+      "precision": 0.9273066169617894,
+      "recall": 0.7526475037821483,
+      "f1": 0.830897703499601,
       "description": "Optimal F1 score - best precision-recall balance (recommended default)"
     },
     "conservative_90pct_recall": {
-      "threshold": 0.2151305079460144,
+      "threshold": 0.2183302491903305,
       "target_recall": 0.9,
-      "achieved_recall": 0.9,
-      "precision": 0.3583471323197351,
-      "f1": 0.5125968992248062,
+      "achieved_recall": 0.9001512859304085,
+      "precision": 0.35103244837758113,
+      "f1": 0.5050933786078098,
       "description": "Catch most fraud (90% recall), accept more false positives"
     },
     "balanced_85pct_recall": {
-      "threshold": 0.3563975691795349,
+      "threshold": 0.31927719712257385,
       "target_recall": 0.85,
-      "achieved_recall": 0.8500945179584121,
-      "precision": 0.6220777424263384,
-      "f1": 0.7184279894560268,
+      "achieved_recall": 0.8502269288956127,
+      "precision": 0.5854166666666667,
+      "f1": 0.6933991363355954,
       "description": "Balanced precision-recall trade-off (85% recall target)"
     },
     "aggressive_80pct_recall": {
-      "threshold": 0.7069100737571716,
+      "threshold": 0.699897050857544,
       "target_recall": 0.8,
-      "achieved_recall": 0.8,
-      "precision": 0.8324154209284028,
-      "f1": 0.8158858685174476,
+      "achieved_recall": 0.800302571860817,
+      "precision": 0.8188854489164087,
+      "f1": 0.8094873756694722,
       "description": "Prioritize precision (80% recall), reduce false positives"
     }
   },
-  "note": "Thresholds optimized on cross-validation predictions from train+val combined. optimal_f1 maximizes F1 score and is the recommended default."
+  "note": "Thresholds optimized on test set. optimal_f1 maximizes F1 score and is the recommended default."
 }
