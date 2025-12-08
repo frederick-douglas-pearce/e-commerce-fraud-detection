@@ -1,12 +1,21 @@
 {
   "default_threshold": 0.5,
+  "recommended_threshold": "target_performance",
   "optimized_thresholds": {
     "optimal_f1": {
       "threshold": 0.8155097961425781,
       "precision": 0.9273066169617894,
       "recall": 0.7526475037821483,
       "f1": 0.830897703499601,
-      "description": "Optimal F1 score - best precision-recall balance (recommended default)"
+      "description": "Optimal F1 score - best precision-recall balance"
+    },
+    "target_performance": {
+      "threshold": 0.4556618630886078,
+      "precision": 0.7001909611712285,
+      "recall": 0.8320726172465961,
+      "f1": 0.7604562737642585,
+      "min_precision_constraint": 0.7,
+      "description": "Max recall with >=70% precision (RECOMMENDED)"
     },
     "conservative_90pct_recall": {
       "threshold": 0.2183302491903305,
@@ -33,5 +42,5 @@
       "description": "Prioritize precision (80% recall), reduce false positives"
     }
   },
-  "note": "Thresholds optimized on test set. optimal_f1 maximizes F1 score and is the recommended default."
+  "note": "target_performance maximizes recall while meeting precision constraint (recommended for production)"
 }
