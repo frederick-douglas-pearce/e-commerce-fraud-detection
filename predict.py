@@ -305,7 +305,7 @@ async def get_model_info():
         version=model_metadata["model_info"]["version"],
         training_date=model_metadata["model_info"]["training_date"],
         algorithm=model_metadata["model_info"]["model_type"],
-        performance=model_metadata["performance"]["test_set_final"],
+        performance=model_metadata["performance"]["test_set"],
         threshold_strategies=threshold_config["optimized_thresholds"],
         raw_features_required=raw_features,
         engineered_features_count=len(feature_lists["all_features"]),
@@ -316,7 +316,7 @@ async def get_model_info():
 async def predict_fraud(
     transaction: RawTransactionRequest,
     threshold_strategy: Literal[
-        "optimal_f1", "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
+        "optimal_f1", "target_performance", "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
     ] = "optimal_f1",
 ):
     """
@@ -327,6 +327,7 @@ async def predict_fraud(
 
     **Threshold Strategies:**
     - `optimal_f1`: Best precision-recall balance (F1 score optimized) - **RECOMMENDED DEFAULT**
+    - `target_performance`: Max recall while maintaining >=70% precision - **RECOMMENDED FOR PRODUCTION**
     - `conservative_90pct_recall`: Catches 90% of fraud (more false positives)
     - `balanced_85pct_recall`: Targets 85% recall with maximized precision
     - `aggressive_80pct_recall`: Targets 80% recall with highest precision (fewer false positives)
