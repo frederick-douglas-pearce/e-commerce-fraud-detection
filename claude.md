@@ -54,29 +54,55 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │   │       ├── thresholds.py        # optimize_thresholds()
 │   │       └── __init__.py          # Package exports
 │   ├── fd1_nb/                      # Notebook 1 utility functions (EDA & FE)
+│   │   ├── __init__.py              # Package exports (21 functions)
 │   │   ├── data_utils.py            # Data loading, splitting, analysis
 │   │   ├── eda_utils.py             # EDA functions (VIF, correlations, MI)
 │   │   └── feature_engineering.py   # Feature engineering utilities
-│   ├── fd2_nb/                      # Notebook 2 utility functions (placeholder)
-│   ├── fd3_nb/                      # Notebook 3 utility functions (placeholder)
+│   ├── fd2_nb/                      # Notebook 2 utility functions (Model Selection & Tuning)
+│   │   ├── __init__.py              # Package exports (14 functions)
+│   │   ├── model_comparison.py      # Model comparison and visualization
+│   │   ├── hyperparameter_tuning.py # GridSearchCV/RandomizedSearchCV utilities
+│   │   ├── cv_analysis.py           # CV results analysis and train-val gap detection
+│   │   └── bias_variance.py         # Bias-variance diagnostics
+│   ├── fd3_nb/                      # Notebook 3 utility functions (Evaluation & Deployment)
+│   │   ├── __init__.py              # Package exports (17 functions)
+│   │   ├── evaluation.py            # Model evaluation and performance comparison
+│   │   ├── visualization.py         # ROC/PR curves and feature importance plots
+│   │   ├── threshold_optimization.py # Threshold optimization strategies
+│   │   ├── feature_importance.py    # Feature importance extraction
+│   │   └── deployment.py            # Deployment artifact generation
 │   └── README.md                    # Source code organization documentation
-├── tests/                           # Test suite (212 passing tests)
+├── tests/                           # Test suite (374 passing tests)
 │   ├── conftest.py                  # Shared pytest fixtures
 │   ├── test_api.py                  # API integration tests (24 tests)
-│   ├── test_config/                 # Shared config tests (45 tests)
+│   ├── test_config/                 # Shared config tests (44 tests)
 │   │   ├── test_data_config.py      # DataConfig tests (16 tests)
-│   │   ├── test_model_config.py     # ModelConfig tests (20 tests)
+│   │   ├── test_model_config.py     # ModelConfig tests (19 tests)
 │   │   └── test_training_config.py  # TrainingConfig tests (9 tests)
-│   ├── test_data/                   # Data loading tests (13 tests)
+│   ├── test_eda/                    # EDA utility tests (68 tests)
+│   │   ├── test_data_utils.py       # Data loading/splitting tests (21 tests)
+│   │   ├── test_eda_utils.py        # VIF, correlations, MI tests (27 tests)
+│   │   └── test_feature_engineering.py # Feature engineering tests (20 tests)
+│   ├── test_data/                   # Data loading tests (12 tests)
 │   │   └── test_loader.py           # load_and_split_data tests
 │   ├── test_evaluation/             # Evaluation tests (26 tests)
 │   │   ├── test_metrics.py          # Metrics tests (14 tests)
 │   │   └── test_thresholds.py       # Threshold tests (12 tests)
-│   └── test_preprocessing/          # Preprocessing tests (59 tests)
+│   ├── test_fd2_nb/                 # Notebook 2 utility tests (63 tests)
+│   │   ├── test_model_comparison.py # Model comparison tests (16 tests)
+│   │   ├── test_hyperparameter_tuning.py # Tuning utility tests (15 tests)
+│   │   ├── test_cv_analysis.py      # CV analysis tests (25 tests)
+│   │   └── test_bias_variance.py    # Bias-variance tests (7 tests)
+│   ├── test_fd3_nb/                 # Notebook 3 utility tests (76 tests)
+│   │   ├── test_evaluation.py       # Evaluation tests (15 tests)
+│   │   ├── test_feature_importance.py # Feature importance tests (12 tests)
+│   │   ├── test_threshold_optimization.py # Threshold tests (23 tests)
+│   │   └── test_deployment.py       # Deployment tests (26 tests)
+│   └── test_preprocessing/          # Preprocessing tests (61 tests)
 │       ├── test_config.py           # FeatureConfig tests (8 tests)
 │       ├── test_features.py         # Feature function tests (15 tests)
 │       ├── test_pipelines.py        # Pipeline factory tests (18 tests)
-│       └── test_transformer.py      # Transformer integration tests (18 tests)
+│       └── test_transformer.py      # Transformer integration tests (20 tests)
 ├── models/                          # Model artifacts
 │   ├── xgb_fraud_detector.joblib    # Trained XGBoost model (gitignored)
 │   ├── transformer_config.json      # Feature transformer configuration (tracked)
@@ -265,8 +291,58 @@ General-purpose utility functions extracted from notebook 1 for reusability.
 
 **Design Philosophy**: General-purpose, configurable functions that work with any dataset when given proper parameters. Includes verbose output and visualizations for exploratory analysis.
 
-#### 6. `src/fd2_nb/` and `src/fd3_nb/` - Placeholder Modules
-Reserved for notebook 2 (Model Selection & Tuning) and notebook 3 (Evaluation & Deployment) utility functions.
+#### 6. `src/fd2_nb/` - Notebook 2 Utilities (Model Selection & Tuning)
+Utility functions extracted from notebook 2 for model comparison, hyperparameter tuning, and CV analysis.
+
+**`src/fd2_nb/model_comparison.py`**:
+- `compare_models()`: Side-by-side model performance comparison
+- `get_best_model()`: Select best model by specified metric
+- `plot_comprehensive_comparison()`: Full visualization of model metrics
+- `plot_model_comparison()`: Simple bar chart comparison
+
+**`src/fd2_nb/hyperparameter_tuning.py`**:
+- `create_search_object()`: Create GridSearchCV or RandomizedSearchCV
+- `tune_with_logging()`: Execute search with detailed logging to files
+- `extract_cv_metrics()`: Extract metrics from CV results
+- `get_best_params_summary()`: Format best parameters for display
+
+**`src/fd2_nb/cv_analysis.py`**:
+- `analyze_cv_results()`: Production-focused CV results analysis
+- `analyze_cv_train_val_gap()`: Detect overfitting via train-val gap analysis
+- `analyze_iteration_performance()`: Analyze XGBoost iteration curves
+- `get_cv_statistics()`: Extract statistics from CV results
+
+**`src/fd2_nb/bias_variance.py`**:
+- `analyze_cv_fold_variance()`: Analyze variance across CV folds
+
+#### 7. `src/fd3_nb/` - Notebook 3 Utilities (Evaluation & Deployment)
+Utility functions extracted from notebook 3 for model evaluation, threshold optimization, and deployment.
+
+**`src/fd3_nb/evaluation.py`**:
+- `evaluate_model()`: Comprehensive model evaluation with all metrics
+- `compare_val_test_performance()`: Compare validation vs test performance
+
+**`src/fd3_nb/visualization.py`**:
+- `plot_roc_pr_curves()`: ROC and PR curve visualization
+- `plot_feature_importance()`: Feature importance bar chart
+- `plot_threshold_optimization()`: Threshold vs metrics visualization
+
+**`src/fd3_nb/threshold_optimization.py`**:
+- `find_threshold_for_recall()`: Find threshold for target recall
+- `find_optimal_f1_threshold()`: Find threshold maximizing F1
+- `find_target_performance_threshold()`: Find threshold meeting precision constraint
+- `optimize_thresholds()`: Complete threshold optimization pipeline
+- `create_threshold_comparison_df()`: Create comparison DataFrame
+
+**`src/fd3_nb/feature_importance.py`**:
+- `extract_feature_importance()`: Extract importance from XGBoost pipeline
+- `print_feature_importance_summary()`: Print formatted importance summary
+
+**`src/fd3_nb/deployment.py`**:
+- `save_production_model()`: Save trained model with joblib
+- `save_threshold_config()`: Save threshold configuration JSON
+- `save_model_metadata()`: Save model metadata JSON
+- `print_deployment_summary()`: Print deployment summary
 
 ### Benefits of Shared Infrastructure
 ✅ **Single Source of Truth**: Configuration, data loading, evaluation logic defined once
@@ -467,7 +543,7 @@ predictions = pipeline.predict(test_df)
 
 ### Testing Strategy
 
-**Test Coverage**: Comprehensive unit and integration tests for all components (212 passing tests)
+**Test Coverage**: Comprehensive unit and integration tests for all components (374 passing tests)
 
 **Test Organization**: Tests mirror source code structure for easy navigation
 
@@ -480,30 +556,42 @@ predictions = pipeline.predict(test_df)
 
 **Test Modules**:
 
-1. **Configuration Tests** (`tests/test_config/` - 45 tests):
+1. **Configuration Tests** (`tests/test_config/` - 44 tests):
    - `test_data_config.py` (16 tests): DataConfig constants, get_data_path(), get_random_seed(), get_split_config()
-   - `test_model_config.py` (20 tests): FeatureListsConfig.load(), ModelConfig.get_param_grid(), hyperparameter loading
+   - `test_model_config.py` (19 tests): FeatureListsConfig.load(), ModelConfig.get_param_grid(), hyperparameter loading
    - `test_training_config.py` (9 tests): CV strategy (StratifiedKFold), threshold targets, random seed handling
 
-2. **Data Loading Tests** (`tests/test_data/` - 13 tests):
+2. **Data Loading Tests** (`tests/test_data/` - 12 tests):
    - `test_loader.py`: load_and_split_data() with correct ratios, stratification, no data leakage, custom parameters
 
-3. **EDA Utility Tests** (`tests/test_eda/` - 45 tests):
-   - `test_data_utils.py` (11 tests): split_train_val_test(), analyze_target_stats(), analyze_feature_stats()
-   - `test_eda_utils.py` (14 tests): VIF, correlations, mutual information calculations
+3. **EDA Utility Tests** (`tests/test_eda/` - 68 tests):
+   - `test_data_utils.py` (21 tests): load_data(), download_data_csv(), split_train_val_test(), analyze_target_stats()
+   - `test_eda_utils.py` (27 tests): VIF, correlations, mutual information, temporal patterns, categorical fraud rates
    - `test_feature_engineering.py` (20 tests): Timezone conversion, temporal features, interaction features
 
 4. **Evaluation Tests** (`tests/test_evaluation/` - 26 tests):
    - `test_metrics.py` (14 tests): calculate_metrics(), evaluate_model(), perfect predictions, verbose control
    - `test_thresholds.py` (12 tests): optimize_thresholds(), default/custom targets, threshold config structure
 
-5. **Preprocessing Tests** (`tests/test_preprocessing/` - 59 tests):
+5. **Preprocessing Tests** (`tests/test_preprocessing/` - 61 tests):
    - `test_config.py` (8 tests): FeatureConfig creation, save/load, JSON structure, quantile calculation
    - `test_features.py` (15 tests): Individual feature functions, edge cases, timezone validation
    - `test_pipelines.py` (18 tests): PreprocessingPipelineFactory, tree/logistic pipelines, model type aliases
-   - `test_transformer.py` (18 tests): Full pipeline execution, sklearn compatibility, save/load consistency
+   - `test_transformer.py` (20 tests): Full pipeline execution, sklearn compatibility, save/load consistency
 
-6. **API Tests** (`tests/test_api.py` - 24 tests):
+6. **Notebook 2 Utility Tests** (`tests/test_fd2_nb/` - 63 tests):
+   - `test_model_comparison.py` (16 tests): compare_models(), get_best_model(), plot functions
+   - `test_hyperparameter_tuning.py` (15 tests): create_search_object(), tune_with_logging()
+   - `test_cv_analysis.py` (25 tests): analyze_cv_results(), analyze_cv_train_val_gap(), analyze_iteration_performance()
+   - `test_bias_variance.py` (7 tests): analyze_cv_fold_variance()
+
+7. **Notebook 3 Utility Tests** (`tests/test_fd3_nb/` - 76 tests):
+   - `test_evaluation.py` (15 tests): evaluate_model(), compare_val_test_performance()
+   - `test_feature_importance.py` (12 tests): extract_feature_importance(), print_feature_importance_summary()
+   - `test_threshold_optimization.py` (23 tests): find_threshold_for_recall(), optimize_thresholds(), comparison DataFrame
+   - `test_deployment.py` (26 tests): save_production_model(), save_threshold_config(), save_model_metadata()
+
+8. **API Tests** (`tests/test_api.py` - 24 tests):
    - Endpoint testing (root, health, model info, predict)
    - Request/response validation
    - Error handling scenarios
@@ -521,6 +609,8 @@ uv run pytest tests/test_data/ -v          # Data loading tests
 uv run pytest tests/test_eda/ -v           # EDA utility tests
 uv run pytest tests/test_evaluation/ -v    # Evaluation tests
 uv run pytest tests/test_preprocessing/ -v # Preprocessing tests
+uv run pytest tests/test_fd2_nb/ -v        # Notebook 2 utility tests
+uv run pytest tests/test_fd3_nb/ -v        # Notebook 3 utility tests
 uv run pytest tests/test_api.py -v         # API tests
 
 # Run with coverage
@@ -530,7 +620,7 @@ uv run pytest --cov=src --cov-report=html
 uv run pytest tests/test_config/test_model_config.py -v
 ```
 
-**Test Results**: All 212 tests passing with 100% success rate
+**Test Results**: All 374 tests passing with 100% success rate
 
 ### Notebook Integration
 
@@ -1766,19 +1856,56 @@ Functions are organized by module location for easy reference.
 - `optimize_thresholds(model, X_val, y_val)`: Find optimal thresholds for recall targets
 - `calculate_metrics(y_true, y_pred, y_pred_proba)`: Calculate PR-AUC, ROC-AUC, F1, Precision, Recall
 
-### Notebook Functions (In-Notebook, Pending Extraction)
+### Notebook 2 Utilities (`src/fd2_nb/`)
 
-The following functions are currently defined in notebooks and will be extracted to `src/fd2_nb/` and `src/fd3_nb/` in future refactoring:
+#### Model Comparison (`src/fd2_nb/model_comparison.py`)
+- `compare_models(results_dict)`: Side-by-side model performance comparison
+- `get_best_model(results_dict, metric)`: Select best model by specified metric
+- `plot_comprehensive_comparison(results_dict)`: Full visualization of all metrics
+- `plot_model_comparison(results_dict)`: Simple bar chart comparison
 
-#### Hyperparameter Tuning (fd2 notebook)
+#### Hyperparameter Tuning (`src/fd2_nb/hyperparameter_tuning.py`)
 - `create_search_object()`: Creates GridSearchCV or RandomizedSearchCV
-- `tune_with_logging()`: Executes search with logging to `models/logs/`
-- `analyze_cv_results()`: Analyzes CV results, identifies best parameters
-- `train_and_evaluate_model()`: Trains and evaluates model pipeline
-- `compare_models()`: Side-by-side model comparison
+- `tune_with_logging()`: Executes search with detailed logging to `models/logs/`
+- `extract_cv_metrics()`: Extract metrics from CV results
+- `get_best_params_summary()`: Format best parameters for display
 
-#### Threshold Optimization (fd3 notebook)
-- `find_threshold_for_recall()`: Find optimal threshold for target recall
+#### CV Analysis (`src/fd2_nb/cv_analysis.py`)
+- `analyze_cv_results()`: Production-focused CV results analysis
+- `analyze_cv_train_val_gap()`: Detect overfitting via train-val gap
+- `analyze_iteration_performance()`: Analyze XGBoost iteration curves
+- `get_cv_statistics()`: Extract statistics from CV results
+
+#### Bias-Variance (`src/fd2_nb/bias_variance.py`)
+- `analyze_cv_fold_variance()`: Analyze variance across CV folds
+
+### Notebook 3 Utilities (`src/fd3_nb/`)
+
+#### Evaluation (`src/fd3_nb/evaluation.py`)
+- `evaluate_model(model, X, y)`: Comprehensive model evaluation
+- `compare_val_test_performance()`: Compare validation vs test metrics
+
+#### Visualization (`src/fd3_nb/visualization.py`)
+- `plot_roc_pr_curves()`: ROC and PR curve visualization
+- `plot_feature_importance()`: Feature importance bar chart
+- `plot_threshold_optimization()`: Threshold vs metrics curves
+
+#### Threshold Optimization (`src/fd3_nb/threshold_optimization.py`)
+- `find_threshold_for_recall()`: Find threshold for target recall
+- `find_optimal_f1_threshold()`: Find threshold maximizing F1
+- `find_target_performance_threshold()`: Find threshold meeting precision constraint
+- `optimize_thresholds()`: Complete threshold optimization pipeline
+- `create_threshold_comparison_df()`: Create comparison DataFrame
+
+#### Feature Importance (`src/fd3_nb/feature_importance.py`)
+- `extract_feature_importance()`: Extract importance from XGBoost pipeline
+- `print_feature_importance_summary()`: Print formatted summary
+
+#### Deployment (`src/fd3_nb/deployment.py`)
+- `save_production_model()`: Save trained model with joblib
+- `save_threshold_config()`: Save threshold configuration JSON
+- `save_model_metadata()`: Save model metadata JSON
+- `print_deployment_summary()`: Print deployment summary
 
 ## Important Notes
 

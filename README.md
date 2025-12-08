@@ -154,19 +154,33 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │   │       ├── thresholds.py           # optimize_thresholds()
 │   │       └── __init__.py             # Package exports
 │   ├── fd1_nb/                         # Notebook 1 utility functions (EDA & FE)
+│   │   ├── __init__.py                 # Package exports (21 functions)
 │   │   ├── data_utils.py               # Data loading, splitting, analysis
 │   │   ├── eda_utils.py                # EDA functions (VIF, correlations, MI)
 │   │   └── feature_engineering.py      # Feature engineering utilities
-│   ├── fd2_nb/                         # Notebook 2 utility functions (placeholder)
-│   └── fd3_nb/                         # Notebook 3 utility functions (placeholder)
-├── tests/                              # Test suite (212 passing tests)
+│   ├── fd2_nb/                         # Notebook 2 utility functions (Model Selection & Tuning)
+│   │   ├── __init__.py                 # Package exports (14 functions)
+│   │   ├── model_comparison.py         # Model comparison and visualization
+│   │   ├── hyperparameter_tuning.py    # GridSearchCV/RandomizedSearchCV utilities
+│   │   ├── cv_analysis.py              # CV results analysis and train-val gap detection
+│   │   └── bias_variance.py            # Bias-variance diagnostics
+│   └── fd3_nb/                         # Notebook 3 utility functions (Evaluation & Deployment)
+│       ├── __init__.py                 # Package exports (17 functions)
+│       ├── evaluation.py               # Model evaluation and performance comparison
+│       ├── visualization.py            # ROC/PR curves and feature importance plots
+│       ├── threshold_optimization.py   # Threshold optimization strategies
+│       ├── feature_importance.py       # Feature importance extraction
+│       └── deployment.py               # Deployment artifact generation
+├── tests/                              # Test suite (374 passing tests)
 │   ├── conftest.py                     # Shared pytest fixtures
 │   ├── test_api.py                     # API integration tests (24 tests)
-│   ├── test_config/                    # Shared config tests (45 tests)
-│   ├── test_data/                      # Data loading tests (13 tests)
-│   ├── test_eda/                       # EDA utility tests (45 tests)
+│   ├── test_config/                    # Shared config tests (44 tests)
+│   ├── test_data/                      # Data loading tests (12 tests)
+│   ├── test_eda/                       # EDA utility tests (68 tests)
 │   ├── test_evaluation/                # Evaluation tests (26 tests)
-│   └── test_preprocessing/             # Preprocessing tests (59 tests)
+│   ├── test_fd2_nb/                    # Notebook 2 utility tests (63 tests)
+│   ├── test_fd3_nb/                    # Notebook 3 utility tests (76 tests)
+│   └── test_preprocessing/             # Preprocessing tests (61 tests)
 ├── models/                             # Model artifacts (tracked in git)
 │   ├── xgb_fraud_detector.joblib       # Trained XGBoost model (~156KB)
 │   ├── transformer_config.json         # Feature engineering configuration
@@ -919,27 +933,38 @@ Run comprehensive test suite to verify all components: shared infrastructure, pr
 
 ### Test Organization
 
-The test suite mirrors the source code structure with 212 passing tests:
+The test suite mirrors the source code structure with 374 passing tests:
 
 ```
 tests/
 ├── test_api.py              # API integration tests (24 tests)
-├── test_config/             # Shared config tests (45 tests)
+├── test_config/             # Shared config tests (44 tests)
 │   ├── test_data_config.py       # DataConfig (16 tests)
-│   ├── test_model_config.py      # ModelConfig, FeatureListsConfig (20 tests)
+│   ├── test_model_config.py      # ModelConfig, FeatureListsConfig (19 tests)
 │   └── test_training_config.py   # TrainingConfig (9 tests)
-├── test_data/               # Data loading tests (13 tests)
+├── test_data/               # Data loading tests (12 tests)
 │   └── test_loader.py            # load_and_split_data()
-├── test_eda/                # EDA utility tests (45 tests)
+├── test_eda/                # EDA utility tests (68 tests)
 │   ├── test_data_utils.py        # Data loading/splitting utilities
 │   ├── test_eda_utils.py         # VIF, correlations, mutual information
 │   └── test_feature_engineering.py # Feature engineering functions
 ├── test_evaluation/         # Evaluation tests (26 tests)
 │   ├── test_metrics.py           # calculate_metrics, evaluate_model (14 tests)
 │   └── test_thresholds.py        # optimize_thresholds (12 tests)
-└── test_preprocessing/      # Preprocessing tests (59 tests)
+├── test_fd2_nb/             # Notebook 2 utility tests (63 tests)
+│   ├── test_bias_variance.py     # Bias-variance analysis (7 tests)
+│   ├── test_cv_analysis.py       # CV results analysis (25 tests)
+│   ├── test_hyperparameter_tuning.py # Tuning utilities (17 tests)
+│   └── test_model_comparison.py  # Model comparison (14 tests)
+├── test_fd3_nb/             # Notebook 3 utility tests (76 tests)
+│   ├── test_deployment.py        # Model deployment utilities (19 tests)
+│   ├── test_evaluation.py        # Model evaluation (10 tests)
+│   ├── test_feature_importance.py # Feature importance extraction (10 tests)
+│   ├── test_threshold_optimization.py # Threshold optimization (22 tests)
+│   └── test_visualization.py     # Visualization functions (15 tests)
+└── test_preprocessing/      # Preprocessing tests (61 tests)
     ├── test_config.py            # FeatureConfig (8 tests)
-    ├── test_features.py          # Feature engineering functions (15 tests)
+    ├── test_features.py          # Feature engineering functions (17 tests)
     ├── test_pipelines.py         # PreprocessingPipelineFactory (18 tests)
     └── test_transformer.py       # FraudFeatureTransformer (18 tests)
 ```
@@ -963,8 +988,17 @@ uv run pytest tests/test_config/ -v
 # Data loading tests
 uv run pytest tests/test_data/ -v
 
+# EDA utility tests
+uv run pytest tests/test_eda/ -v
+
 # Evaluation tests
 uv run pytest tests/test_evaluation/ -v
+
+# fd2 notebook utility tests
+uv run pytest tests/test_fd2_nb/ -v
+
+# fd3 notebook utility tests
+uv run pytest tests/test_fd3_nb/ -v
 
 # Preprocessing tests
 uv run pytest tests/test_preprocessing/ -v
@@ -987,12 +1021,14 @@ uv run pytest tests/test_preprocessing/test_transformer.py -v --tb=short
 
 ### Test Coverage Summary
 
-**212 total tests** covering:
-- ✅ **Shared Configuration** (45 tests): DataConfig, ModelConfig, TrainingConfig
-- ✅ **Data Loading** (13 tests): load_and_split_data with stratification validation
-- ✅ **EDA Utilities** (45 tests): Data utils, EDA functions, feature engineering
+**374 total tests** covering:
+- ✅ **Shared Configuration** (44 tests): DataConfig, ModelConfig, TrainingConfig
+- ✅ **Data Loading** (12 tests): load_and_split_data with stratification validation
+- ✅ **EDA Utilities** (68 tests): Data utils, EDA functions, feature engineering
 - ✅ **Evaluation** (26 tests): Metrics calculation and threshold optimization
-- ✅ **Preprocessing** (59 tests): FeatureConfig, feature engineering functions, pipelines, transformer
+- ✅ **fd2 Notebook Utilities** (63 tests): Model comparison, hyperparameter tuning, CV analysis, bias-variance
+- ✅ **fd3 Notebook Utilities** (76 tests): Evaluation, visualization, threshold optimization, deployment
+- ✅ **Preprocessing** (61 tests): FeatureConfig, feature engineering functions, pipelines, transformer
 - ✅ **API** (24 tests): Endpoints, validation, error handling, threshold strategies
 
 **Key Test Features**:
