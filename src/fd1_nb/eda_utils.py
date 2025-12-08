@@ -16,6 +16,20 @@ from sklearn.metrics import mutual_info_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
+def _save_figure(fig: plt.Figure, save_path: Optional[str], dpi: int = 150) -> None:
+    """
+    Save figure to disk if save_path is provided.
+
+    Args:
+        fig: Matplotlib figure to save
+        save_path: Path to save the figure (if None, figure is not saved)
+        dpi: Resolution for saved figure (default: 150)
+    """
+    if save_path:
+        fig.savefig(save_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+        print(f"  Figure saved: {save_path}")
+
+
 def calculate_mi_scores(
     df: pd.DataFrame,
     categorical_features: List[str],
@@ -126,7 +140,8 @@ def plot_numeric_distributions(
     figsize: Tuple[int, int] = (14, 12),
     bins: int = 50,
     ncols: int = 2,
-    show_stats: bool = True
+    show_stats: bool = True,
+    save_path: Optional[str] = None
 ) -> None:
     """
     Visualize distributions of numeric features with histograms.
@@ -140,12 +155,14 @@ def plot_numeric_distributions(
         bins: Number of bins for histograms
         ncols: Number of columns in subplot grid
         show_stats: If True, display mean and median lines with legend
+        save_path: Optional path to save the figure
 
     Returns:
         None (displays plot)
 
     Example:
         >>> plot_numeric_distributions(df, ['amount', 'age', 'distance'], bins=30)
+        >>> plot_numeric_distributions(df, ['amount'], save_path='images/fd1/numeric_distributions.png')
     """
     nrows = int(np.ceil(len(numeric_features) / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
@@ -170,6 +187,7 @@ def plot_numeric_distributions(
         fig.delaxes(axes[idx])
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
 
@@ -179,7 +197,8 @@ def analyze_vif(
     vif_threshold_moderate: float = 5.0,
     vif_threshold_high: float = 10.0,
     figsize: Tuple[int, int] = (10, 5),
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Calculate and visualize VIF for multicollinearity detection.
@@ -194,6 +213,7 @@ def analyze_vif(
         vif_threshold_high: VIF value indicating high multicollinearity (default: 10.0)
         figsize: Figure size for plot
         verbose: If True, print interpretation and findings
+        save_path: Optional path to save the figure
 
     Returns:
         pd.DataFrame: VIF results with columns ['feature', 'VIF']
@@ -230,17 +250,18 @@ def analyze_vif(
         print(f"- VIF > {vif_threshold_high}: High multicollinearity (consider removing)")
 
     # Visualization
-    plt.figure(figsize=figsize)
-    plt.barh(vif_df['feature'], vif_df['VIF'], color='coral', edgecolor='black')
-    plt.xlabel('VIF Value', fontsize=12)
-    plt.ylabel('Feature', fontsize=12)
-    plt.title('Variance Inflation Factor (VIF) - Multicollinearity Check', fontsize=13, fontweight='bold')
-    plt.axvline(x=vif_threshold_moderate, color='orange', linestyle='--', linewidth=2,
-                label=f'VIF = {vif_threshold_moderate} (Moderate)')
-    plt.axvline(x=vif_threshold_high, color='red', linestyle='--', linewidth=2,
-                label=f'VIF = {vif_threshold_high} (High)')
-    plt.legend()
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.barh(vif_df['feature'], vif_df['VIF'], color='coral', edgecolor='black')
+    ax.set_xlabel('VIF Value', fontsize=12)
+    ax.set_ylabel('Feature', fontsize=12)
+    ax.set_title('Variance Inflation Factor (VIF) - Multicollinearity Check', fontsize=13, fontweight='bold')
+    ax.axvline(x=vif_threshold_moderate, color='orange', linestyle='--', linewidth=2,
+               label=f'VIF = {vif_threshold_moderate} (Moderate)')
+    ax.axvline(x=vif_threshold_high, color='red', linestyle='--', linewidth=2,
+               label=f'VIF = {vif_threshold_high} (High)')
+    ax.legend()
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
     if verbose:
@@ -262,7 +283,8 @@ def analyze_correlations(
     numeric_features: List[str],
     target_col: str,
     figsize: Tuple[int, int] = (10, 5),
-    verbose: bool = True
+    verbose: bool = True,
+    save_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Calculate and visualize correlations of numeric features with target variable.
@@ -276,6 +298,7 @@ def analyze_correlations(
         target_col: Name of the target column
         figsize: Figure size for plot
         verbose: If True, print correlation values and interpretation
+        save_path: Optional path to save the figure
 
     Returns:
         pd.DataFrame: Correlation results with columns ['feature', 'correlation']
@@ -303,14 +326,15 @@ def analyze_correlations(
         print("=" * 60)
 
     # Visualization
-    plt.figure(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     colors = ['green' if x > 0 else 'red' for x in corr_df['correlation']]
-    plt.barh(corr_df['feature'], corr_df['correlation'], color=colors, edgecolor='black')
-    plt.xlabel('Correlation Coefficient', fontsize=12)
-    plt.ylabel('Feature', fontsize=12)
-    plt.title(f'Correlation of Numeric Features with {target_col}', fontsize=13, fontweight='bold')
-    plt.axvline(x=0, color='black', linestyle='-', linewidth=1)
+    ax.barh(corr_df['feature'], corr_df['correlation'], color=colors, edgecolor='black')
+    ax.set_xlabel('Correlation Coefficient', fontsize=12)
+    ax.set_ylabel('Feature', fontsize=12)
+    ax.set_title(f'Correlation of Numeric Features with {target_col}', fontsize=13, fontweight='bold')
+    ax.axvline(x=0, color='black', linestyle='-', linewidth=1)
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
     if verbose:
@@ -328,7 +352,8 @@ def plot_box_plots(
     target_col: str,
     label_names: Optional[List[str]] = None,
     figsize: Tuple[int, int] = (14, 12),
-    ncols: int = 2
+    ncols: int = 2,
+    save_path: Optional[str] = None
 ) -> None:
     """
     Compare feature distributions between target classes using box plots.
@@ -343,6 +368,7 @@ def plot_box_plots(
         label_names: Optional list of label names for target classes (e.g., ['Normal', 'Fraud'])
         figsize: Figure size as (width, height) tuple
         ncols: Number of columns in subplot grid
+        save_path: Optional path to save the figure
 
     Returns:
         None (displays plot)
@@ -371,6 +397,7 @@ def plot_box_plots(
 
     plt.suptitle('')
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
     print("\nBox Plot Interpretation:")
@@ -385,7 +412,8 @@ def analyze_temporal_patterns(
     target_col: str,
     baseline_rate: float,
     figsize: Tuple[int, int] = (16, 10),
-    risk_threshold: float = 1.2
+    risk_threshold: float = 1.2,
+    save_path: Optional[str] = None
 ) -> None:
     """
     Analyze and visualize target patterns over time dimensions.
@@ -400,6 +428,7 @@ def analyze_temporal_patterns(
         baseline_rate: Baseline target rate for reference line
         figsize: Figure size for 2x2 subplot grid
         risk_threshold: Multiplier for identifying high-risk periods (default: 1.2 = 20% above baseline)
+        save_path: Optional path to save the figure
 
     Returns:
         None (displays plot and prints insights)
@@ -469,6 +498,7 @@ def analyze_temporal_patterns(
     ax.legend()
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
     # Print insights
@@ -557,7 +587,8 @@ def plot_categorical_fraud_rates(
     target_col: str,
     baseline_rate: float,
     figsize: Tuple[int, int] = (16, 16),
-    ncols: int = 2
+    ncols: int = 2,
+    save_path: Optional[str] = None
 ) -> None:
     """
     Visualize target rates for categorical features with bar charts.
@@ -572,6 +603,7 @@ def plot_categorical_fraud_rates(
         baseline_rate: Baseline target rate for reference line
         figsize: Figure size as (width, height) tuple
         ncols: Number of columns in subplot grid
+        save_path: Optional path to save the figure
 
     Returns:
         None (displays plot)
@@ -600,6 +632,7 @@ def plot_categorical_fraud_rates(
         fig.delaxes(axes[idx])
 
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
     print("\nVisualization Insight:")
@@ -612,7 +645,8 @@ def analyze_mutual_information(
     categorical_features: List[str],
     target_col: str,
     figsize: Tuple[int, int] = (10, 6),
-    mi_threshold: float = 0.1
+    mi_threshold: float = 0.1,
+    save_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Calculate and visualize mutual information scores for categorical features.
@@ -626,6 +660,7 @@ def analyze_mutual_information(
         target_col: Name of the target column
         figsize: Figure size for plot
         mi_threshold: Threshold for meaningful predictive value (default: 0.1)
+        save_path: Optional path to save the figure
 
     Returns:
         pd.DataFrame: MI results with columns ['feature', 'mi_score']
@@ -656,12 +691,13 @@ def analyze_mutual_information(
     print(f"- MI > {mi_threshold} typically indicates meaningful predictive value")
 
     # Visualization
-    plt.figure(figsize=figsize)
-    plt.barh(mi_df['feature'], mi_df['mi_score'], color='teal', edgecolor='black')
-    plt.xlabel('Mutual Information Score', fontsize=12)
-    plt.ylabel('Feature', fontsize=12)
-    plt.title(f'Mutual Information: Categorical Features vs. {target_col}', fontsize=13, fontweight='bold')
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.barh(mi_df['feature'], mi_df['mi_score'], color='teal', edgecolor='black')
+    ax.set_xlabel('Mutual Information Score', fontsize=12)
+    ax.set_ylabel('Feature', fontsize=12)
+    ax.set_title(f'Mutual Information: Categorical Features vs. {target_col}', fontsize=13, fontweight='bold')
     plt.tight_layout()
+    _save_figure(fig, save_path)
     plt.show()
 
     return mi_df
