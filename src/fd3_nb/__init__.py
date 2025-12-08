@@ -27,6 +27,7 @@ from .visualization import (
 from .threshold_optimization import (
     find_threshold_for_recall,
     find_optimal_f1_threshold,
+    find_target_performance_threshold,
     optimize_thresholds,
     create_threshold_comparison_df,
 )
@@ -54,6 +55,7 @@ __all__ = [
     # Threshold optimization
     'find_threshold_for_recall',
     'find_optimal_f1_threshold',
+    'find_target_performance_threshold',
     'optimize_thresholds',
     'create_threshold_comparison_df',
     # Feature importance

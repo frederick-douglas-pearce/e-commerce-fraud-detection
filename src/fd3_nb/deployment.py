@@ -8,7 +8,7 @@ and metadata for production deployment.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import joblib
 
@@ -41,6 +41,7 @@ def save_production_model(
 
 def save_threshold_config(
     optimal_f1_result: Dict[str, Any],
+    target_performance_result: Optional[Dict[str, Any]],
     threshold_results: List[Dict[str, Any]],
     model_dir: Path,
     filename: str = "threshold_config.json"
@@ -50,6 +51,7 @@ def save_threshold_config(
 
     Args:
         optimal_f1_result: Dict with optimal F1 threshold results
+        target_performance_result: Dict with target performance threshold results (or None)
         threshold_results: List of dicts with recall-targeted threshold results
         model_dir: Directory to save config
         filename: Output filename
@@ -57,50 +59,69 @@ def save_threshold_config(
     Returns:
         Path to saved config
     """
+    optimized_thresholds = {
+        'optimal_f1': {
+            'threshold': float(optimal_f1_result['threshold']),
+            'precision': float(optimal_f1_result['precision']),
+            'recall': float(optimal_f1_result['recall']),
+            'f1': float(optimal_f1_result['f1']),
+            'description': 'Optimal F1 score - best precision-recall balance'
+        }
+    }
+
+    # Add target performance threshold if available
+    if target_performance_result is not None:
+        min_prec = target_performance_result.get('min_precision', 0.70)
+        optimized_thresholds['target_performance'] = {
+            'threshold': float(target_performance_result['threshold']),
+            'precision': float(target_performance_result['precision']),
+            'recall': float(target_performance_result['recall']),
+            'f1': float(target_performance_result['f1']),
+            'min_precision_constraint': min_prec,
+            'description': f'Max recall with >={min_prec*100:.0f}% precision (RECOMMENDED)'
+        }
+
+    # Add recall-targeted thresholds
+    optimized_thresholds['conservative_90pct_recall'] = {
+        'threshold': float(threshold_results[0]['threshold']),
+        'target_recall': 0.90,
+        'achieved_recall': float(threshold_results[0]['recall']),
+        'precision': float(threshold_results[0]['precision']),
+        'f1': float(threshold_results[0]['f1']),
+        'description': 'Catch most fraud (90% recall), accept more false positives'
+    }
+    optimized_thresholds['balanced_85pct_recall'] = {
+        'threshold': float(threshold_results[1]['threshold']),
+        'target_recall': 0.85,
+        'achieved_recall': float(threshold_results[1]['recall']),
+        'precision': float(threshold_results[1]['precision']),
+        'f1': float(threshold_results[1]['f1']),
+        'description': 'Balanced precision-recall trade-off (85% recall target)'
+    }
+    optimized_thresholds['aggressive_80pct_recall'] = {
+        'threshold': float(threshold_results[2]['threshold']),
+        'target_recall': 0.80,
+        'achieved_recall': float(threshold_results[2]['recall']),
+        'precision': float(threshold_results[2]['precision']),
+        'f1': float(threshold_results[2]['f1']),
+        'description': 'Prioritize precision (80% recall), reduce false positives'
+    }
+
     threshold_config = {
         'default_threshold': 0.5,
-        'optimized_thresholds': {
-            'optimal_f1': {
-                'threshold': float(optimal_f1_result['threshold']),
-                'precision': float(optimal_f1_result['precision']),
-                'recall': float(optimal_f1_result['recall']),
-                'f1': float(optimal_f1_result['f1']),
-                'description': 'Optimal F1 score - best precision-recall balance (recommended default)'
-            },
-            'conservative_90pct_recall': {
-                'threshold': float(threshold_results[0]['threshold']),
-                'target_recall': 0.90,
-                'achieved_recall': float(threshold_results[0]['recall']),
-                'precision': float(threshold_results[0]['precision']),
-                'f1': float(threshold_results[0]['f1']),
-                'description': 'Catch most fraud (90% recall), accept more false positives'
-            },
-            'balanced_85pct_recall': {
-                'threshold': float(threshold_results[1]['threshold']),
-                'target_recall': 0.85,
-                'achieved_recall': float(threshold_results[1]['recall']),
-                'precision': float(threshold_results[1]['precision']),
-                'f1': float(threshold_results[1]['f1']),
-                'description': 'Balanced precision-recall trade-off (85% recall target)'
-            },
-            'aggressive_80pct_recall': {
-                'threshold': float(threshold_results[2]['threshold']),
-                'target_recall': 0.80,
-                'achieved_recall': float(threshold_results[2]['recall']),
-                'precision': float(threshold_results[2]['precision']),
-                'f1': float(threshold_results[2]['f1']),
-                'description': 'Prioritize precision (80% recall), reduce false positives'
-            }
-        },
-        'note': 'Thresholds optimized on test set. optimal_f1 maximizes F1 score and is the recommended default.'
+        'recommended_threshold': 'target_performance' if target_performance_result else 'optimal_f1',
+        'optimized_thresholds': optimized_thresholds,
+        'note': 'target_performance maximizes recall while meeting precision constraint (recommended for production)'
     }
 
     config_path = model_dir / filename
     with open(config_path, 'w') as f:
         json.dump(threshold_config, f, indent=2)
 
+    num_strategies = len(optimized_thresholds)
     print(f"✓ Threshold configuration saved to: {config_path}")
-    print(f"  • 4 threshold strategies available (including optimal F1)")
+    print(f"  • {num_strategies} threshold strategies available")
+    print(f"  • Recommended: {threshold_config['recommended_threshold']}")
 
     return config_path
 

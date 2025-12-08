@@ -77,12 +77,53 @@ def find_optimal_f1_threshold(
     )
 
 
+def find_target_performance_threshold(
+    precisions: np.ndarray,
+    recalls: np.ndarray,
+    thresholds: np.ndarray,
+    min_precision: float = 0.70
+) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+    """
+    Find threshold that maximizes recall while maintaining minimum precision.
+
+    This is useful when you have a target precision constraint (e.g., at least 70%
+    of flagged transactions must be actual fraud) and want to maximize fraud
+    detection (recall) within that constraint.
+
+    Args:
+        precisions: Precision values from precision_recall_curve
+        recalls: Recall values from precision_recall_curve
+        thresholds: Threshold values from precision_recall_curve
+        min_precision: Minimum required precision (default: 0.70 for 70%)
+
+    Returns:
+        Tuple of (threshold, precision, recall, f1) or (None, None, None, None) if not found
+    """
+    # Find all thresholds where precision meets the minimum
+    valid_mask = precisions[:-1] >= min_precision
+    valid_indices = np.where(valid_mask)[0]
+
+    if len(valid_indices) == 0:
+        return None, None, None, None
+
+    # Among valid thresholds, find the one with MAXIMUM recall
+    best_idx = valid_indices[np.argmax(recalls[:-1][valid_indices])]
+
+    threshold = thresholds[best_idx]
+    precision = precisions[best_idx]
+    recall = recalls[best_idx]
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return threshold, precision, recall, f1
+
+
 def optimize_thresholds(
     y_true: pd.Series,
     y_pred_proba: np.ndarray,
     recall_targets: List[float] = [0.90, 0.85, 0.80],
+    min_precision_target: float = 0.70,
     verbose: bool = True
-) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
     """
     Optimize classification thresholds for different business requirements.
 
@@ -90,10 +131,11 @@ def optimize_thresholds(
         y_true: True labels
         y_pred_proba: Predicted probabilities
         recall_targets: List of target recall levels
+        min_precision_target: Minimum precision for target performance threshold
         verbose: If True, print detailed results
 
     Returns:
-        Tuple of (optimal_f1_result, threshold_results_list)
+        Tuple of (optimal_f1_result, target_performance_result, threshold_results_list)
     """
     # Calculate precision-recall curve
     precisions, recalls, thresholds = precision_recall_curve(y_true, y_pred_proba)
@@ -141,10 +183,52 @@ def optimize_thresholds(
         print(f"\nℹ️  This threshold maximizes F1 score - the harmonic mean of precision and recall")
         print(f"   It provides the best overall balance without targeting a specific recall level")
 
-    # 2. Find recall-targeted thresholds
+    # 2. Find target performance threshold (max recall with min precision constraint)
     if verbose:
         print("\n" + "=" * 100)
-        print("2. RECALL-TARGETED THRESHOLDS")
+        print(f"2. TARGET PERFORMANCE THRESHOLD (Max Recall with >={min_precision_target*100:.0f}% Precision)")
+        print("-" * 100)
+
+    target_perf_threshold, target_perf_precision, target_perf_recall, target_perf_f1 = \
+        find_target_performance_threshold(precisions, recalls, thresholds, min_precision_target)
+
+    target_performance_result = None
+    if target_perf_threshold is not None:
+        # Calculate confusion matrix
+        y_pred_target = (y_pred_proba >= target_perf_threshold).astype(int)
+        cm = confusion_matrix(y_true, y_pred_target)
+        tn, fp, fn, tp = cm.ravel()
+
+        target_performance_result = {
+            'name': 'target_performance',
+            'threshold': target_perf_threshold,
+            'precision': target_perf_precision,
+            'recall': target_perf_recall,
+            'f1': target_perf_f1,
+            'min_precision': min_precision_target,
+            'tn': tn,
+            'fp': fp,
+            'fn': fn,
+            'tp': tp
+        }
+
+        if verbose:
+            print(f"Target Performance Threshold: {target_perf_threshold:.4f}")
+            print(f"  • Recall:            {target_perf_recall:.4f} ({target_perf_recall*100:.2f}%) MAXIMIZED")
+            print(f"  • Precision:         {target_perf_precision:.4f} ({target_perf_precision*100:.2f}%) >= {min_precision_target*100:.0f}% ✓")
+            print(f"  • F1 Score:          {target_perf_f1:.4f}")
+            print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp:,}")
+            print(f"  • False Positive Rate: {fp/(fp+tn)*100:.2f}%")
+            print(f"  • False Negative Rate: {fn/(fn+tp)*100:.2f}%")
+            print(f"\nℹ️  This threshold maximizes fraud detection (recall) while ensuring")
+            print(f"   at least {min_precision_target*100:.0f}% of flagged transactions are actual fraud")
+    elif verbose:
+        print(f"WARNING: No threshold found that meets the minimum precision of {min_precision_target*100:.0f}%")
+
+    # 3. Find recall-targeted thresholds
+    if verbose:
+        print("\n" + "=" * 100)
+        print("3. RECALL-TARGETED THRESHOLDS")
         print("=" * 100)
 
     threshold_results = []
@@ -186,11 +270,12 @@ def optimize_thresholds(
     if verbose:
         print("=" * 100)
 
-    return optimal_f1_result, threshold_results
+    return optimal_f1_result, target_performance_result, threshold_results
 
 
 def create_threshold_comparison_df(
     optimal_f1_result: Dict[str, Any],
+    target_performance_result: Optional[Dict[str, Any]],
     threshold_results: List[Dict[str, Any]]
 ) -> pd.DataFrame:
     """
@@ -198,6 +283,7 @@ def create_threshold_comparison_df(
 
     Args:
         optimal_f1_result: Dict with optimal F1 threshold results
+        target_performance_result: Dict with target performance threshold results (or None)
         threshold_results: List of dicts with recall-targeted threshold results
 
     Returns:
@@ -214,6 +300,19 @@ def create_threshold_comparison_df(
             'fn': optimal_f1_result['fn']
         }
     ]
+
+    # Add target performance threshold if available
+    if target_performance_result is not None:
+        min_prec = target_performance_result.get('min_precision', 0.70)
+        rows.append({
+            'strategy': f'Target Performance (>={min_prec*100:.0f}% Prec)',
+            'threshold': target_performance_result['threshold'],
+            'precision': target_performance_result['precision'],
+            'recall': target_performance_result['recall'],
+            'f1': target_performance_result['f1'],
+            'fp': target_performance_result['fp'],
+            'fn': target_performance_result['fn']
+        })
 
     strategy_names = {
         0.90: 'Conservative (90% Recall)',
