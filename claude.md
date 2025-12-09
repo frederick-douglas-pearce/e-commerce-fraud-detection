@@ -796,9 +796,10 @@ The API loads the following artifacts on startup from `models/` directory:
    - Performance metrics (PR-AUC, ROC-AUC, F1, Precision, Recall)
    - Dataset information
 
-5. **`feature_lists.json`** (tracked in git)
-   - List of 30 engineered features (categorized)
-   - Feature names and descriptions
+5. **`feature_lists.json`** (tracked in git, created in fd1 notebook)
+   - Feature categorization by dtype for preprocessing pipeline
+   - Categories: categorical (1), continuous_numeric (12), binary (17)
+   - Used by fd2 and fd3 notebooks for consistent feature handling
 
 ### Usage
 
@@ -1703,9 +1704,10 @@ The project uses a modular three-notebook workflow with clear separation of conc
    - Top 10 feature importance scores
    - Dataset information (sample counts, feature counts)
 
-5. **feature_lists.json** (tracked in git)
-   - List of 30 engineered features (categorized)
-   - Feature names for API documentation
+5. **feature_lists.json** (tracked in git, created in fd1 notebook)
+   - Feature categorization by dtype for preprocessing pipeline
+   - Categories: categorical (1), continuous_numeric (12), binary (17)
+   - Used by fd2 and fd3 notebooks for consistent feature handling
 
 **Status**: ✅ Model fully trained, evaluated, and ready for production deployment via FastAPI
 
@@ -1713,11 +1715,11 @@ The project uses a modular three-notebook workflow with clear separation of conc
 
 ```
 notebooks/fd1_EDA_FE.ipynb
-    ↓ (saves models/transformer_config.json)
+    ↓ (saves models/transformer_config.json + models/feature_lists.json)
 notebooks/fd2_model_selection_tuning.ipynb
-    ↓ (saves models/best_params.json + models/validation_metrics.json)
+    ↓ (loads feature_lists.json, saves models/best_model.joblib + models/best_params.json + models/validation_metrics.json)
 notebooks/fd3_model_evaluation_deployment.ipynb
-    ↓ (saves models/*.joblib, models/*.json)
+    ↓ (loads feature_lists.json + best_model.joblib, saves models/threshold_config.json + models/model_metadata.json)
 Production Deployment
 ```
 

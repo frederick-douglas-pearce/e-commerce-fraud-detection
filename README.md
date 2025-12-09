@@ -375,10 +375,12 @@ This notebook contains:
   - Removed redundant features (UTC features, duplicate country fields)
   - Excluded low-signal features (merchant_category)
   - Prioritized interpretability and fraud scenario alignment
-6. **Production Configuration**: Generates `FraudFeatureTransformer` configuration for deployment
-  - Automatically creates `transformer_config.json` from training data
-  - Stores quantile thresholds (95th/75th percentiles) for feature engineering
-  - Saves 30 selected feature names with categorical groupings
+6. **Production Configuration**: Generates deployment configuration files
+  - `transformer_config.json` - Quantile thresholds (95th/75th percentiles) for feature engineering
+  - `feature_lists.json` - Feature categorization by dtype for preprocessing pipeline:
+    - Categorical (1): string features requiring OrdinalEncoder
+    - Continuous numeric (12): continuous/ordinal numeric features
+    - Binary (17): 0/1 flag features
   - Includes timezone mappings for 10 countries
   - Ensures consistent feature engineering between training and inference
 
@@ -427,7 +429,6 @@ This notebook contains:
 7. **Deployment Artifacts**: Saves configuration files to `models/`
    - `threshold_config.json` - Optimal thresholds for different strategies
    - `model_metadata.json` - Model version, hyperparameters, performance metrics
-   - `feature_lists.json` - Categorized feature names
 8. **Model Card**: Comprehensive documentation of model capabilities and limitations
 
 **Workflow Benefits**:
