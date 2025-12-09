@@ -228,6 +228,109 @@ def plot_importance_comparison(
     print(f"\n✓ Feature importance comparison plotted ({top_n} features)")
 
 
+def plot_shap_beeswarm(
+    shap_values: np.ndarray,
+    X: pd.DataFrame,
+    feature_names: List[str],
+    top_n: int = 20,
+    figsize: Tuple[int, int] = (12, 10),
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Plot SHAP beeswarm showing distribution of SHAP values colored by feature value.
+
+    This visualization shows how each feature affects predictions across all samples,
+    with color indicating whether the feature value was high (red) or low (blue).
+    This is the standard SHAP visualization that reveals non-linear relationships.
+
+    Args:
+        shap_values: SHAP values matrix (n_samples, n_features)
+        X: Original feature DataFrame (for getting feature values)
+        feature_names: List of feature names
+        top_n: Number of top features to show
+        figsize: Figure size
+        save_path: Optional path to save figure
+    """
+    # Get top features by mean absolute SHAP
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+    top_indices = np.argsort(mean_abs_shap)[::-1][:top_n]
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # For each feature, create a scatter of SHAP values
+    for i, feat_idx in enumerate(top_indices):
+        feat_name = feature_names[feat_idx]
+        shap_vals = shap_values[:, feat_idx]
+
+        # Get feature values and normalize to 0-1 for coloring
+        if feat_name in X.columns:
+            feat_vals = X[feat_name].values
+            # Handle categorical/string columns
+            if feat_vals.dtype == object or feat_vals.dtype.name == 'category':
+                # Convert to numeric codes
+                unique_vals = np.unique(feat_vals)
+                val_to_code = {v: i for i, v in enumerate(unique_vals)}
+                feat_vals = np.array([val_to_code[v] for v in feat_vals], dtype=float)
+        else:
+            # Handle features that might have been transformed
+            feat_vals = np.zeros(len(shap_vals))
+
+        # Normalize feature values to 0-1 for color mapping
+        feat_min, feat_max = float(feat_vals.min()), float(feat_vals.max())
+        if feat_max > feat_min:
+            feat_normalized = (feat_vals - feat_min) / (feat_max - feat_min)
+        else:
+            feat_normalized = np.zeros_like(feat_vals, dtype=float)
+
+        # Sample points for visualization (too many points makes plot unreadable)
+        n_samples = len(shap_vals)
+        if n_samples > 1000:
+            sample_idx = np.random.choice(n_samples, 1000, replace=False)
+        else:
+            sample_idx = np.arange(n_samples)
+
+        # Add jitter to y-position
+        y_jitter = np.random.normal(0, 0.15, len(sample_idx))
+
+        # Plot scatter with color based on feature value
+        scatter = ax.scatter(
+            shap_vals[sample_idx],
+            i + y_jitter,
+            c=feat_normalized[sample_idx],
+            cmap='RdBu_r',  # Red=high, Blue=low
+            alpha=0.5,
+            s=10,
+            vmin=0,
+            vmax=1
+        )
+
+    # Set y-axis labels
+    ax.set_yticks(range(top_n))
+    ax.set_yticklabels([feature_names[idx] for idx in top_indices])
+    ax.invert_yaxis()
+
+    # Add vertical line at 0
+    ax.axvline(x=0, color='gray', linestyle='-', linewidth=0.5)
+
+    ax.set_xlabel('SHAP Value (impact on model output)', fontsize=12)
+    ax.set_title(f'SHAP Beeswarm Plot - Top {top_n} Features\n'
+                 '(Red = high feature value, Blue = low feature value)',
+                 fontsize=14, fontweight='bold')
+    ax.grid(axis='x', alpha=0.3)
+
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax, shrink=0.6)
+    cbar.set_label('Feature Value\n(normalized)', fontsize=10)
+    cbar.set_ticks([0, 0.5, 1])
+    cbar.set_ticklabels(['Low', 'Mid', 'High'])
+
+    plt.tight_layout()
+    _save_figure(fig, save_path)
+    plt.show()
+
+    print(f"\n✓ SHAP beeswarm plot generated ({top_n} features shown)")
+
+
 def plot_threshold_optimization(
     precisions: np.ndarray,
     recalls: np.ndarray,

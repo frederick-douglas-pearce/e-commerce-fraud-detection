@@ -22,6 +22,7 @@ from .visualization import (
     plot_roc_pr_curves,
     plot_feature_importance,
     plot_shap_importance,
+    plot_shap_beeswarm,
     plot_importance_comparison,
     plot_threshold_optimization,
 )
@@ -58,6 +59,7 @@ __all__ = [
     'plot_roc_pr_curves',
     'plot_feature_importance',
     'plot_shap_importance',
+    'plot_shap_beeswarm',
     'plot_importance_comparison',
     'plot_threshold_optimization',
     # Threshold optimization
