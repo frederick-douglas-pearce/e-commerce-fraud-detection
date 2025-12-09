@@ -81,7 +81,7 @@ flowchart TB
 
         subgraph Model["XGBoost Classifier"]
             PRED[Prediction<br/>fraud_probability]
-            THR[Threshold Strategy<br/>80% / 85% / 90% recall]
+            THR[Threshold Strategy<br/>optimal_f1 / 80% / 85% / 90%]
         end
 
         subgraph Explain["SHAP Explainability"]
@@ -104,18 +104,31 @@ flowchart TB
     THR --> OUT
     TOP -.-> OUT
 
-    style Client fill:#e1f5fe
-    style API fill:#fff3e0
-    style Pipeline fill:#f3e5f5
-    style Model fill:#e8f5e9
-    style Explain fill:#fce4ec
-    style Response fill:#e1f5fe
+    style Client fill:#e1f5fe,color:#000
+    style API fill:#fff3e0,color:#000
+    style Pipeline fill:#f3e5f5,color:#000
+    style Model fill:#e8f5e9,color:#000
+    style Explain fill:#fce4ec,color:#000
+    style Response fill:#e1f5fe,color:#000
+    style REQ fill:#bbdefb,color:#000
+    style VAL fill:#ffe0b2,color:#000
+    style TZ fill:#e1bee7,color:#000
+    style TEMP fill:#e1bee7,color:#000
+    style AMT fill:#e1bee7,color:#000
+    style GEO fill:#e1bee7,color:#000
+    style SEC fill:#e1bee7,color:#000
+    style INT fill:#e1bee7,color:#000
+    style PRED fill:#c8e6c9,color:#000
+    style THR fill:#c8e6c9,color:#000
+    style SHAP fill:#f8bbd9,color:#000
+    style TOP fill:#f8bbd9,color:#000
+    style OUT fill:#bbdefb,color:#000
 ```
 
 **Key Components:**
 - **Feature Engineering**: Transforms 15 raw fields into 30 engineered features using production `FraudFeatureTransformer`
 - **XGBoost Model**: Tuned classifier with PR-AUC 0.87, optimized for fraud detection
-- **Threshold Strategies**: Configurable precision-recall trade-offs (80%, 85%, 90% recall targets)
+- **Threshold Strategies**: Configurable precision-recall trade-offs (optimal_f1 default, plus 80%, 85%, 90% recall targets)
 - **SHAP Explainability**: Optional per-prediction explanations showing top risk-increasing features
 
 ### Example Fraud Patterns Detected
