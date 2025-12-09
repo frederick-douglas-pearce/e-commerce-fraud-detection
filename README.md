@@ -403,8 +403,21 @@ This notebook contains:
 6. **Bias-Variance Analysis**: Train-validation gap and CV fold variance diagnostics
   - XGBoost iteration tracking to find optimal n_estimators
   - Model stability assessment across CV folds
+
+<p align="center">
+  <img src="notebooks/images/fd2/xgb_iteration_performance.png" alt="XGBoost Iteration Performance" width="700">
+</p>
+
+*The figure above shows hyperparameter tuning optimized to minimize overfitting. The tuned model (n_estimators=100) was selected where validation performance plateaus while maintaining a small train-validation gap (1.9%), avoiding the overfitting seen at higher iteration counts.*
+
 7. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
 8. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.868)
+
+<p align="center">
+  <img src="notebooks/images/fd2/comprehensive_model_comparison.png" alt="Model Comparison" width="700">
+</p>
+
+*XGBoost (Tuned) achieves the best PR-AUC (0.868) while maintaining strong precision (73.5%) and recall (83.2%). The tuned model significantly outperforms baselines on the primary metric while providing a better precision-recall balance than Random Forest alternatives.*
 9. **Output**: Saves trained model and configuration for next notebook
   - `models/best_model.joblib` - Trained XGBoost pipeline (preprocessing + classifier)
   - `models/best_params.json` - Optimal hyperparameters
@@ -424,8 +437,21 @@ This notebook contains:
    - SHAP values computed using XGBoost native `pred_contribs=True`
    - Guidance on interpreting global vs per-sample SHAP values
    - Per-sample SHAP examples previewing API explainability behavior
+
+<p align="center">
+  <img src="notebooks/images/fd3/shap_beeswarm.png" alt="SHAP Feature Importance" width="600">
+</p>
+
+*SHAP beeswarm plot showing how feature values impact fraud predictions. Red points (high values) on the right increase fraud risk; blue points (low values) on the left decrease it. Key insights: longer shipping distances and lower security scores strongly increase fraud risk, while older accounts and app channel usage decrease it.*
+
 6. **Threshold Optimization**: Calibration of precision-recall trade-offs
    - 5 threshold strategies: target_performance, optimal_f1, 80%/85%/90% recall
+
+<p align="center">
+  <img src="notebooks/images/fd3/threshold_optimization.png" alt="Threshold Optimization" width="700">
+</p>
+
+*Threshold optimization enables precision-recall trade-offs for different business needs. The 80% recall threshold (green diamond) provides the best F1 score (0.809), while higher recall targets (85%, 90%) catch more fraud at the cost of increased false positives.*
 7. **Deployment Artifacts**: Saves configuration files to `models/`
    - `threshold_config.json` - Optimal thresholds for different strategies
    - `model_metadata.json` - Model version, hyperparameters, performance metrics
