@@ -360,8 +360,45 @@ def plot_threshold_optimization(
     """
     fig, axes = plt.subplots(2, 2, figsize=figsize)
 
-    # Colors and markers for recall-targeted thresholds (90%, 85%, 80%)
+    # Build combined list of all threshold results for bottom panels
+    all_results = []
+    if optimal_f1_result is not None:
+        all_results.append({
+            'name': 'Optimal F1',
+            'threshold': optimal_f1_result['threshold'],
+            'precision': optimal_f1_result['precision'],
+            'recall': optimal_f1_result['recall'],
+            'f1': optimal_f1_result['f1'],
+            'fp': optimal_f1_result.get('fp', 0),
+            'fn': optimal_f1_result.get('fn', 0),
+            'color': 'purple'
+        })
+    if target_performance_result is not None:
+        all_results.append({
+            'name': 'Target Perf',
+            'threshold': target_performance_result['threshold'],
+            'precision': target_performance_result['precision'],
+            'recall': target_performance_result['recall'],
+            'f1': target_performance_result['f1'],
+            'fp': target_performance_result.get('fp', 0),
+            'fn': target_performance_result.get('fn', 0),
+            'color': 'blue'
+        })
+    # Add recall-targeted thresholds
     recall_colors = ['red', 'orange', 'green']
+    for i, result in enumerate(threshold_results):
+        all_results.append({
+            'name': f"{result['target_recall']*100:.0f}% recall",
+            'threshold': result['threshold'],
+            'precision': result['precision'],
+            'recall': result['recall'],
+            'f1': result['f1'],
+            'fp': result.get('fp', 0),
+            'fn': result.get('fn', 0),
+            'color': recall_colors[i]
+        })
+
+    # Markers for recall-targeted thresholds
     recall_markers = ['*', 's', 'D']
 
     # Plot 1: Precision-Recall Curve with marked thresholds
@@ -373,7 +410,7 @@ def plot_threshold_optimization(
     # Mark optimal F1 threshold (if provided)
     if optimal_f1_result is not None:
         ax.scatter(optimal_f1_result['recall'], optimal_f1_result['precision'],
-                   c='purple', s=500, marker='P',
+                   c='purple', s=400, marker='P',
                    edgecolors='black', linewidths=2,
                    label=f"Optimal F1: θ={optimal_f1_result['threshold']:.3f}",
                    zorder=11)
@@ -381,7 +418,7 @@ def plot_threshold_optimization(
     # Mark target performance threshold (if provided)
     if target_performance_result is not None:
         ax.scatter(target_performance_result['recall'], target_performance_result['precision'],
-                   c='blue', s=450, marker='X',
+                   c='blue', s=350, marker='X',
                    edgecolors='black', linewidths=2,
                    label=f"Target Perf: θ={target_performance_result['threshold']:.3f}",
                    zorder=11)
@@ -389,7 +426,7 @@ def plot_threshold_optimization(
     # Mark recall-targeted thresholds
     for i, result in enumerate(threshold_results):
         ax.scatter(result['recall'], result['precision'],
-                   c=recall_colors[i], s=400, marker=recall_markers[i],
+                   c=recall_colors[i], s=300, marker=recall_markers[i],
                    edgecolors='black', linewidths=2,
                    label=f"{result['target_recall']*100:.0f}% recall: θ={result['threshold']:.3f}",
                    zorder=10)
@@ -397,7 +434,7 @@ def plot_threshold_optimization(
     ax.set_xlabel('Recall', fontsize=16)
     ax.set_ylabel('Precision', fontsize=16)
     ax.set_title('Precision-Recall Curve with Optimal Thresholds', fontsize=18, fontweight='bold')
-    ax.legend(loc='lower left', fontsize=11)
+    ax.legend(loc='lower left', fontsize=10, markerscale=0.6)
     ax.tick_params(axis='both', labelsize=14)
     ax.grid(alpha=0.3)
     ax.set_xlim([0, 1])
@@ -442,14 +479,15 @@ def plot_threshold_optimization(
     ax.set_xlim([0, 1])
     ax.set_ylim([0, 1])
 
-    # Plot 3: False Positives vs False Negatives
+    # Plot 3: False Positives vs False Negatives (all thresholds)
     ax = axes[1, 0]
 
-    x = np.arange(len(threshold_results))
+    x = np.arange(len(all_results))
     width = 0.35
 
-    fp_counts = [r['fp'] for r in threshold_results]
-    fn_counts = [r['fn'] for r in threshold_results]
+    fp_counts = [r['fp'] for r in all_results]
+    fn_counts = [r['fn'] for r in all_results]
+    bar_colors = [r['color'] for r in all_results]
 
     bars1 = ax.bar(x - width/2, fp_counts, width, label='False Positives (FP)',
                    color='coral', alpha=0.8)
@@ -460,9 +498,9 @@ def plot_threshold_optimization(
     ax.set_ylabel('Count', fontsize=16)
     ax.set_title('False Positives vs False Negatives by Threshold', fontsize=18, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels([f"{r['target_recall']*100:.0f}% recall" for r in threshold_results], fontsize=14)
+    ax.set_xticklabels([r['name'] for r in all_results], fontsize=12, rotation=15, ha='right')
     ax.tick_params(axis='y', labelsize=14)
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=12)
     ax.grid(axis='y', alpha=0.3)
 
     # Add value labels
@@ -471,19 +509,19 @@ def plot_threshold_optimization(
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
                     f'{int(height):,}',
-                    ha='center', va='bottom', fontsize=14, fontweight='bold')
+                    ha='center', va='bottom', fontsize=11, fontweight='bold')
 
-    # Plot 4: Metrics Comparison
+    # Plot 4: Metrics Comparison (all thresholds)
     ax = axes[1, 1]
 
     metrics_data = pd.DataFrame([
         {
-            'Scenario': f"{r['target_recall']*100:.0f}% recall",
+            'Scenario': r['name'],
             'Precision': r['precision'],
             'Recall': r['recall'],
             'F1': r['f1']
         }
-        for r in threshold_results
+        for r in all_results
     ])
 
     x = np.arange(len(metrics_data))
@@ -500,9 +538,9 @@ def plot_threshold_optimization(
     ax.set_ylabel('Score', fontsize=16)
     ax.set_title('Performance Metrics Comparison', fontsize=18, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels(metrics_data['Scenario'], fontsize=14)
+    ax.set_xticklabels(metrics_data['Scenario'], fontsize=12, rotation=15, ha='right')
     ax.tick_params(axis='y', labelsize=14)
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=12)
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim([0, 1])
 
@@ -512,7 +550,7 @@ def plot_threshold_optimization(
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
                     f'{height:.3f}',
-                    ha='center', va='bottom', fontsize=12)
+                    ha='center', va='bottom', fontsize=10)
 
     plt.tight_layout()
     _save_figure(fig, save_path)
