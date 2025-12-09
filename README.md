@@ -398,9 +398,15 @@ This notebook contains:
   - Comprehensive CSV logging of all CV results
   - Stability analysis (std_test_score across folds)
   - Timing measurements with appropriate caveats for parallel processing
-6. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
-7. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.8679)
-8. **Output**: Saves `models/best_params.json` and `models/validation_metrics.json` for next notebook
+6. **Bias-Variance Analysis**: Train-validation gap and CV fold variance diagnostics
+  - XGBoost iteration tracking to find optimal n_estimators
+  - Model stability assessment across CV folds
+7. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
+8. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.8679)
+9. **Output**: Saves trained model and configuration for next notebook
+  - `models/best_model.joblib` - Trained XGBoost pipeline (preprocessing + classifier)
+  - `models/best_params.json` - Optimal hyperparameters
+  - `models/validation_metrics.json` - CV performance metrics
 
 **Notebook 3: Final Evaluation & Deployment** (`notebooks/fd3_model_evaluation_deployment.ipynb`)
 
