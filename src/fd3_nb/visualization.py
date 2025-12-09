@@ -233,7 +233,7 @@ def plot_shap_beeswarm(
     X: pd.DataFrame,
     feature_names: List[str],
     top_n: int = 20,
-    figsize: Tuple[int, int] = (12, 10),
+    figsize: Tuple[int, int] = (14, 12),
     save_path: Optional[str] = None
 ) -> None:
     """
@@ -312,17 +312,19 @@ def plot_shap_beeswarm(
     # Add vertical line at 0
     ax.axvline(x=0, color='gray', linestyle='-', linewidth=0.5)
 
-    ax.set_xlabel('SHAP Value (impact on model output)', fontsize=12)
+    ax.set_xlabel('SHAP Value (impact on model output)', fontsize=16)
     ax.set_title(f'SHAP Beeswarm Plot - Top {top_n} Features\n'
                  '(Red = high feature value, Blue = low feature value)',
-                 fontsize=14, fontweight='bold')
+                 fontsize=18, fontweight='bold')
+    ax.tick_params(axis='both', labelsize=14)
     ax.grid(axis='x', alpha=0.3)
 
     # Add colorbar
     cbar = plt.colorbar(scatter, ax=ax, shrink=0.6)
-    cbar.set_label('Feature Value\n(normalized)', fontsize=10)
+    cbar.set_label('Feature Value\n(normalized)', fontsize=14)
     cbar.set_ticks([0, 0.5, 1])
     cbar.set_ticklabels(['Low', 'Mid', 'High'])
+    cbar.ax.tick_params(labelsize=12)
 
     plt.tight_layout()
     _save_figure(fig, save_path)
@@ -337,7 +339,7 @@ def plot_threshold_optimization(
     thresholds: np.ndarray,
     threshold_results: List[Dict[str, Any]],
     baseline_rate: float,
-    figsize: Tuple[int, int] = (18, 14),
+    figsize: Tuple[int, int] = (20, 16),
     save_path: Optional[str] = None
 ) -> None:
     """
@@ -359,22 +361,23 @@ def plot_threshold_optimization(
 
     # Plot 1: Precision-Recall Curve with marked thresholds
     ax = axes[0, 0]
-    ax.plot(recalls, precisions, color='steelblue', lw=2, label='PR Curve')
-    ax.axhline(y=baseline_rate, color='gray', linestyle='--', lw=1,
+    ax.plot(recalls, precisions, color='steelblue', lw=2.5, label='PR Curve')
+    ax.axhline(y=baseline_rate, color='gray', linestyle='--', lw=1.5,
                label=f'No Skill = {baseline_rate:.3f}')
 
     # Mark optimal thresholds
     for i, result in enumerate(threshold_results):
         ax.scatter(result['recall'], result['precision'],
-                   c=colors[i], s=300, marker=markers[i],
+                   c=colors[i], s=400, marker=markers[i],
                    edgecolors='black', linewidths=2,
                    label=f"{result['target_recall']*100:.0f}% recall: θ={result['threshold']:.3f}",
                    zorder=10)
 
-    ax.set_xlabel('Recall', fontsize=12)
-    ax.set_ylabel('Precision', fontsize=12)
-    ax.set_title('Precision-Recall Curve with Optimal Thresholds', fontsize=14, fontweight='bold')
-    ax.legend(loc='lower left', fontsize=10)
+    ax.set_xlabel('Recall', fontsize=16)
+    ax.set_ylabel('Precision', fontsize=16)
+    ax.set_title('Precision-Recall Curve with Optimal Thresholds', fontsize=18, fontweight='bold')
+    ax.legend(loc='lower left', fontsize=12)
+    ax.tick_params(axis='both', labelsize=14)
     ax.grid(alpha=0.3)
     ax.set_xlim([0, 1])
     ax.set_ylim([0, 1])
@@ -384,23 +387,24 @@ def plot_threshold_optimization(
 
     # Sample thresholds for clarity
     step = max(1, len(thresholds) // 1000)
-    ax.plot(thresholds[::step], precisions[:-1][::step], 'steelblue', lw=2, label='Precision')
-    ax.plot(thresholds[::step], recalls[:-1][::step], 'coral', lw=2, label='Recall')
+    ax.plot(thresholds[::step], precisions[:-1][::step], 'steelblue', lw=2.5, label='Precision')
+    ax.plot(thresholds[::step], recalls[:-1][::step], 'coral', lw=2.5, label='Recall')
 
     # Calculate F1 for all thresholds
     f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-10)
-    ax.plot(thresholds[::step], f1_scores[::step], 'lightgreen', lw=2, label='F1 Score')
+    ax.plot(thresholds[::step], f1_scores[::step], 'lightgreen', lw=2.5, label='F1 Score')
 
     # Mark optimal thresholds
     for i, result in enumerate(threshold_results):
-        ax.axvline(x=result['threshold'], color=colors[i], linestyle='--', lw=1.5,
+        ax.axvline(x=result['threshold'], color=colors[i], linestyle='--', lw=2,
                    label=f"θ={result['threshold']:.3f} ({result['target_recall']*100:.0f}% recall)",
                    alpha=0.7)
 
-    ax.set_xlabel('Threshold', fontsize=12)
-    ax.set_ylabel('Score', fontsize=12)
-    ax.set_title('Precision/Recall/F1 vs Threshold', fontsize=14, fontweight='bold')
-    ax.legend(loc='best', fontsize=9)
+    ax.set_xlabel('Threshold', fontsize=16)
+    ax.set_ylabel('Score', fontsize=16)
+    ax.set_title('Precision/Recall/F1 vs Threshold', fontsize=18, fontweight='bold')
+    ax.legend(loc='best', fontsize=12)
+    ax.tick_params(axis='both', labelsize=14)
     ax.grid(alpha=0.3)
     ax.set_xlim([0, 1])
     ax.set_ylim([0, 1])
@@ -419,12 +423,13 @@ def plot_threshold_optimization(
     bars2 = ax.bar(x + width/2, fn_counts, width, label='False Negatives (FN)',
                    color='steelblue', alpha=0.8)
 
-    ax.set_xlabel('Threshold Scenario', fontsize=12)
-    ax.set_ylabel('Count', fontsize=12)
-    ax.set_title('False Positives vs False Negatives by Threshold', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Threshold Scenario', fontsize=16)
+    ax.set_ylabel('Count', fontsize=16)
+    ax.set_title('False Positives vs False Negatives by Threshold', fontsize=18, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels([f"{r['target_recall']*100:.0f}% recall" for r in threshold_results])
-    ax.legend(fontsize=11)
+    ax.set_xticklabels([f"{r['target_recall']*100:.0f}% recall" for r in threshold_results], fontsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    ax.legend(fontsize=14)
     ax.grid(axis='y', alpha=0.3)
 
     # Add value labels
@@ -433,7 +438,7 @@ def plot_threshold_optimization(
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
                     f'{int(height):,}',
-                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+                    ha='center', va='bottom', fontsize=14, fontweight='bold')
 
     # Plot 4: Metrics Comparison
     ax = axes[1, 1]
@@ -458,12 +463,13 @@ def plot_threshold_optimization(
     bars3 = ax.bar(x + width, metrics_data['F1'], width, label='F1 Score',
                    color='lightgreen', alpha=0.8)
 
-    ax.set_xlabel('Threshold Scenario', fontsize=12)
-    ax.set_ylabel('Score', fontsize=12)
-    ax.set_title('Performance Metrics Comparison', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Threshold Scenario', fontsize=16)
+    ax.set_ylabel('Score', fontsize=16)
+    ax.set_title('Performance Metrics Comparison', fontsize=18, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels(metrics_data['Scenario'])
-    ax.legend(fontsize=11)
+    ax.set_xticklabels(metrics_data['Scenario'], fontsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    ax.legend(fontsize=14)
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim([0, 1])
 
@@ -473,7 +479,7 @@ def plot_threshold_optimization(
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
                     f'{height:.3f}',
-                    ha='center', va='bottom', fontsize=9)
+                    ha='center', va='bottom', fontsize=12)
 
     plt.tight_layout()
     _save_figure(fig, save_path)

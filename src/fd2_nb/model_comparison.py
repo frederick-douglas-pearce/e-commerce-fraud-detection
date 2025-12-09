@@ -342,7 +342,7 @@ def plot_model_comparison(
 
 def plot_comprehensive_comparison(
     comparison_df: pd.DataFrame,
-    figsize: Tuple[int, int] = (18, 12),
+    figsize: Tuple[int, int] = (20, 14),
     metrics: Optional[List[str]] = None,
     colors: Optional[List[str]] = None,
     titles: Optional[List[str]] = None,
@@ -397,15 +397,16 @@ def plot_comprehensive_comparison(
             continue
 
         comparison_df[metric].plot(kind='barh', ax=ax, color=color)
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.set_xlabel(metric.replace('_', ' ').title(), fontsize=12)
-        ax.set_ylabel('Model', fontsize=12)
+        ax.set_title(title, fontsize=18, fontweight='bold')
+        ax.set_xlabel(metric.replace('_', ' ').title(), fontsize=16)
+        ax.set_ylabel('Model', fontsize=16)
+        ax.tick_params(axis='both', labelsize=14)
         ax.grid(axis='x', alpha=0.3)
         ax.set_xlim([0, 1])
 
         # Add value labels
         for i, v in enumerate(comparison_df[metric]):
-            ax.text(v + 0.01, i, f'{v:.4f}', va='center', fontsize=10)
+            ax.text(v + 0.01, i, f'{v:.4f}', va='center', fontsize=14)
 
     plt.tight_layout()
     _save_figure(fig, save_path)

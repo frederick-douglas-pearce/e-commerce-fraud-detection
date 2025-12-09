@@ -932,18 +932,18 @@ def _plot_iteration_performance(
     fig, ax = plt.subplots(figsize=figsize)
 
     # Plot training and validation curves with confidence bands
-    ax.plot(n_estimators, train_scores, 'b-', label='Training', linewidth=2, marker='o', markersize=6)
+    ax.plot(n_estimators, train_scores, 'b-', label='Training', linewidth=2.5, marker='o', markersize=8)
     ax.fill_between(n_estimators, train_scores - train_stds, train_scores + train_stds,
                     alpha=0.2, color='blue')
 
-    ax.plot(n_estimators, val_scores, 'g-', label='Validation', linewidth=2, marker='s', markersize=6)
+    ax.plot(n_estimators, val_scores, 'g-', label='Validation', linewidth=2.5, marker='s', markersize=8)
     ax.fill_between(n_estimators, val_scores - val_stds, val_scores + val_stds,
                     alpha=0.2, color='green')
 
     # Mark optimal n_estimators (best validation)
     optimal_idx = np.where(n_estimators == optimal_n)[0][0]
     ax.axvline(x=optimal_n, color='green', linestyle='--', linewidth=2, alpha=0.7)
-    ax.scatter([optimal_n], [val_scores[optimal_idx]], color='green', s=150, zorder=5,
+    ax.scatter([optimal_n], [val_scores[optimal_idx]], color='green', s=200, zorder=5,
                edgecolors='black', linewidths=2, label=f'Best Val (n={optimal_n})')
 
     # Mark tuned n_estimators if provided and different from optimal
@@ -952,13 +952,14 @@ def _plot_iteration_performance(
         if len(tuned_idx_arr) > 0:
             tuned_idx = tuned_idx_arr[0]
             ax.axvline(x=tuned_n, color='purple', linestyle=':', linewidth=2, alpha=0.7)
-            ax.scatter([tuned_n], [val_scores[tuned_idx]], color='purple', s=150, zorder=5,
+            ax.scatter([tuned_n], [val_scores[tuned_idx]], color='purple', s=200, zorder=5,
                        edgecolors='black', linewidths=2, marker='D', label=f'Tuned (n={tuned_n})')
 
-    ax.set_xlabel('n_estimators', fontsize=12)
-    ax.set_ylabel(f'{refit_metric.upper()}', fontsize=12)
-    ax.set_title(f'{model_name}: Performance by n_estimators', fontsize=14, fontweight='bold')
-    ax.legend(loc='lower right')
+    ax.set_xlabel('n_estimators', fontsize=16)
+    ax.set_ylabel(f'{refit_metric.upper()}', fontsize=16)
+    ax.set_title(f'{model_name}: Performance by n_estimators', fontsize=18, fontweight='bold')
+    ax.legend(loc='lower right', fontsize=12)
+    ax.tick_params(axis='both', labelsize=12)
     ax.grid(alpha=0.3)
 
     # Add gap annotation at optimal point
@@ -967,7 +968,7 @@ def _plot_iteration_performance(
     ax.annotate(f'Gap: {gap_pct:.1f}%',
                 xy=(optimal_n, (train_scores[optimal_idx] + val_scores[optimal_idx]) / 2),
                 xytext=(10, 0), textcoords='offset points',
-                fontsize=10, color='red',
+                fontsize=12, color='red',
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
 
     plt.tight_layout()
