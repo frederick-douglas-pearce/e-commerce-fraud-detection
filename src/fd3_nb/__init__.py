@@ -21,6 +21,8 @@ from .evaluation import (
 from .visualization import (
     plot_roc_pr_curves,
     plot_feature_importance,
+    plot_shap_importance,
+    plot_importance_comparison,
     plot_threshold_optimization,
 )
 
@@ -35,6 +37,10 @@ from .threshold_optimization import (
 from .feature_importance import (
     extract_feature_importance,
     print_feature_importance_summary,
+    compute_shap_importance,
+    compare_importance_methods,
+    print_shap_importance_summary,
+    print_importance_comparison,
 )
 
 from .deployment import (
@@ -51,6 +57,8 @@ __all__ = [
     # Visualization
     'plot_roc_pr_curves',
     'plot_feature_importance',
+    'plot_shap_importance',
+    'plot_importance_comparison',
     'plot_threshold_optimization',
     # Threshold optimization
     'find_threshold_for_recall',
@@ -61,6 +69,10 @@ __all__ = [
     # Feature importance
     'extract_feature_importance',
     'print_feature_importance_summary',
+    'compute_shap_importance',
+    'compare_importance_methods',
+    'print_shap_importance_summary',
+    'print_importance_comparison',
     # Deployment
     'save_production_model',
     'save_threshold_config',

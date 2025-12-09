@@ -122,6 +122,112 @@ def plot_feature_importance(
     print(f"\n✓ XGBoost built-in feature importance analyzed ({top_n} features shown)")
 
 
+def plot_shap_importance(
+    shap_importance_df: pd.DataFrame,
+    top_n: int = 20,
+    figsize: Tuple[int, int] = (12, 10),
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Plot horizontal bar chart of SHAP-based feature importance.
+
+    Shows mean |SHAP value| for each feature, with color indicating
+    whether the feature increases (red) or decreases (blue) fraud risk on average.
+
+    Args:
+        shap_importance_df: DataFrame with 'feature', 'shap_importance', 'mean_shap' columns
+        top_n: Number of top features to show
+        figsize: Figure size
+        save_path: Optional path to save figure
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    top_features = shap_importance_df.head(top_n)
+
+    # Color based on direction of effect
+    colors = ['#d62728' if ms > 0 else '#1f77b4' for ms in top_features['mean_shap']]
+
+    ax.barh(range(len(top_features)), top_features['shap_importance'], color=colors)
+    ax.set_yticks(range(len(top_features)))
+    ax.set_yticklabels(top_features['feature'])
+    ax.invert_yaxis()
+    ax.set_xlabel('Mean |SHAP Value|', fontsize=12)
+    ax.set_ylabel('Feature', fontsize=12)
+    ax.set_title(f'Top {top_n} Most Important Features - SHAP Values',
+                 fontsize=14, fontweight='bold')
+    ax.grid(axis='x', alpha=0.3)
+
+    # Add value labels with direction indicator
+    for i, (_, row) in enumerate(top_features.iterrows()):
+        direction = "↑" if row['mean_shap'] > 0 else "↓"
+        ax.text(row['shap_importance'], i,
+                f"  {row['shap_importance']:.4f} {direction}",
+                va='center', fontsize=9)
+
+    # Add legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#d62728', label='Increases fraud risk'),
+        Patch(facecolor='#1f77b4', label='Decreases fraud risk')
+    ]
+    ax.legend(handles=legend_elements, loc='lower right')
+
+    plt.tight_layout()
+    _save_figure(fig, save_path)
+    plt.show()
+
+    print(f"\n✓ SHAP feature importance analyzed ({top_n} features shown)")
+
+
+def plot_importance_comparison(
+    comparison_df: pd.DataFrame,
+    figsize: Tuple[int, int] = (14, 10),
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Plot side-by-side comparison of XGBoost Gain vs SHAP importance.
+
+    Args:
+        comparison_df: DataFrame from compare_importance_methods()
+        figsize: Figure size
+        save_path: Optional path to save figure
+    """
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    top_n = len(comparison_df)
+
+    # Normalize for comparison (both sum to 1)
+    gain_normalized = comparison_df['importance'] / comparison_df['importance'].sum()
+    shap_normalized = comparison_df['shap_importance'] / comparison_df['shap_importance'].sum()
+
+    # Left plot: Gain importance
+    axes[0].barh(range(top_n), gain_normalized, color='steelblue')
+    axes[0].set_yticks(range(top_n))
+    axes[0].set_yticklabels(comparison_df['feature'])
+    axes[0].invert_yaxis()
+    axes[0].set_xlabel('Normalized Importance', fontsize=11)
+    axes[0].set_title('XGBoost Gain', fontsize=12, fontweight='bold')
+    axes[0].grid(axis='x', alpha=0.3)
+
+    # Right plot: SHAP importance
+    colors = ['#d62728' if ms > 0 else '#1f77b4' for ms in comparison_df['mean_shap']]
+    axes[1].barh(range(top_n), shap_normalized, color=colors)
+    axes[1].set_yticks(range(top_n))
+    axes[1].set_yticklabels(comparison_df['feature'])
+    axes[1].invert_yaxis()
+    axes[1].set_xlabel('Normalized Importance', fontsize=11)
+    axes[1].set_title('SHAP Values', fontsize=12, fontweight='bold')
+    axes[1].grid(axis='x', alpha=0.3)
+
+    fig.suptitle('Feature Importance: XGBoost Gain vs SHAP Comparison',
+                 fontsize=14, fontweight='bold', y=1.02)
+
+    plt.tight_layout()
+    _save_figure(fig, save_path)
+    plt.show()
+
+    print(f"\n✓ Feature importance comparison plotted ({top_n} features)")
+
+
 def plot_threshold_optimization(
     precisions: np.ndarray,
     recalls: np.ndarray,
