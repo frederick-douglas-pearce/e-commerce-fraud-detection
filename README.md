@@ -58,6 +58,66 @@ This project builds and deploys a classification model to identify fraudulent e-
 
 **Project Goal**: Deploy an optimally trained classification model capable of identifying fraudulent transactions with high precision and recall, packaged as a REST API service.
 
+### System Architecture
+
+```mermaid
+flowchart TB
+    subgraph Client["Client Application"]
+        REQ[/"Raw Transaction<br/>(15 fields)"/]
+    end
+
+    subgraph API["FastAPI Service"]
+        direction TB
+        VAL[Pydantic Validation]
+
+        subgraph Pipeline["Feature Engineering Pipeline"]
+            TZ[Timezone Conversion<br/>UTC → Local]
+            TEMP[Temporal Features<br/>hour, day, is_late_night]
+            AMT[Amount Features<br/>deviation, ratios, flags]
+            GEO[Geographic Features<br/>mismatch, distance risk]
+            SEC[Security Score<br/>AVS + CVV + 3DS]
+            INT[Interaction Features<br/>fraud scenario patterns]
+        end
+
+        subgraph Model["XGBoost Classifier"]
+            PRED[Prediction<br/>fraud_probability]
+            THR[Threshold Strategy<br/>80% / 85% / 90% recall]
+        end
+
+        subgraph Explain["SHAP Explainability"]
+            SHAP[TreeSHAP<br/>pred_contribs]
+            TOP[Top N Risk<br/>Contributors]
+        end
+    end
+
+    subgraph Response["API Response"]
+        OUT[/"is_fraud, probability,<br/>risk_level, explanation"/]
+    end
+
+    REQ --> VAL
+    VAL --> TZ
+    TZ --> TEMP --> AMT --> GEO --> SEC --> INT
+    INT --> |"30 features"| PRED
+    PRED --> THR
+    PRED -.-> |"optional"| SHAP
+    SHAP --> TOP
+    THR --> OUT
+    TOP -.-> OUT
+
+    style Client fill:#e1f5fe
+    style API fill:#fff3e0
+    style Pipeline fill:#f3e5f5
+    style Model fill:#e8f5e9
+    style Explain fill:#fce4ec
+    style Response fill:#e1f5fe
+```
+
+**Key Components:**
+- **Feature Engineering**: Transforms 15 raw fields into 30 engineered features using production `FraudFeatureTransformer`
+- **XGBoost Model**: Tuned classifier with PR-AUC 0.87, optimized for fraud detection
+- **Threshold Strategies**: Configurable precision-recall trade-offs (80%, 85%, 90% recall targets)
+- **SHAP Explainability**: Optional per-prediction explanations showing top risk-increasing features
+
 ### Example Fraud Patterns Detected
 - Card testing with small-value purchases (e.g., $1 transactions at midnight)
 - Geographic anomalies (e.g., gaming accessories shipped 5,000 km away)
