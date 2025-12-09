@@ -411,17 +411,25 @@ This notebook contains:
 **Notebook 3: Final Evaluation & Deployment** (`notebooks/fd3_model_evaluation_deployment.ipynb`)
 
 This notebook contains:
-1. **Parameter Loading**: Loads optimal hyperparameters from `models/best_params.json`
+1. **Model Loading**: Loads trained model from `models/best_model.joblib` (trained in Notebook 2)
+   - Also loads `validation_metrics.json` for comparison with test set performance
 2. **Data Preparation**: Recreates train/val/test splits with same random seed
-3. **Model Retraining**: Trains best model on train+val combined (239,756 samples)
-4. **Test Set Evaluation**: Unbiased evaluation on completely held-out test set
-5. **Performance Visualization**: ROC/PR curves on test data
-6. **Feature Importance**: SHAP-based analysis with beeswarm plots
+3. **Test Set Evaluation**: Unbiased evaluation on completely held-out test set
+   - Model was trained on train+val combined (239,756 samples) in Notebook 2
+   - Test set (59,939 samples) never seen during training or hyperparameter tuning
+4. **Performance Visualization**: ROC/PR curves on test data
+5. **Feature Importance**: SHAP-based analysis with beeswarm plots
    - SHAP values computed using XGBoost native `pred_contribs=True`
-   - Comparison of XGBoost gain vs SHAP importance rankings
    - Guidance on interpreting global vs per-sample SHAP values
-7. **Threshold Optimization**: Calibration of precision-recall trade-offs
-8. **Deployment Artifacts**: Saves model and configuration files to `models/`
+   - Per-sample SHAP examples previewing API explainability behavior
+6. **Threshold Optimization**: Calibration of precision-recall trade-offs
+   - 5 threshold strategies: target_performance, optimal_f1, 80%/85%/90% recall
+7. **Deployment Artifacts**: Saves configuration files to `models/`
+   - `xgb_fraud_detector.joblib` - Production model (copy of best_model)
+   - `threshold_config.json` - Optimal thresholds for different strategies
+   - `model_metadata.json` - Model version, hyperparameters, performance metrics
+   - `feature_lists.json` - Categorized feature names
+8. **Model Card**: Comprehensive documentation of model capabilities and limitations
 
 **Workflow Benefits**:
 - **Clear separation**: EDA → Selection → Deployment stages
