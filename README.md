@@ -81,7 +81,7 @@ flowchart TB
 
         subgraph Model["XGBoost Classifier"]
             PRED[Prediction<br/>fraud_probability]
-            THR[Threshold Strategy<br/>target_performance / optimal_f1<br/>80% / 85% / 90% recall]
+            THR[Threshold Strategy<br/>target_performance / optimal_f1 /<br/>80% / 85% / 90% recall]
         end
 
         subgraph Explain["SHAP Explainability"]
