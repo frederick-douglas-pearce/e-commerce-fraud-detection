@@ -81,7 +81,7 @@ flowchart TB
 
         subgraph Model["XGBoost Classifier"]
             PRED[Prediction<br/>fraud_probability]
-            THR[Threshold Strategy<br/>optimal_f1 / 80% / 85% / 90%]
+            THR[Threshold Strategy<br/>target_performance / optimal_f1<br/>80% / 85% / 90% recall]
         end
 
         subgraph Explain["SHAP Explainability"]
@@ -128,7 +128,7 @@ flowchart TB
 **Key Components:**
 - **Feature Engineering**: Transforms 15 raw fields into 30 engineered features using production `FraudFeatureTransformer`
 - **XGBoost Model**: Tuned classifier with PR-AUC 0.87, optimized for fraud detection
-- **Threshold Strategies**: Configurable precision-recall trade-offs (optimal_f1 default, plus 80%, 85%, 90% recall targets)
+- **Threshold Strategies**: 5 configurable precision-recall trade-offs (target_performance recommended, optimal_f1, plus 80%, 85%, 90% recall targets)
 - **SHAP Explainability**: Optional per-prediction explanations showing top risk-increasing features
 
 ### Example Fraud Patterns Detected
@@ -975,11 +975,13 @@ curl -X POST "http://localhost:8000/predict?include_explanation=true&top_n=3" \
 
 Choose different risk tolerance levels:
 
-| Strategy | Target Recall | Use Case |
-|----------|---------------|----------|
-| `conservative_90pct_recall` | 90% | Catch maximum fraud (more false positives) |
-| `balanced_85pct_recall` | 85% | Balanced approach (default) |
-| `aggressive_80pct_recall` | 80% | Minimize false positives |
+| Strategy | Precision | Recall | Use Case |
+|----------|-----------|--------|----------|
+| `target_performance` | 70.0% | 83.2% | **RECOMMENDED** - Max recall with ≥70% precision |
+| `optimal_f1` | 92.7% | 75.3% | Best F1 score - highest precision-recall balance |
+| `conservative_90pct_recall` | 35.1% | 90.0% | Catch maximum fraud (more false positives) |
+| `balanced_85pct_recall` | 58.5% | 85.0% | Balanced precision-recall trade-off |
+| `aggressive_80pct_recall` | 81.9% | 80.0% | Prioritize precision, reduce false positives |
 
 **Example - Conservative Strategy:**
 ```bash
