@@ -339,6 +339,8 @@ def plot_threshold_optimization(
     thresholds: np.ndarray,
     threshold_results: List[Dict[str, Any]],
     baseline_rate: float,
+    optimal_f1_result: Optional[Dict[str, Any]] = None,
+    target_performance_result: Optional[Dict[str, Any]] = None,
     figsize: Tuple[int, int] = (20, 16),
     save_path: Optional[str] = None
 ) -> None:
@@ -349,15 +351,18 @@ def plot_threshold_optimization(
         precisions: Precision values from precision_recall_curve
         recalls: Recall values from precision_recall_curve
         thresholds: Threshold values from precision_recall_curve
-        threshold_results: List of dicts with threshold optimization results
+        threshold_results: List of dicts with recall-targeted threshold results
         baseline_rate: Baseline fraud rate (for no-skill line)
+        optimal_f1_result: Optional dict with optimal F1 threshold results
+        target_performance_result: Optional dict with target performance threshold results
         figsize: Figure size
         save_path: Optional path to save figure
     """
     fig, axes = plt.subplots(2, 2, figsize=figsize)
 
-    colors = ['red', 'orange', 'green']
-    markers = ['*', 's', 'D']
+    # Colors and markers for recall-targeted thresholds (90%, 85%, 80%)
+    recall_colors = ['red', 'orange', 'green']
+    recall_markers = ['*', 's', 'D']
 
     # Plot 1: Precision-Recall Curve with marked thresholds
     ax = axes[0, 0]
@@ -365,10 +370,26 @@ def plot_threshold_optimization(
     ax.axhline(y=baseline_rate, color='gray', linestyle='--', lw=1.5,
                label=f'No Skill = {baseline_rate:.3f}')
 
-    # Mark optimal thresholds
+    # Mark optimal F1 threshold (if provided)
+    if optimal_f1_result is not None:
+        ax.scatter(optimal_f1_result['recall'], optimal_f1_result['precision'],
+                   c='purple', s=500, marker='P',
+                   edgecolors='black', linewidths=2,
+                   label=f"Optimal F1: θ={optimal_f1_result['threshold']:.3f}",
+                   zorder=11)
+
+    # Mark target performance threshold (if provided)
+    if target_performance_result is not None:
+        ax.scatter(target_performance_result['recall'], target_performance_result['precision'],
+                   c='blue', s=450, marker='X',
+                   edgecolors='black', linewidths=2,
+                   label=f"Target Perf: θ={target_performance_result['threshold']:.3f}",
+                   zorder=11)
+
+    # Mark recall-targeted thresholds
     for i, result in enumerate(threshold_results):
         ax.scatter(result['recall'], result['precision'],
-                   c=colors[i], s=400, marker=markers[i],
+                   c=recall_colors[i], s=400, marker=recall_markers[i],
                    edgecolors='black', linewidths=2,
                    label=f"{result['target_recall']*100:.0f}% recall: θ={result['threshold']:.3f}",
                    zorder=10)
@@ -376,7 +397,7 @@ def plot_threshold_optimization(
     ax.set_xlabel('Recall', fontsize=16)
     ax.set_ylabel('Precision', fontsize=16)
     ax.set_title('Precision-Recall Curve with Optimal Thresholds', fontsize=18, fontweight='bold')
-    ax.legend(loc='lower left', fontsize=12)
+    ax.legend(loc='lower left', fontsize=11)
     ax.tick_params(axis='both', labelsize=14)
     ax.grid(alpha=0.3)
     ax.set_xlim([0, 1])
@@ -394,16 +415,28 @@ def plot_threshold_optimization(
     f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-10)
     ax.plot(thresholds[::step], f1_scores[::step], 'lightgreen', lw=2.5, label='F1 Score')
 
-    # Mark optimal thresholds
+    # Mark optimal F1 threshold (if provided)
+    if optimal_f1_result is not None:
+        ax.axvline(x=optimal_f1_result['threshold'], color='purple', linestyle='--', lw=2,
+                   label=f"θ={optimal_f1_result['threshold']:.3f} (Optimal F1)",
+                   alpha=0.8)
+
+    # Mark target performance threshold (if provided)
+    if target_performance_result is not None:
+        ax.axvline(x=target_performance_result['threshold'], color='blue', linestyle='--', lw=2,
+                   label=f"θ={target_performance_result['threshold']:.3f} (Target Perf)",
+                   alpha=0.8)
+
+    # Mark recall-targeted thresholds
     for i, result in enumerate(threshold_results):
-        ax.axvline(x=result['threshold'], color=colors[i], linestyle='--', lw=2,
+        ax.axvline(x=result['threshold'], color=recall_colors[i], linestyle='--', lw=2,
                    label=f"θ={result['threshold']:.3f} ({result['target_recall']*100:.0f}% recall)",
                    alpha=0.7)
 
     ax.set_xlabel('Threshold', fontsize=16)
     ax.set_ylabel('Score', fontsize=16)
     ax.set_title('Precision/Recall/F1 vs Threshold', fontsize=18, fontweight='bold')
-    ax.legend(loc='best', fontsize=12)
+    ax.legend(loc='best', fontsize=10)
     ax.tick_params(axis='both', labelsize=14)
     ax.grid(alpha=0.3)
     ax.set_xlim([0, 1])
