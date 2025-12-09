@@ -49,10 +49,14 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │   │   │   ├── transformer.py       # FraudFeatureTransformer (sklearn-compatible)
 │   │   │   ├── pipelines.py         # PreprocessingPipelineFactory
 │   │   │   └── __init__.py          # Package exports
-│   │   └── evaluation/              # Model evaluation utilities
-│   │       ├── metrics.py           # evaluate_model()
-│   │       ├── thresholds.py        # optimize_thresholds()
-│   │       └── __init__.py          # Package exports
+│   │   ├── evaluation/              # Model evaluation utilities
+│   │   │   ├── metrics.py           # evaluate_model()
+│   │   │   ├── thresholds.py        # optimize_thresholds()
+│   │   │   └── __init__.py          # Package exports
+│   │   └── explainability/          # SHAP-based prediction explanations
+│   │       ├── __init__.py          # Package exports
+│   │       ├── shap_explainer.py    # FraudExplainer class for SHAP explanations
+│   │       └── feature_descriptions.py  # Human-readable feature names
 │   ├── fd1_nb/                      # Notebook 1 utility functions (EDA & FE)
 │   │   ├── __init__.py              # Package exports (21 functions)
 │   │   ├── data_utils.py            # Data loading, splitting, analysis
@@ -65,16 +69,16 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │   │   ├── cv_analysis.py           # CV results analysis and train-val gap detection
 │   │   └── bias_variance.py         # Bias-variance diagnostics
 │   ├── fd3_nb/                      # Notebook 3 utility functions (Evaluation & Deployment)
-│   │   ├── __init__.py              # Package exports (17 functions)
+│   │   ├── __init__.py              # Package exports (18 functions)
 │   │   ├── evaluation.py            # Model evaluation and performance comparison
-│   │   ├── visualization.py         # ROC/PR curves and feature importance plots
+│   │   ├── visualization.py         # ROC/PR curves, feature importance, SHAP beeswarm plots
 │   │   ├── threshold_optimization.py # Threshold optimization strategies
-│   │   ├── feature_importance.py    # Feature importance extraction
+│   │   ├── feature_importance.py    # Feature importance (XGBoost gain + SHAP)
 │   │   └── deployment.py            # Deployment artifact generation
 │   └── README.md                    # Source code organization documentation
-├── tests/                           # Test suite (374 passing tests)
+├── tests/                           # Test suite (425 passing tests)
 │   ├── conftest.py                  # Shared pytest fixtures
-│   ├── test_api.py                  # API integration tests (24 tests)
+│   ├── test_api.py                  # API integration tests (33 tests)
 │   ├── test_config/                 # Shared config tests (44 tests)
 │   │   ├── test_data_config.py      # DataConfig tests (16 tests)
 │   │   ├── test_model_config.py     # ModelConfig tests (19 tests)
@@ -93,11 +97,14 @@ This project builds machine learning models to detect fraudulent e-commerce tran
 │   │   ├── test_hyperparameter_tuning.py # Tuning utility tests (15 tests)
 │   │   ├── test_cv_analysis.py      # CV analysis tests (25 tests)
 │   │   └── test_bias_variance.py    # Bias-variance tests (7 tests)
-│   ├── test_fd3_nb/                 # Notebook 3 utility tests (76 tests)
+│   ├── test_fd3_nb/                 # Notebook 3 utility tests (83 tests)
 │   │   ├── test_evaluation.py       # Evaluation tests (15 tests)
-│   │   ├── test_feature_importance.py # Feature importance tests (12 tests)
+│   │   ├── test_feature_importance.py # Feature importance tests (19 tests)
 │   │   ├── test_threshold_optimization.py # Threshold tests (23 tests)
-│   │   └── test_deployment.py       # Deployment tests (26 tests)
+│   │   ├── test_deployment.py       # Deployment tests (26 tests)
+│   │   └── test_visualization.py    # SHAP beeswarm plot tests (7 tests)
+│   ├── test_explainability/         # Explainability tests (9 tests)
+│   │   └── test_shap_explainer.py   # FraudExplainer tests
 │   └── test_preprocessing/          # Preprocessing tests (61 tests)
 │       ├── test_config.py           # FeatureConfig tests (8 tests)
 │       ├── test_features.py         # Feature function tests (15 tests)
@@ -324,7 +331,10 @@ Utility functions extracted from notebook 3 for model evaluation, threshold opti
 
 **`src/fd3_nb/visualization.py`**:
 - `plot_roc_pr_curves()`: ROC and PR curve visualization
-- `plot_feature_importance()`: Feature importance bar chart
+- `plot_feature_importance()`: XGBoost gain-based feature importance bar chart
+- `plot_shap_importance()`: SHAP-based feature importance bar chart
+- `plot_shap_beeswarm()`: SHAP beeswarm plot showing value distributions (handles categorical features)
+- `plot_importance_comparison()`: Side-by-side comparison of gain vs SHAP importance
 - `plot_threshold_optimization()`: Threshold vs metrics visualization
 
 **`src/fd3_nb/threshold_optimization.py`**:
@@ -335,8 +345,12 @@ Utility functions extracted from notebook 3 for model evaluation, threshold opti
 - `create_threshold_comparison_df()`: Create comparison DataFrame
 
 **`src/fd3_nb/feature_importance.py`**:
-- `extract_feature_importance()`: Extract importance from XGBoost pipeline
+- `extract_feature_importance()`: Extract gain-based importance from XGBoost pipeline
 - `print_feature_importance_summary()`: Print formatted importance summary
+- `compute_shap_importance()`: Compute SHAP values and importance using XGBoost native method
+- `compare_importance_methods()`: Compare XGBoost gain vs SHAP importance rankings
+- `print_shap_importance_summary()`: Print formatted SHAP importance with direction indicators
+- `print_importance_comparison()`: Print Spearman correlation between methods
 
 **`src/fd3_nb/deployment.py`**:
 - `save_production_model()`: Save trained model with joblib
@@ -543,7 +557,7 @@ predictions = pipeline.predict(test_df)
 
 ### Testing Strategy
 
-**Test Coverage**: Comprehensive unit and integration tests for all components (374 passing tests)
+**Test Coverage**: Comprehensive unit and integration tests for all components (425 passing tests)
 
 **Test Organization**: Tests mirror source code structure for easy navigation
 
@@ -585,17 +599,22 @@ predictions = pipeline.predict(test_df)
    - `test_cv_analysis.py` (25 tests): analyze_cv_results(), analyze_cv_train_val_gap(), analyze_iteration_performance()
    - `test_bias_variance.py` (7 tests): analyze_cv_fold_variance()
 
-7. **Notebook 3 Utility Tests** (`tests/test_fd3_nb/` - 76 tests):
+7. **Notebook 3 Utility Tests** (`tests/test_fd3_nb/` - 83 tests):
    - `test_evaluation.py` (15 tests): evaluate_model(), compare_val_test_performance()
-   - `test_feature_importance.py` (12 tests): extract_feature_importance(), print_feature_importance_summary()
+   - `test_feature_importance.py` (19 tests): extract_feature_importance(), compute_shap_importance(), compare_importance_methods()
    - `test_threshold_optimization.py` (23 tests): find_threshold_for_recall(), optimize_thresholds(), comparison DataFrame
    - `test_deployment.py` (26 tests): save_production_model(), save_threshold_config(), save_model_metadata()
+   - `test_visualization.py` (7 tests): plot_shap_beeswarm() with numeric, categorical, and edge cases
 
-8. **API Tests** (`tests/test_api.py` - 24 tests):
+8. **Explainability Tests** (`tests/test_explainability/` - 9 tests):
+   - `test_shap_explainer.py`: FraudExplainer initialization, explain() output structure, top_n parameter
+
+9. **API Tests** (`tests/test_api.py` - 33 tests):
    - Endpoint testing (root, health, model info, predict)
    - Request/response validation
    - Error handling scenarios
    - Threshold strategies
+   - Explainability feature tests (include_explanation, top_n parameters)
    - Performance validation
 
 **Run Tests**:
@@ -620,7 +639,7 @@ uv run pytest --cov=src --cov-report=html
 uv run pytest tests/test_config/test_model_config.py -v
 ```
 
-**Test Results**: All 374 tests passing with 100% success rate
+**Test Results**: All 425 tests passing with 100% success rate
 
 ### Notebook Integration
 
@@ -697,6 +716,9 @@ The fraud detection model is deployed as a FastAPI web service (`predict.py`) th
   - `conservative_90pct_recall`: Catches 90% of fraud (more false positives)
   - `balanced_85pct_recall`: Balanced approach (default)
   - `aggressive_80pct_recall`: Fewer false positives (may miss some fraud)
+  - `optimal_f1`: Maximum F1 score threshold
+- `include_explanation` (query param, bool): Include SHAP-based feature explanations (default: false)
+- `top_n` (query param, int): Number of top contributing features to include in explanation (1-10, default: 3)
 
 **Output**: `PredictionResponse`
 ```json
@@ -708,7 +730,8 @@ The fraud detection model is deployed as a FastAPI web service (`predict.py`) th
   "threshold_used": "balanced_85pct_recall",
   "threshold_value": 0.35,
   "model_version": "1.0",
-  "processing_time_ms": 15.3
+  "processing_time_ms": 15.3,
+  "explanation": null
 }
 ```
 
@@ -823,21 +846,74 @@ curl http://localhost:8000/health
 curl http://localhost:8000/model/info
 ```
 
+### Explainability Feature
+
+The API includes optional SHAP-based explainability to show which features contributed most to a fraud prediction.
+
+**Request with Explanation**:
+```bash
+curl -X POST "http://localhost:8000/predict?include_explanation=true&top_n=3" \
+  -H "Content-Type: application/json" \
+  -d '{ ... transaction data ... }'
+```
+
+**Response with Explanation**:
+```json
+{
+  "transaction_id": "...",
+  "is_fraud": true,
+  "fraud_probability": 0.85,
+  "explanation": {
+    "top_contributors": [
+      {
+        "feature": "avs_match",
+        "display_name": "Address Verification Match",
+        "value": 0,
+        "contribution": 0.32
+      },
+      {
+        "feature": "account_age_days",
+        "display_name": "Account Age (days)",
+        "value": 5,
+        "contribution": 0.28
+      },
+      {
+        "feature": "security_score",
+        "display_name": "Security Score",
+        "value": 1,
+        "contribution": 0.15
+      }
+    ],
+    "base_fraud_rate": 0.022,
+    "explanation_method": "shap"
+  }
+}
+```
+
+**Key Points**:
+- Uses XGBoost's native `pred_contribs=True` for fast SHAP computation (~1-5ms overhead)
+- Only returns features that **increase** fraud risk (positive SHAP contributions)
+- `contribution` values are per-sample SHAP values (direction is always correct for individual predictions)
+- `base_fraud_rate` is the expected value (baseline) before feature contributions
+- Human-readable `display_name` provided for each feature
+
 ### Key Features
 
 1. **Automatic Feature Engineering**: API accepts raw transaction data (15 features) and automatically applies the production feature engineering pipeline to create 30 engineered features
 
 2. **Input Validation**: Pydantic models ensure data quality with type checking, range validation, and pattern matching
 
-3. **Flexible Thresholds**: Three pre-configured threshold strategies allow customization of precision-recall trade-offs without retraining
+3. **Flexible Thresholds**: Four pre-configured threshold strategies allow customization of precision-recall trade-offs without retraining
 
-4. **Fast Inference**: ~15ms average processing time (feature engineering + prediction)
+4. **SHAP-based Explainability**: Optional per-prediction explanations showing top risk-increasing features
 
-5. **Error Handling**: Comprehensive error handling with structured error responses
+5. **Fast Inference**: ~15-20ms average processing time (feature engineering + prediction + optional explanation)
 
-6. **Logging**: Request/response logging for monitoring and debugging
+6. **Error Handling**: Comprehensive error handling with structured error responses
 
-7. **Auto-Documentation**: Swagger UI and ReDoc for interactive API exploration
+7. **Logging**: Request/response logging for monitoring and debugging
+
+8. **Auto-Documentation**: Swagger UI and ReDoc for interactive API exploration
 
 ### Design Decisions
 
@@ -1592,8 +1668,13 @@ The project uses a modular three-notebook workflow with clear separation of conc
 - Comparison with validation performance
 
 #### 6. Feature Importance Analysis
-- XGBoost built-in importance (gain metric)
-- Top 10 features visualization
+- **SHAP-based importance** using XGBoost native `pred_contribs=True`
+- SHAP beeswarm plot showing value distributions colored by feature values
+- Comparison of XGBoost gain vs SHAP importance rankings
+- **Important**: Global SHAP direction (mean_shap) can be misleading for continuous features with non-linear relationships
+  - Example: `shipping_distance_km` shows ↓ fraud globally, but per-sample SHAP correctly shows: short distance → negative SHAP, long distance → positive SHAP
+  - Always use beeswarm plots to understand true feature-SHAP relationships
+  - Per-sample SHAP (used in API) always shows correct direction for individual predictions
 
 #### 7. Threshold Optimization
 - Three threshold strategies calibrated on validation set
@@ -1815,6 +1896,35 @@ plot_numeric_distributions(train_df, numeric_features)
 | **Short/one-off** (<10 lines) | Inline in notebook | Simple calculations, quick formatting |
 | **Production/deployment** | `src/deployment/` | `FraudFeatureTransformer`, `evaluate_model()` |
 
+### SHAP Interpretation Best Practices
+
+#### Global vs Per-Sample SHAP
+
+**Global SHAP** (mean across all samples) can be misleading for continuous features with non-linear relationships to the target:
+
+- **Example**: `shipping_distance_km` - Mean SHAP direction shows "↓ fraud" (negative correlation with fraud globally)
+- **Reality**: The correlation between `shipping_distance_km` and its SHAP values is **+0.87** (strong positive)
+- **Explanation**: Most transactions have short distances (low fraud risk, negative SHAP), which dominates the mean. But long distances DO increase fraud risk (positive SHAP for individual samples).
+
+**Per-Sample SHAP** (used in the API explainability feature) always shows the correct direction for individual predictions:
+- Short shipping distance → Negative SHAP (decreases fraud probability)
+- Long shipping distance → Positive SHAP (increases fraud probability)
+
+#### Best Practices
+
+1. **Always use beeswarm plots** to visualize the relationship between feature values and SHAP values
+2. **Check correlations** between features and their SHAP values to understand true relationships
+3. **Don't rely solely on mean SHAP direction** for continuous features
+4. **Per-sample explanations** (API `include_explanation=true`) are always reliable for individual predictions
+5. **Binary features** (like `avs_match`, `promo_used`) don't have this issue - their global direction is typically reliable
+
+#### Implementation
+
+The project uses **XGBoost's native SHAP computation** via `pred_contribs=True`:
+- Fast (~1-5ms per prediction)
+- Exact TreeSHAP algorithm (not approximation)
+- Consistent with global SHAP analysis in notebook
+
 ## Key Functions
 
 Functions are organized by module location for easy reference.
@@ -1887,7 +1997,10 @@ Functions are organized by module location for easy reference.
 
 #### Visualization (`src/fd3_nb/visualization.py`)
 - `plot_roc_pr_curves()`: ROC and PR curve visualization
-- `plot_feature_importance()`: Feature importance bar chart
+- `plot_feature_importance()`: XGBoost gain-based feature importance bar chart
+- `plot_shap_importance()`: SHAP-based feature importance bar chart
+- `plot_shap_beeswarm()`: SHAP beeswarm plot (handles categorical features)
+- `plot_importance_comparison()`: Side-by-side gain vs SHAP comparison
 - `plot_threshold_optimization()`: Threshold vs metrics curves
 
 #### Threshold Optimization (`src/fd3_nb/threshold_optimization.py`)
@@ -1898,14 +2011,30 @@ Functions are organized by module location for easy reference.
 - `create_threshold_comparison_df()`: Create comparison DataFrame
 
 #### Feature Importance (`src/fd3_nb/feature_importance.py`)
-- `extract_feature_importance()`: Extract importance from XGBoost pipeline
-- `print_feature_importance_summary()`: Print formatted summary
+- `extract_feature_importance()`: Extract gain-based importance from XGBoost pipeline
+- `print_feature_importance_summary()`: Print formatted importance summary
+- `compute_shap_importance()`: Compute SHAP values using XGBoost native method
+- `compare_importance_methods()`: Compare gain vs SHAP rankings (Spearman correlation)
+- `print_shap_importance_summary()`: Print SHAP summary with direction indicators
+- `print_importance_comparison()`: Print ranking comparison between methods
 
 #### Deployment (`src/fd3_nb/deployment.py`)
 - `save_production_model()`: Save trained model with joblib
 - `save_threshold_config()`: Save threshold configuration JSON
 - `save_model_metadata()`: Save model metadata JSON
 - `print_deployment_summary()`: Print deployment summary
+
+### Explainability (`src/deployment/explainability/`)
+
+#### SHAP Explainer (`src/deployment/explainability/shap_explainer.py`)
+- `FraudExplainer`: Class for computing per-prediction SHAP explanations
+  - `__init__(model, feature_names)`: Initialize with trained XGBoost model
+  - `explain(features_df, top_n=3)`: Returns top N risk-increasing feature contributions
+
+#### Feature Descriptions (`src/deployment/explainability/feature_descriptions.py`)
+- `FEATURE_DESCRIPTIONS`: Dict mapping 30 technical feature names to human-readable display names
+  - Example: `"avs_match"` → `"Address Verification Match"`
+  - Example: `"is_new_account"` → `"New Account (≤30 days)"`
 
 ## Important Notes
 
