@@ -172,9 +172,11 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 - **Data Processing**: pandas, numpy
 - **Visualization**: matplotlib, seaborn
 - **ML Models**: scikit-learn, xgboost
+- **Explainability**: shap (SHAP values for model interpretation)
 - **Statistics**: statsmodels
 - **Timezone Handling**: pytz (UTC to local time conversion)
 - **Testing**: pytest (unit and integration tests)
+- **Performance Testing**: locust (load testing), requests (HTTP benchmarks)
 - **Notebook Environment**: Jupyter
 
 ### Deployment
