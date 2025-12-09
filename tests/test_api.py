@@ -257,6 +257,202 @@ class TestAPIDocumentation:
         assert "/predict" in data["paths"]
 
 
+class TestPredictExplanation:
+    """Test fraud prediction explanation feature."""
+
+    @pytest.fixture
+    def valid_transaction(self):
+        """Sample valid raw transaction for testing."""
+        return {
+            "user_id": 12345,
+            "account_age_days": 180,
+            "total_transactions_user": 25,
+            "avg_amount_user": 250.50,
+            "amount": 850.75,
+            "country": "US",
+            "bin_country": "US",
+            "channel": "web",
+            "merchant_category": "retail",
+            "promo_used": 0,
+            "avs_match": 1,
+            "cvv_result": 1,
+            "three_ds_flag": 1,
+            "shipping_distance_km": 12.5,
+            "transaction_time": "2024-01-15 14:30:00"
+        }
+
+    @pytest.fixture
+    def suspicious_transaction(self):
+        """Sample suspicious transaction likely to have positive SHAP contributions."""
+        return {
+            "user_id": 99999,
+            "account_age_days": 5,  # new account
+            "total_transactions_user": 2,
+            "avg_amount_user": 50.0,
+            "amount": 999.99,  # high amount
+            "country": "US",
+            "bin_country": "GB",  # country mismatch
+            "channel": "web",
+            "merchant_category": "electronics",
+            "promo_used": 1,  # using promo
+            "avs_match": 0,  # failed verification
+            "cvv_result": 0,
+            "three_ds_flag": 0,
+            "shipping_distance_km": 500.0,  # long distance
+            "transaction_time": "2024-01-15 02:30:00"  # late night
+        }
+
+    def test_predict_without_explanation(self, client, valid_transaction):
+        """Test that explanation is not included by default."""
+        response = client.post("/predict", json=valid_transaction)
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("explanation") is None
+
+    def test_predict_with_explanation_false(self, client, valid_transaction):
+        """Test that explanation is not included when include_explanation=false."""
+        response = client.post(
+            "/predict?include_explanation=false",
+            json=valid_transaction,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("explanation") is None
+
+    def test_predict_with_explanation_true(self, client, suspicious_transaction):
+        """Test that explanation is included when include_explanation=true."""
+        response = client.post(
+            "/predict?include_explanation=true",
+            json=suspicious_transaction,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["explanation"] is not None
+        assert "top_contributors" in data["explanation"]
+        assert "base_fraud_rate" in data["explanation"]
+        assert "explanation_method" in data["explanation"]
+
+    def test_explanation_has_correct_structure(self, client, suspicious_transaction):
+        """Test that explanation has the correct structure."""
+        response = client.post(
+            "/predict?include_explanation=true",
+            json=suspicious_transaction,
+        )
+        data = response.json()
+        explanation = data["explanation"]
+
+        # Check base fields
+        assert isinstance(explanation["base_fraud_rate"], float)
+        assert explanation["explanation_method"] == "shap"
+
+        # Check top_contributors structure
+        assert isinstance(explanation["top_contributors"], list)
+        if len(explanation["top_contributors"]) > 0:
+            contrib = explanation["top_contributors"][0]
+            assert "feature" in contrib
+            assert "display_name" in contrib
+            assert "value" in contrib
+            assert "contribution" in contrib
+
+    def test_explanation_default_top_n(self, client, suspicious_transaction):
+        """Test that explanation returns default top 3 contributors."""
+        response = client.post(
+            "/predict?include_explanation=true",
+            json=suspicious_transaction,
+        )
+        data = response.json()
+        # Default is top 3, but may return fewer if not enough positive contributors
+        assert len(data["explanation"]["top_contributors"]) <= 3
+
+    def test_explanation_custom_top_n(self, client, suspicious_transaction):
+        """Test that explanation respects custom top_n parameter."""
+        response = client.post(
+            "/predict?include_explanation=true&top_n=5",
+            json=suspicious_transaction,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # May return fewer if not enough positive contributors
+        assert len(data["explanation"]["top_contributors"]) <= 5
+
+    def test_explanation_top_n_min_value(self, client, suspicious_transaction):
+        """Test that top_n=1 works correctly."""
+        response = client.post(
+            "/predict?include_explanation=true&top_n=1",
+            json=suspicious_transaction,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["explanation"]["top_contributors"]) <= 1
+
+    def test_explanation_top_n_max_value(self, client, suspicious_transaction):
+        """Test that top_n=10 works correctly."""
+        response = client.post(
+            "/predict?include_explanation=true&top_n=10",
+            json=suspicious_transaction,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["explanation"]["top_contributors"]) <= 10
+
+    def test_explanation_top_n_too_small(self, client, valid_transaction):
+        """Test that top_n < 1 is rejected."""
+        response = client.post(
+            "/predict?include_explanation=true&top_n=0",
+            json=valid_transaction,
+        )
+        assert response.status_code == 422
+
+    def test_explanation_top_n_too_large(self, client, valid_transaction):
+        """Test that top_n > 10 is rejected."""
+        response = client.post(
+            "/predict?include_explanation=true&top_n=11",
+            json=valid_transaction,
+        )
+        assert response.status_code == 422
+
+    def test_explanation_contributions_are_positive(self, client, suspicious_transaction):
+        """Test that all contributions are positive (increase fraud risk)."""
+        response = client.post(
+            "/predict?include_explanation=true&top_n=5",
+            json=suspicious_transaction,
+        )
+        data = response.json()
+        for contrib in data["explanation"]["top_contributors"]:
+            assert contrib["contribution"] > 0, (
+                f"Expected positive contribution for {contrib['feature']}, "
+                f"got {contrib['contribution']}"
+            )
+
+    def test_explanation_with_threshold_strategy(self, client, suspicious_transaction):
+        """Test that explanation works with different threshold strategies."""
+        response = client.post(
+            "/predict?include_explanation=true&threshold_strategy=conservative_90pct_recall",
+            json=suspicious_transaction,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["threshold_used"] == "conservative_90pct_recall"
+        assert data["explanation"] is not None
+
+    def test_explanation_processing_time_reasonable(self, client, suspicious_transaction):
+        """Test that explanation doesn't add too much processing time."""
+        # Get baseline without explanation
+        response_no_explain = client.post("/predict", json=suspicious_transaction)
+        time_no_explain = response_no_explain.json()["processing_time_ms"]
+
+        # Get time with explanation
+        response_with_explain = client.post(
+            "/predict?include_explanation=true",
+            json=suspicious_transaction,
+        )
+        time_with_explain = response_with_explain.json()["processing_time_ms"]
+
+        # Explanation should add reasonable overhead (less than 100ms typically)
+        # Allow generous margin for CI environments
+        assert time_with_explain < time_no_explain + 500
+
+
 class TestErrorHandling:
     """Test API error handling."""
 

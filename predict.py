@@ -25,12 +25,15 @@ from typing import Literal, Optional
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 # Import production feature engineering pipeline
 from src.deployment.preprocessing.transformer import FraudFeatureTransformer
+
+# Import explainability module
+from src.deployment.explainability import FraudExplainer
 
 # Configure logging
 logging.basicConfig(
@@ -45,12 +48,13 @@ threshold_config = None
 model_metadata = None
 feature_lists = None
 startup_time = None
+explainer = None  # SHAP explainer for prediction explanations
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global model, transformer, threshold_config, model_metadata, feature_lists, startup_time
+    global model, transformer, threshold_config, model_metadata, feature_lists, startup_time, explainer
 
     # Startup: Load model and configuration files
     startup_time = datetime.now()
@@ -92,6 +96,16 @@ async def lifespan(app: FastAPI):
         with open(feature_lists_path, "r") as f:
             feature_lists = json.load(f)
         logger.info(f"✓ Feature lists loaded: {len(feature_lists['all_features'])} features")
+
+        # Initialize SHAP explainer for prediction explanations
+        # Get feature names in the order the preprocessor outputs them (after encoding)
+        preprocessor = model.named_steps["preprocessor"]
+        preprocessed_feature_names = [
+            name.split("__", 1)[1] if "__" in name else name
+            for name in preprocessor.get_feature_names_out()
+        ]
+        explainer = FraudExplainer(model, feature_names=preprocessed_feature_names)
+        logger.info("✓ SHAP explainer initialized for prediction explanations")
 
         logger.info("=" * 80)
         logger.info("API READY FOR REQUESTS")
@@ -195,8 +209,11 @@ class PredictionResponse(BaseModel):
     threshold_value: float = Field(..., description="Threshold value used")
     model_version: str = Field(..., description="Model version")
     processing_time_ms: float = Field(..., description="Processing time in milliseconds")
+    explanation: Optional["ExplanationResponse"] = Field(
+        None, description="Explanation of the fraud score (when include_explanation=true)"
+    )
 
-    model_config = {"json_schema_extra": {"example": {"transaction_id": "550e8400-e29b-41d4-a716-446655440000", "is_fraud": False, "fraud_probability": 0.12, "risk_level": "low", "threshold_used": "balanced_85pct_recall", "threshold_value": 0.35, "model_version": "1.0", "processing_time_ms": 15.3}}}
+    model_config = {"json_schema_extra": {"example": {"transaction_id": "550e8400-e29b-41d4-a716-446655440000", "is_fraud": False, "fraud_probability": 0.12, "risk_level": "low", "threshold_used": "balanced_85pct_recall", "threshold_value": 0.35, "model_version": "1.0", "processing_time_ms": 15.3, "explanation": None}}}
 
 
 class HealthResponse(BaseModel):
@@ -228,6 +245,48 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str
     timestamp: str
+
+
+class FeatureContributionResponse(BaseModel):
+    """A single feature's contribution to the fraud prediction."""
+
+    feature: str = Field(..., description="Technical feature name")
+    display_name: str = Field(..., description="Human-readable feature name")
+    value: float = Field(..., description="Actual feature value for this prediction")
+    contribution: float = Field(..., description="SHAP contribution (positive = increases fraud risk)")
+
+
+class ExplanationResponse(BaseModel):
+    """Explanation of a fraud prediction showing top contributing features."""
+
+    top_contributors: list[FeatureContributionResponse] = Field(
+        ..., description="Top features contributing to the fraud score"
+    )
+    base_fraud_rate: float = Field(..., description="Baseline fraud probability (expected value)")
+    explanation_method: str = Field(default="shap", description="Method used for explanation")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "top_contributors": [
+                    {
+                        "feature": "avs_match",
+                        "display_name": "Address Verification Match",
+                        "value": 0,
+                        "contribution": 0.32,
+                    },
+                    {
+                        "feature": "account_age_days",
+                        "display_name": "Account Age (days)",
+                        "value": 5,
+                        "contribution": 0.28,
+                    },
+                ],
+                "base_fraud_rate": 0.022,
+                "explanation_method": "shap",
+            }
+        }
+    }
 
 
 # API endpoints
@@ -318,6 +377,16 @@ async def predict_fraud(
     threshold_strategy: Literal[
         "optimal_f1", "target_performance", "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
     ] = "optimal_f1",
+    include_explanation: bool = Query(
+        False,
+        description="Include SHAP-based explanation of top contributing features",
+    ),
+    top_n: int = Query(
+        3,
+        ge=1,
+        le=10,
+        description="Number of top contributing features to include in explanation (1-10)",
+    ),
 ):
     """
     Predict fraud for a raw transaction.
@@ -332,11 +401,16 @@ async def predict_fraud(
     - `balanced_85pct_recall`: Targets 85% recall with maximized precision
     - `aggressive_80pct_recall`: Targets 80% recall with highest precision (fewer false positives)
 
+    **Explanation Parameters:**
+    - `include_explanation`: Set to `true` to include SHAP-based explanation
+    - `top_n`: Number of top risk-increasing features to return (default: 3, range: 1-10)
+
     **Returns:**
     - Fraud prediction (True/False)
     - Fraud probability (0.0-1.0)
     - Risk level (low/medium/high)
     - Processing metadata
+    - Explanation (optional): Top features that increased the fraud risk score
     """
     start_time = time.time()
 
@@ -374,6 +448,32 @@ async def predict_fraud(
         else:
             risk_level = "low"
 
+        # Generate explanation if requested
+        explanation_response = None
+        if include_explanation and explainer is not None:
+            # Apply the pipeline's preprocessor to convert categorical features to numeric
+            # This is needed because XGBoost's DMatrix requires numeric input
+            preprocessor = model.named_steps["preprocessor"]
+            preprocessed_features = preprocessor.transform(engineered_features)
+            explanation_result = explainer.explain(
+                preprocessed_features,
+                top_n=top_n,
+                only_positive=True,  # Only show features that increase fraud risk
+            )
+            explanation_response = ExplanationResponse(
+                top_contributors=[
+                    FeatureContributionResponse(
+                        feature=contrib.feature,
+                        display_name=contrib.display_name,
+                        value=contrib.value,
+                        contribution=contrib.contribution,
+                    )
+                    for contrib in explanation_result.top_contributors
+                ],
+                base_fraud_rate=explanation_result.base_fraud_rate,
+                explanation_method=explanation_result.explanation_method,
+            )
+
         # Calculate processing time
         processing_time = (time.time() - start_time) * 1000  # Convert to ms
 
@@ -383,6 +483,7 @@ async def predict_fraud(
             f"Fraud={is_fraud}, "
             f"Prob={fraud_probability:.4f}, "
             f"Risk={risk_level}, "
+            f"Explained={include_explanation}, "
             f"Time={processing_time:.2f}ms"
         )
 
@@ -395,6 +496,7 @@ async def predict_fraud(
             threshold_value=threshold_value,
             model_version=model_metadata["model_info"]["version"],
             processing_time_ms=processing_time,
+            explanation=explanation_response,
         )
 
     except KeyError as e:
