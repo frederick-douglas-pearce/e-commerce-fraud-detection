@@ -53,7 +53,7 @@ class TestSaveProductionModel:
     def test_file_has_correct_name(self, sample_model, tmp_path):
         """Test that file has correct default name."""
         result = save_production_model(sample_model, tmp_path)
-        assert result.name == 'xgb_fraud_detector.joblib'
+        assert result.name == 'best_model.joblib'
 
     def test_custom_filename(self, sample_model, tmp_path):
         """Test with custom filename."""

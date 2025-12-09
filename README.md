@@ -402,7 +402,7 @@ This notebook contains:
   - XGBoost iteration tracking to find optimal n_estimators
   - Model stability assessment across CV folds
 7. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
-8. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.8679)
+8. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.868)
 9. **Output**: Saves trained model and configuration for next notebook
   - `models/best_model.joblib` - Trained XGBoost pipeline (preprocessing + classifier)
   - `models/best_params.json` - Optimal hyperparameters
@@ -425,7 +425,6 @@ This notebook contains:
 6. **Threshold Optimization**: Calibration of precision-recall trade-offs
    - 5 threshold strategies: target_performance, optimal_f1, 80%/85%/90% recall
 7. **Deployment Artifacts**: Saves configuration files to `models/`
-   - `xgb_fraud_detector.joblib` - Production model (copy of best_model)
    - `threshold_config.json` - Optimal thresholds for different strategies
    - `model_metadata.json` - Model version, hyperparameters, performance metrics
    - `feature_lists.json` - Categorized feature names

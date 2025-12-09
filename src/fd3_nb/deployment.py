@@ -16,7 +16,7 @@ import joblib
 def save_production_model(
     model: Any,
     model_dir: Path,
-    filename: str = "xgb_fraud_detector.joblib"
+    filename: str = "best_model.joblib"
 ) -> Path:
     """
     Save the trained model for production deployment.
