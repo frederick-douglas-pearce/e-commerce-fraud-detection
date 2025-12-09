@@ -149,10 +149,14 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │   │   │   ├── transformer.py          # FraudFeatureTransformer (sklearn-compatible)
 │   │   │   ├── pipelines.py            # PreprocessingPipelineFactory
 │   │   │   └── __init__.py             # Package exports
-│   │   └── evaluation/                 # Model evaluation utilities
-│   │       ├── metrics.py              # evaluate_model()
-│   │       ├── thresholds.py           # optimize_thresholds()
-│   │       └── __init__.py             # Package exports
+│   │   ├── evaluation/                 # Model evaluation utilities
+│   │   │   ├── metrics.py              # evaluate_model()
+│   │   │   ├── thresholds.py           # optimize_thresholds()
+│   │   │   └── __init__.py             # Package exports
+│   │   └── explainability/             # SHAP-based prediction explanations
+│   │       ├── __init__.py             # Package exports
+│   │       ├── shap_explainer.py       # FraudExplainer class
+│   │       └── feature_descriptions.py # Human-readable feature names
 │   ├── fd1_nb/                         # Notebook 1 utility functions (EDA & FE)
 │   │   ├── __init__.py                 # Package exports (21 functions)
 │   │   ├── data_utils.py               # Data loading, splitting, analysis
@@ -165,21 +169,22 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 │   │   ├── cv_analysis.py              # CV results analysis and train-val gap detection
 │   │   └── bias_variance.py            # Bias-variance diagnostics
 │   └── fd3_nb/                         # Notebook 3 utility functions (Evaluation & Deployment)
-│       ├── __init__.py                 # Package exports (17 functions)
+│       ├── __init__.py                 # Package exports (18 functions)
 │       ├── evaluation.py               # Model evaluation and performance comparison
-│       ├── visualization.py            # ROC/PR curves and feature importance plots
+│       ├── visualization.py            # ROC/PR curves, SHAP beeswarm plots
 │       ├── threshold_optimization.py   # Threshold optimization strategies
-│       ├── feature_importance.py       # Feature importance extraction
+│       ├── feature_importance.py       # Feature importance (XGBoost gain + SHAP)
 │       └── deployment.py               # Deployment artifact generation
-├── tests/                              # Test suite (374 passing tests)
+├── tests/                              # Test suite (425 passing tests)
 │   ├── conftest.py                     # Shared pytest fixtures
-│   ├── test_api.py                     # API integration tests (24 tests)
+│   ├── test_api.py                     # API integration tests (33 tests)
 │   ├── test_config/                    # Shared config tests (44 tests)
 │   ├── test_data/                      # Data loading tests (12 tests)
 │   ├── test_eda/                       # EDA utility tests (68 tests)
 │   ├── test_evaluation/                # Evaluation tests (26 tests)
+│   ├── test_explainability/            # Explainability tests (9 tests)
 │   ├── test_fd2_nb/                    # Notebook 2 utility tests (63 tests)
-│   ├── test_fd3_nb/                    # Notebook 3 utility tests (76 tests)
+│   ├── test_fd3_nb/                    # Notebook 3 utility tests (83 tests)
 │   └── test_preprocessing/             # Preprocessing tests (61 tests)
 ├── models/                             # Model artifacts (tracked in git)
 │   ├── xgb_fraud_detector.joblib       # Trained XGBoost model (~156KB)
@@ -330,7 +335,10 @@ This notebook contains:
 3. **Model Retraining**: Trains best model on train+val combined (239,756 samples)
 4. **Test Set Evaluation**: Unbiased evaluation on completely held-out test set
 5. **Performance Visualization**: ROC/PR curves on test data
-6. **Feature Importance**: Analysis of top predictive features
+6. **Feature Importance**: SHAP-based analysis with beeswarm plots
+   - SHAP values computed using XGBoost native `pred_contribs=True`
+   - Comparison of XGBoost gain vs SHAP importance rankings
+   - Guidance on interpreting global vs per-sample SHAP values
 7. **Threshold Optimization**: Calibration of precision-recall trade-offs
 8. **Deployment Artifacts**: Saves model and configuration files to `models/`
 
@@ -853,9 +861,42 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_re
   "threshold_used": "balanced_85pct_recall",
   "threshold_value": 0.35,
   "model_version": "1.0",
-  "processing_time_ms": 15.3
+  "processing_time_ms": 15.3,
+  "explanation": null
 }
 ```
+
+#### Explainability Feature
+
+Request SHAP-based explanations showing which features increased fraud risk:
+
+```bash
+curl -X POST "http://localhost:8000/predict?include_explanation=true&top_n=3" \
+  -H "Content-Type: application/json" \
+  -d @transaction.json
+```
+
+**Response with Explanation:**
+```json
+{
+  "transaction_id": "...",
+  "is_fraud": true,
+  "fraud_probability": 0.85,
+  "explanation": {
+    "top_contributors": [
+      {"feature": "avs_match", "display_name": "Address Verification Match", "value": 0, "contribution": 0.32},
+      {"feature": "account_age_days", "display_name": "Account Age (days)", "value": 5, "contribution": 0.28},
+      {"feature": "security_score", "display_name": "Security Score", "value": 1, "contribution": 0.15}
+    ],
+    "base_fraud_rate": 0.022,
+    "explanation_method": "shap"
+  }
+}
+```
+
+**Parameters:**
+- `include_explanation` (bool): Include SHAP-based feature explanations (default: false)
+- `top_n` (int): Number of top contributing features (1-10, default: 3)
 
 #### Threshold Strategies
 
@@ -933,11 +974,11 @@ Run comprehensive test suite to verify all components: shared infrastructure, pr
 
 ### Test Organization
 
-The test suite mirrors the source code structure with 374 passing tests:
+The test suite mirrors the source code structure with 425 passing tests:
 
 ```
 tests/
-├── test_api.py              # API integration tests (24 tests)
+├── test_api.py              # API integration tests (33 tests)
 ├── test_config/             # Shared config tests (44 tests)
 │   ├── test_data_config.py       # DataConfig (16 tests)
 │   ├── test_model_config.py      # ModelConfig, FeatureListsConfig (19 tests)
@@ -951,22 +992,24 @@ tests/
 ├── test_evaluation/         # Evaluation tests (26 tests)
 │   ├── test_metrics.py           # calculate_metrics, evaluate_model (14 tests)
 │   └── test_thresholds.py        # optimize_thresholds (12 tests)
+├── test_explainability/     # Explainability tests (9 tests)
+│   └── test_shap_explainer.py    # FraudExplainer class tests
 ├── test_fd2_nb/             # Notebook 2 utility tests (63 tests)
 │   ├── test_bias_variance.py     # Bias-variance analysis (7 tests)
 │   ├── test_cv_analysis.py       # CV results analysis (25 tests)
-│   ├── test_hyperparameter_tuning.py # Tuning utilities (17 tests)
-│   └── test_model_comparison.py  # Model comparison (14 tests)
-├── test_fd3_nb/             # Notebook 3 utility tests (76 tests)
-│   ├── test_deployment.py        # Model deployment utilities (19 tests)
-│   ├── test_evaluation.py        # Model evaluation (10 tests)
-│   ├── test_feature_importance.py # Feature importance extraction (10 tests)
-│   ├── test_threshold_optimization.py # Threshold optimization (22 tests)
-│   └── test_visualization.py     # Visualization functions (15 tests)
+│   ├── test_hyperparameter_tuning.py # Tuning utilities (15 tests)
+│   └── test_model_comparison.py  # Model comparison (16 tests)
+├── test_fd3_nb/             # Notebook 3 utility tests (83 tests)
+│   ├── test_deployment.py        # Model deployment utilities (26 tests)
+│   ├── test_evaluation.py        # Model evaluation (15 tests)
+│   ├── test_feature_importance.py # Feature importance extraction (19 tests)
+│   ├── test_threshold_optimization.py # Threshold optimization (23 tests)
+│   └── test_visualization.py     # SHAP beeswarm plot tests (7 tests)
 └── test_preprocessing/      # Preprocessing tests (61 tests)
     ├── test_config.py            # FeatureConfig (8 tests)
-    ├── test_features.py          # Feature engineering functions (17 tests)
+    ├── test_features.py          # Feature engineering functions (15 tests)
     ├── test_pipelines.py         # PreprocessingPipelineFactory (18 tests)
-    └── test_transformer.py       # FraudFeatureTransformer (18 tests)
+    └── test_transformer.py       # FraudFeatureTransformer (20 tests)
 ```
 
 ### Running Tests
@@ -993,6 +1036,9 @@ uv run pytest tests/test_eda/ -v
 
 # Evaluation tests
 uv run pytest tests/test_evaluation/ -v
+
+# Explainability tests
+uv run pytest tests/test_explainability/ -v
 
 # fd2 notebook utility tests
 uv run pytest tests/test_fd2_nb/ -v
@@ -1021,15 +1067,16 @@ uv run pytest tests/test_preprocessing/test_transformer.py -v --tb=short
 
 ### Test Coverage Summary
 
-**374 total tests** covering:
+**425 total tests** covering:
 - ✅ **Shared Configuration** (44 tests): DataConfig, ModelConfig, TrainingConfig
 - ✅ **Data Loading** (12 tests): load_and_split_data with stratification validation
 - ✅ **EDA Utilities** (68 tests): Data utils, EDA functions, feature engineering
 - ✅ **Evaluation** (26 tests): Metrics calculation and threshold optimization
+- ✅ **Explainability** (9 tests): FraudExplainer SHAP-based explanations
 - ✅ **fd2 Notebook Utilities** (63 tests): Model comparison, hyperparameter tuning, CV analysis, bias-variance
-- ✅ **fd3 Notebook Utilities** (76 tests): Evaluation, visualization, threshold optimization, deployment
+- ✅ **fd3 Notebook Utilities** (83 tests): Evaluation, visualization, SHAP beeswarm, threshold optimization, deployment
 - ✅ **Preprocessing** (61 tests): FeatureConfig, feature engineering functions, pipelines, transformer
-- ✅ **API** (24 tests): Endpoints, validation, error handling, threshold strategies
+- ✅ **API** (33 tests): Endpoints, validation, error handling, threshold strategies, explainability
 
 **Key Test Features**:
 - Comprehensive edge case coverage (division by zero, missing data)
