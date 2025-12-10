@@ -380,6 +380,8 @@ The project uses a modular three-notebook workflow for clear separation of conce
   <img src="notebooks/images/fd2/comprehensive_model_comparison.png" alt="Model Comparison" width="700">
 </p>
 
+*XGBoost (Tuned) achieves the best PR-AUC (0.868) while maintaining strong precision (73.5%) and recall (83.2%), significantly outperforming baselines and providing better precision-recall balance than Random Forest alternatives.*
+
 **Notebook 3: Final Evaluation & Deployment** (`notebooks/fd3_model_evaluation_deployment.ipynb`)
 
 - **Test Set Evaluation**: Unbiased evaluation on held-out test set (59,939 samples)
