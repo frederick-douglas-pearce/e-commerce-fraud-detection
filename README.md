@@ -394,9 +394,6 @@ This notebook contains:
 2. **Preprocessing**: Model-specific transformations (one-hot encoding, scaling)
 3. **Baseline Models**: Logistic Regression, Random Forest, XGBoost (all trained)
 4. **Hyperparameter Tuning**: Flexible GridSearchCV/RandomizedSearchCV with detailed logging
-  1. Randomized search of 50+ combinations across a wide range of parameters and their values
-  2. Identify parameters with values that remain constant across best performing parameter combinations
-  3. Grid search across a narrow range of only the most influential parameters 
 5. **CV Results Analysis**: Production-focused evaluation of model stability and timing
   - Comprehensive CSV logging of all CV results
   - Stability analysis (std_test_score across folds)
@@ -454,7 +451,8 @@ This notebook contains:
   <img src="notebooks/images/fd3/threshold_optimization.png" alt="Threshold Optimization" width="700">
 </p>
 
-*Threshold optimization enables precision-recall trade-offs for different business needs. The 80% recall threshold (green diamond) provides the best F1 score (0.809), while higher recall targets (85%, 90%) catch more fraud at the cost of increased false positives.*
+*Threshold optimization enables precision-recall trade-offs for different business needs. Five strategies are shown: Optimal F1 (purple square) maximizes the F1 score (0.831) with highest precision (92.7%); Target Performance (blue square) is the default threshold meeting both criteria (recall >80%, precision >70%) while catching the most fraud (83.2% recall); and three recall-targeted thresholds (90%, 85%, 80%) prioritize fraud detection at the cost of increased false positives.*
+
 7. **Deployment Artifacts**: Saves configuration files to `models/`
    - `threshold_config.json` - Optimal thresholds for different strategies
    - `model_metadata.json` - Model version, hyperparameters, performance metrics
