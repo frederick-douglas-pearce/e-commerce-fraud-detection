@@ -110,6 +110,11 @@ def save_threshold_config(
     threshold_config = {
         'default_threshold': 0.5,
         'recommended_threshold': 'target_performance' if target_performance_result else 'optimal_f1',
+        'risk_levels': {
+            'low': {'max_probability': 0.3},
+            'medium': {'max_probability': 0.7},
+            'high': {'max_probability': 1.0}
+        },
         'optimized_thresholds': optimized_thresholds,
         'note': 'target_performance maximizes recall while meeting precision constraint (recommended for production)'
     }

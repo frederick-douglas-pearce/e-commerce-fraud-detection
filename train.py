@@ -425,6 +425,11 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
     threshold_config_wrapped = {
         "default_threshold": 0.5,
         "recommended_threshold": "target_performance" if "target_performance" in results["threshold_config"] else "optimal_f1",
+        "risk_levels": {
+            "low": {"max_probability": 0.3},
+            "medium": {"max_probability": 0.7},
+            "high": {"max_probability": 1.0}
+        },
         "optimized_thresholds": results["threshold_config"],
         "note": "Thresholds optimized on held-out test set predictions."
     }

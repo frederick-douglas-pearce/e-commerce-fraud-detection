@@ -477,10 +477,18 @@ async def predict_fraud(
         threshold_value = threshold_info["threshold"]
         is_fraud = fraud_probability >= threshold_value
 
-        # Determine risk level
-        if fraud_probability >= 0.7:
+        # Determine risk level from configuration
+        risk_levels_config = threshold_config.get("risk_levels", {
+            "low": {"max_probability": 0.3},
+            "medium": {"max_probability": 0.7},
+            "high": {"max_probability": 1.0}
+        })
+        low_max = risk_levels_config["low"]["max_probability"]
+        medium_max = risk_levels_config["medium"]["max_probability"]
+
+        if fraud_probability >= medium_max:
             risk_level = "high"
-        elif fraud_probability >= 0.3:
+        elif fraud_probability >= low_max:
             risk_level = "medium"
         else:
             risk_level = "low"

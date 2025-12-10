@@ -788,8 +788,9 @@ The API loads the following artifacts on startup from `models/` directory:
    - Timezone mapping for local time conversion
 
 3. **`threshold_config.json`** (tracked in git)
-   - Three threshold strategies with precision-recall trade-offs
-   - Threshold values calibrated on validation set
+   - Five threshold strategies with precision-recall trade-offs
+   - Threshold values calibrated on test set
+   - Configurable risk levels (low/medium/high) with probability boundaries for automated workflow routing
 
 4. **`model_metadata.json`** (tracked in git)
    - Model version, training date, algorithm
@@ -1694,8 +1695,9 @@ The project uses a modular three-notebook workflow with clear separation of conc
    - Timezone mapping for local time conversion
 
 3. **threshold_config.json** (tracked in git)
-   - Three pre-calibrated threshold strategies (conservative, balanced, aggressive)
+   - Five pre-calibrated threshold strategies (target_performance, optimal_f1, conservative, balanced, aggressive)
    - Precision-recall trade-offs for different use cases
+   - Configurable risk levels (low/medium/high) for automated workflow routing
 
 4. **model_metadata.json** (tracked in git)
    - Model version, training date, algorithm details

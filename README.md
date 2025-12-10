@@ -565,12 +565,13 @@ This section covers deployment options, the deployment roadmap, and API usage ex
 ```bash
 uv sync                                                    # Install dependencies
 uv run python train.py                                     # Train model (if needed)
-uv run uvicorn predict:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn predict:app --host 0.0.0.0 --port 8000
 ```
 Access: http://localhost:8000/docs
 
 #### Option 2: Docker (Recommended)
 ```bash
+docker compose build                                       # Build image
 docker compose up -d                                       # Start container
 curl http://localhost:8000/health                          # Verify
 docker compose down                                        # Stop
@@ -758,6 +759,31 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=conservative_90pc
   -H "Content-Type: application/json" \
   -d @transaction.json
 ```
+
+#### Risk Levels
+
+Each prediction includes a `risk_level` classification based on configurable probability thresholds. This enables automated workflow routing where certain risk levels trigger manual review while others are processed automatically.
+
+**Default Configuration** (in `models/threshold_config.json`):
+
+| Risk Level | Probability Range | Recommended Action |
+|------------|-------------------|-------------------|
+| `low` | 0.0 - 0.3 | Auto-approve transaction |
+| `medium` | 0.3 - 0.7 | Flag for analyst review |
+| `high` | 0.7 - 1.0 | Auto-block or escalate |
+
+**Configuration:**
+```json
+{
+  "risk_levels": {
+    "low": {"max_probability": 0.3},
+    "medium": {"max_probability": 0.7},
+    "high": {"max_probability": 1.0}
+  }
+}
+```
+
+Adjust thresholds based on your business requirements - for example, lowering the `medium` boundary to 0.2 will flag more transactions for review.
 
 #### Health Check
 ```bash
