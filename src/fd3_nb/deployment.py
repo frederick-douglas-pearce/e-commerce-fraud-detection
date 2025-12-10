@@ -16,7 +16,7 @@ import joblib
 def save_production_model(
     model: Any,
     model_dir: Path,
-    filename: str = "best_model.joblib"
+    filename: str = "xgb_fraud_detector.joblib"
 ) -> Path:
     """
     Save the trained model for production deployment.
@@ -223,7 +223,7 @@ def save_model_metadata(
             'training_notebook': 'fd2_model_selection_tuning.ipynb',
             'evaluation_notebook': 'fd3_model_evaluation_deployment.ipynb',
             'model_source': 'GridSearchCV best_estimator_ (auto-refit on train+val)',
-            'note': 'Model loaded from best_model.joblib, no retraining in fd3'
+            'note': 'Model loaded from xgb_fraud_detector.joblib, no retraining in fd3'
         }
     }
 

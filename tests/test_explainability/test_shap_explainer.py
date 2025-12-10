@@ -22,7 +22,7 @@ from src.deployment.explainability.shap_explainer import (
 @pytest.fixture(scope="module")
 def model():
     """Load the trained XGBoost model."""
-    return joblib.load("models/best_model.joblib")
+    return joblib.load("models/xgb_fraud_detector.joblib")
 
 
 @pytest.fixture(scope="module")

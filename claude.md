@@ -1717,9 +1717,9 @@ The project uses a modular three-notebook workflow with clear separation of conc
 notebooks/fd1_EDA_FE.ipynb
     ↓ (saves models/transformer_config.json + models/feature_lists.json)
 notebooks/fd2_model_selection_tuning.ipynb
-    ↓ (loads feature_lists.json, saves models/best_model.joblib + models/best_params.json + models/validation_metrics.json)
+    ↓ (loads feature_lists.json, saves models/xgb_fraud_detector.joblib + models/best_params.json + models/validation_metrics.json)
 notebooks/fd3_model_evaluation_deployment.ipynb
-    ↓ (loads feature_lists.json + best_model.joblib, saves models/threshold_config.json + models/model_metadata.json)
+    ↓ (loads feature_lists.json + xgb_fraud_detector.joblib, saves models/threshold_config.json + models/model_metadata.json)
 Production Deployment
 ```
 

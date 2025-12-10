@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"✓ Feature transformer loaded from {transformer_config_path}")
 
         # Load model
-        model_path = models_dir / "best_model.joblib"
+        model_path = models_dir / "xgb_fraud_detector.joblib"
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 

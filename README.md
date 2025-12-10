@@ -355,52 +355,16 @@ The project uses a modular three-notebook workflow for clear separation of conce
 
 **Notebook 1: EDA & Feature Engineering** (`notebooks/fd1_EDA_FE.ipynb`)
 
-This notebook contains:
-1. **Data Loading**: Automated Kaggle dataset download with caching
-2. **Preprocessing**: Data cleaning, type conversion, train/val/test splits (60/20/20, stratified)
-3. **EDA**: Comprehensive exploratory data analysis
-  - Target distribution and class imbalance analysis (44:1 ratio)
-  - Numeric feature distributions and correlations
-  - Categorical feature fraud rates and mutual information
-  - Temporal pattern analysis
-  - Multicollinearity detection (VIF)
-4. **Feature Engineering Development**: 32 engineered features were created and evaluated:
-  - **Temporal**: UTC and local timezone features (hour, day_of_week, is_late_night, etc.)
-  - **Amount**: Deviation, ratios, micro/large transaction flags
-  - **User Behavior**: Transaction velocity, new account flags, frequency indicators
-  - **Geographic**: Country mismatch, high-risk distance, zero distance
-  - **Security**: Composite security score from verification flags
-  - **Interaction**: Fraud scenario-specific combinations (e.g., new_account_with_promo)
-5. **Feature Selection**: Final selection of **30 features** from 45 available
-  - Removed redundant features (UTC features, duplicate country fields)
-  - Excluded low-signal features (merchant_category)
-  - Prioritized interpretability and fraud scenario alignment
-6. **Production Configuration**: Generates deployment configuration files
-  - `transformer_config.json` - Quantile thresholds (95th/75th percentiles) for feature engineering
-  - `feature_lists.json` - Feature categorization by dtype for preprocessing pipeline:
-    - Categorical (1): string features requiring OrdinalEncoder
-    - Continuous numeric (12): continuous/ordinal numeric features
-    - Binary (17): 0/1 flag features
-  - Includes timezone mappings for 10 countries
-  - Ensures consistent feature engineering between training and inference
+- **Data Loading & EDA**: Automated Kaggle download, train/val/test splits (60/20/20), class imbalance analysis (44:1)
+- **Feature Engineering**: 32 features created across temporal, amount, behavior, geographic, security, and interaction categories
+- **Feature Selection**: 30 features selected, removing redundant/low-signal features
+- **Output**: `transformer_config.json`, `feature_lists.json` for production deployment
 
 **Notebook 2: Model Selection & Hyperparameter Tuning** (`notebooks/fd2_model_selection_tuning.ipynb`)
 
-This notebook contains:
-1. **Data Loading**: Loads raw transaction data and applies `FraudFeatureTransformer` pipeline
-  - Applies production feature engineering consistently across train/val/test splits
-  - Generates 30 engineered features from 15 raw transaction fields
-  - Uses same transformer configuration as deployment API
-2. **Preprocessing**: Model-specific transformations (one-hot encoding, scaling)
-3. **Baseline Models**: Logistic Regression, Random Forest, XGBoost (all trained)
-4. **Hyperparameter Tuning**: Flexible GridSearchCV/RandomizedSearchCV with detailed logging
-5. **CV Results Analysis**: Production-focused evaluation of model stability and timing
-  - Comprehensive CSV logging of all CV results
-  - Stability analysis (std_test_score across folds)
-  - Timing measurements with appropriate caveats for parallel processing
-6. **Bias-Variance Analysis**: Train-validation gap and CV fold variance diagnostics
-  - Random Forest and XGBoost iteration tracking to minimize overfitting and find the optimal n_estimators value
-  - Model stability assessment across CV folds
+- **Data Loading**: Applies `FraudFeatureTransformer` to generate 30 features from raw data
+- **Model Training**: Logistic Regression, Random Forest, XGBoost baselines with GridSearchCV tuning
+- **Bias-Variance Analysis**: Train-validation gap diagnostics to minimize overfitting
 
 <p align="center">
   <img src="notebooks/images/fd2/rf_iteration_performance.png" alt="Random Forest Iteration Performance" width="49%">
@@ -409,34 +373,17 @@ This notebook contains:
 
 *Bias-variance analysis comparing Random Forest (left) and XGBoost (right). XGBoost achieves significantly higher validation performance (PR-AUC: 0.868 vs 0.832) while exhibiting substantially less overfitting (train-validation gap: 1.5% vs 4.7%). The tuned XGBoost model (n_estimators=100) was selected where validation performance plateaus while maintaining a minimal train-validation gap.*
 
-7. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
-8. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.868)
+- **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.868, Precision: 73.5%, Recall: 83.2%)
+- **Output**: `xgb_fraud_detector.joblib`, `best_params.json`, `validation_metrics.json`
 
 <p align="center">
   <img src="notebooks/images/fd2/comprehensive_model_comparison.png" alt="Model Comparison" width="700">
 </p>
 
-*XGBoost (Tuned) achieves the best PR-AUC (0.868) while maintaining strong precision (73.5%) and recall (83.2%). The tuned model significantly outperforms baselines on the primary metric while providing a better precision-recall balance than Random Forest alternatives.*
-
-9. **Output**: Saves trained model and configuration for next notebook
-  - `models/best_model.joblib` - Trained XGBoost pipeline (preprocessing + classifier)
-  - `models/best_params.json` - Optimal hyperparameters
-  - `models/validation_metrics.json` - CV performance metrics
-
 **Notebook 3: Final Evaluation & Deployment** (`notebooks/fd3_model_evaluation_deployment.ipynb`)
 
-This notebook contains:
-1. **Model Loading**: Loads trained model from `models/best_model.joblib` (trained in Notebook 2)
-   - Also loads `validation_metrics.json` for comparison with test set performance
-2. **Data Preparation**: Recreates train/val/test splits with same random seed
-3. **Test Set Evaluation**: Unbiased evaluation on completely held-out test set
-   - Model was trained on train+val combined (239,756 samples) in Notebook 2
-   - Test set (59,939 samples) never seen during training or hyperparameter tuning
-4. **Performance Visualization**: ROC/PR curves on test data
-5. **Feature Importance**: SHAP-based analysis with beeswarm plots
-   - SHAP values computed using XGBoost native `pred_contribs=True`
-   - Guidance on interpreting global vs per-sample SHAP values
-   - Per-sample SHAP examples previewing API explainability behavior
+- **Test Set Evaluation**: Unbiased evaluation on held-out test set (59,939 samples)
+- **Feature Importance**: SHAP-based analysis with beeswarm plots
 
 <p align="center">
   <img src="notebooks/images/fd3/shap_beeswarm.png" alt="SHAP Feature Importance" width="600">
@@ -444,71 +391,20 @@ This notebook contains:
 
 *SHAP beeswarm plot showing how feature values impact fraud predictions. Red points (high values) on the right increase fraud risk; blue points (low values) on the left decrease it. Key insights: longer shipping distances and lower security scores strongly increase fraud risk, while older accounts and app channel usage decrease it.*
 
-6. **Threshold Optimization**: Calibration of precision-recall trade-offs
-   - 5 threshold strategies: target_performance, optimal_f1, 80%/85%/90% recall
+- **Threshold Optimization**: 5 strategies (target_performance, optimal_f1, 80%/85%/90% recall)
+- **Output**: `threshold_config.json`, `model_metadata.json`
 
 <p align="center">
   <img src="notebooks/images/fd3/threshold_optimization.png" alt="Threshold Optimization" width="700">
 </p>
 
-*Threshold optimization enables precision-recall trade-offs for different business needs. Five strategies are shown: Optimal F1 (purple square) maximizes the F1 score (0.831) with highest precision (92.7%); Target Performance (blue square) is the default threshold meeting both criteria (recall >80%, precision >70%) while catching the most fraud (83.2% recall); and three recall-targeted thresholds (90%, 85%, 80%) prioritize fraud detection at the cost of increased false positives.*
-
-7. **Deployment Artifacts**: Saves configuration files to `models/`
-   - `threshold_config.json` - Optimal thresholds for different strategies
-   - `model_metadata.json` - Model version, hyperparameters, performance metrics
-8. **Model Card**: Comprehensive documentation of model capabilities and limitations
-
-**Workflow Benefits**:
-- **Clear separation**: EDA → Selection → Deployment stages
-- **Focused notebooks**: Each notebook has manageable size and single purpose
-- **Proper holdout**: Test set only evaluated in final notebook
-- **Reproducibility**: JSON files enable independent execution
-- **Modularity**: Easy to re-run specific stages without full pipeline
+*Threshold optimization enables precision-recall trade-offs for different business needs. Five strategies are shown: Optimal F1 (purple square) maximizes the F1 score (0.831) with highest precision (92.7%); Target Performance (blue square) is the default threshold meeting both criteria (recall >80%, precision >70%) while catching the most fraud (83.2% recall); and three recall-targeted thresholds (90%, 85%, 80%) prioritize fraud detection rates at fixed intervals.*
 
 ### Model Training Strategy
-Given the 44:1 class imbalance, the project employs:
-- **Stratified sampling** to maintain class distribution across splits
-- **Class weighting** in model training (class_weight='balanced', scale_pos_weight)
-- **Appropriate metrics**: PR-AUC (primary), ROC-AUC, F1, Precision-Recall (not accuracy)
-- **Threshold tuning** to optimize precision/recall trade-offs
-- **4-fold Stratified CV** for hyperparameter optimization
 
-**Hyperparameter Tuning Features**
+Given the 44:1 class imbalance, the project employs stratified sampling, class weighting (`scale_pos_weight=8`), PR-AUC as primary metric, threshold tuning, and 4-fold Stratified CV.
 
-The modeling pipeline includes production-ready tuning capabilities:
-
-**Two-Stage Tuning Approach:**
-- **Stage 1 (Exploration)**: RandomizedSearchCV with broad parameter ranges identifies stable parameters that remain unchanged across top-performing models
-- **Stage 2 (Refinement)**: GridSearchCV on a focused parameter subset with narrow ranges, guided by Stage 1 insights
-- Applied to Random Forest and XGBoost for efficient, thorough hyperparameter optimization
-
-**Critical Hyperparameter Finding:**
-- XGBoost's `scale_pos_weight` primarily controls the recall/precision trade-off and was included in the hyperparameter search space
-- Using the actual class imbalance ratio (44:1) produced excessive false positives
-- Optimal value of 8 (5.5× lower than class imbalance) achieved performance targets for both metrics
-- Key tuning parameter for adapting model behavior to changing business requirements
-
-**Flexible Search Strategy:**
-- Switch between GridSearchCV and RandomizedSearchCV with a single parameter
-- Automatic calculation of total parameter combinations
-- Support for both exhaustive and random search approaches
-
-**Comprehensive Logging:**
-- Detailed CV results exported to timestamped CSV files
-- Verbose output captured to log files
-- All parameter combinations and scores preserved for analysis
-
-**Production-Focused Analysis:**
-- Model stability evaluation (std_test_score across CV folds)
-- Timing measurements with appropriate caveats for parallel processing
-- Top N candidates comparison for trade-off analysis
-- Automated recommendations for model selection
-- Visual analysis of performance vs stability trade-offs
-
-**Key Insights:**
-- Timing metrics are unreliable with parallel CV (measurement artifacts)
-- Focus on PR-AUC and stability for model selection
-- Production API latency testing provides definitive performance numbers
+**Key Finding**: XGBoost's `scale_pos_weight` controls the recall/precision trade-off. Using the actual class imbalance ratio (44:1) produced excessive false positives; optimal value of 8 achieved targets for both metrics.
 
 ---
 
@@ -518,76 +414,22 @@ This section covers the production-ready components: the feature engineering tra
 
 ### Feature Engineering Pipeline
 
-The project includes a production-ready feature engineering pipeline (`src/deployment/preprocessing/`) designed for deployment. This sklearn-compatible transformer ensures consistent feature engineering between training and inference.
+The sklearn-compatible `FraudFeatureTransformer` (`src/deployment/preprocessing/`) ensures consistent feature engineering between training and inference:
 
-**Architecture Overview**
-
-**Design Pattern**: Hybrid Class + Config (sklearn-compatible transformer with JSON configuration)
-
-**Key Components**:
-1. **`FraudFeatureTransformer`** - Sklearn-compatible transformer class
-   - `fit(X)` - Calculates quantile thresholds from training data
-   - `transform(X)` - Applies feature engineering pipeline
-   - `save(path)` / `load(path)` - Persists configuration as JSON
-
-2. **`FeatureConfig`** - Type-safe configuration dataclass
-   - Stores training-time statistics (95th/75th percentile thresholds)
-   - Timezone mappings for 10 countries
-   - List of 30 final selected features
-   - JSON serialization for version control
-
-3. **Feature Engineering Functions** - Modular, testable functions
-   - Timezone conversion (UTC → local time by country)
-   - Temporal, amount, behavior, geographic, security features
-   - Fraud scenario-specific interaction features
-
-**Usage**
-
-Training Workflow:
 ```python
 from src.deployment.preprocessing import FraudFeatureTransformer
 
-# Fit transformer on training data
+# Training: fit and save
 transformer = FraudFeatureTransformer()
-transformer.fit(train_df)  # Calculates quantile thresholds
-X_train = transformer.transform(train_df)
-
-# Save configuration for deployment
+transformer.fit(train_df)
 transformer.save("models/transformer_config.json")
-```
 
-Inference Workflow:
-```python
-# Load transformer with saved configuration
+# Inference: load and transform
 transformer = FraudFeatureTransformer.load("models/transformer_config.json")
 X_new = transformer.transform(new_df)
 ```
 
-Sklearn Pipeline Integration:
-```python
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-
-pipeline = Pipeline([
-    ('feature_engineering', FraudFeatureTransformer()),
-    ('classifier', LogisticRegression())
-])
-pipeline.fit(train_df, y_train)
-predictions = pipeline.predict(test_df)
-```
-
-**Benefits**
-
-✅ **Sklearn Pipeline compatible** - Standard fit/transform API
-✅ **Lightweight** - JSON config (not pickled Python objects)
-✅ **Version control friendly** - Config changes visible in diffs
-✅ **Type-safe** - Dataclass with validation
-✅ **Fully tested** - 41 passing tests with edge case coverage
-✅ **Production-ready** - Industry standard pattern
-
-**Configuration File**
-
-The `transform_config.json` file stores:
+**Configuration** (`transformer_config.json`):
 ```json
 {
   "amount_95th_percentile": 595.97,
@@ -707,153 +549,37 @@ uv run python train.py \
 
 This section covers deployment options, the deployment roadmap, and API usage examples.
 
-### Deployment Plan
+### Deployment Status
 
-**Phase 1: Model Development & Feature Engineering ✅ (100% Complete)**
-- [x] Dataset acquisition and exploration
-- [x] Initial EDA and data quality checks
-- [x] Preprocessing pipeline setup (stratified splits, type conversion)
-- [x] Comprehensive exploratory data analysis
-- [x] Feature engineering (32 features created)
-- [x] Final feature selection (30 features selected)
-- [x] Dataset persistence for modeling
-- [x] **Production feature engineering pipeline** (sklearn-compatible)
-- [x] **Comprehensive test suite** (41 passing tests)
-- [x] **Configuration management** (JSON-based FeatureConfig)
-- [x] **Baseline model training** (Logistic Regression, Random Forest, XGBoost)
-- [x] **Hyperparameter tuning** (Random Forest and XGBoost optimized)
-- [x] **CV analysis tooling** (Production-focused stability and timing evaluation)
-- [x] **Model selection** (XGBoost Tuned - PR-AUC: 0.8679)
-- [x] **Test set evaluation** (PR-AUC: 0.8679, excellent generalization)
-- [x] **Feature importance analysis** (XGBoost built-in + SHAP values)
-- [x] **Threshold optimization** (Multiple recall targets: 80%, 85%, 90%)
-- [x] **Model persistence and deployment package** (Model, metadata, thresholds, model card)
-
-**Phase 2: API Development ✅ (100% Complete)**
-- [x] Create FastAPI application structure
-- [x] Implement prediction endpoint with Pydantic validation
-- [x] Add input validation and comprehensive error handling
-- [x] Create health check and monitoring endpoints
-- [x] Write API documentation (OpenAPI/Swagger)
-- [x] Multiple threshold strategies (conservative/balanced/aggressive)
-- [x] Request logging and structured error responses
-- [x] Comprehensive API integration tests (41 test cases)
-
-**Phase 3: Containerization ✅ (100% Complete)**
-- [x] Create Dockerfile with multi-stage build
-- [x] Optimize container image size (<500MB target)
-- [x] Add docker compose for local development
-- [x] Test containerized application
-- [x] Security hardening (non-root user, health checks)
-- [x] Build context optimization (.dockerignore)
-
-**Phase 4: Production Deployment ✅ (100% Complete)**
-- [x] Implement logging and monitoring endpoints
-- [x] Model artifact management and versioning
-- [x] Automated testing (pytest integration)
-- [x] Deploy to cloud platform (Google Cloud Run/AWS/Azure)
-
-**Phase 5: Deployment Automation/Monitoring (Future Work)**
-- [ ] Set up CI/CD pipeline (GitHub Actions)
-- [ ] Production monitoring dashboard
-- [ ] Model performance tracking and alerting
-- [ ] Model drift detection
+| Phase | Status |
+|-------|--------|
+| Model Development & Feature Engineering | ✅ Complete |
+| API Development (FastAPI + Pydantic) | ✅ Complete |
+| Containerization (Docker) | ✅ Complete |
+| Cloud Deployment (Google Cloud Run) | ✅ Complete |
+| CI/CD & Monitoring | 🔄 Future Work |
 
 ### API Deployment Options
 
-Deploy the fraud detection model as a production REST API.
-
-#### Option 1: Local Development (FastAPI + Uvicorn) ✅
-
-**1. Install Dependencies**
+#### Option 1: Local Development
 ```bash
-# Using uv (recommended)
-uv sync
-
-# Or using pip
-pip install -r requirements.txt
-```
-
-**2. Train Model (if not already trained)**
-```bash
-uv run python train.py --skip-tuning
-```
-
-**3. Start API Server**
-```bash
-# Development mode with auto-reload
+uv sync                                                    # Install dependencies
+uv run python train.py --skip-tuning                       # Train model (if needed)
 uv run uvicorn predict:app --reload --host 0.0.0.0 --port 8000
-
-# Production mode
-uv run uvicorn predict:app --host 0.0.0.0 --port 8000 --workers 4
 ```
+Access: http://localhost:8000/docs
 
-**4. Access API**
-- **Interactive Docs**: http://localhost:8000/docs
-- **Alternative Docs**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/health
-- See the **API Usage Examples** section below for additional test commands
-
-#### Option 2: Docker Deployment (Recommended for Production) ✅
-
-**1. Build Docker Image**
+#### Option 2: Docker (Recommended)
 ```bash
-# Build the image (1.5 - 2 minutes)
-docker build -t fraud-detection-api .
-
-# Check image size (~1.5GB)
-docker images fraud-detection-api
+docker compose up -d                                       # Start container
+curl http://localhost:8000/health                          # Verify
+docker compose down                                        # Stop
 ```
 
-**2. Run Container**
-```bash
-# Run with docker
-docker run -d \
-  --name fraud-detection-api \
-  -p 8000:8000 \
-  fraud-detection-api
+#### Option 3: Google Cloud Run
+Deployed and available for testing. See [docs/GCP_DEPLOYMENT.md](docs/GCP_DEPLOYMENT.md) for full deployment guide.
 
-# Or use docker compose (easier)
-docker compose up -d
-```
-
-**3. Verify Deployment**
-
-See the **API Usage Examples** section for additional test commands
-```bash
-# Check health
-curl http://localhost:8000/health
-
-# View logs
-docker logs fraud-detection-api
-
-# Stop container
-docker compose down
-```
-
-#### Option 3: Cloud Deployment ✅
-
-**Google Cloud Run (Serverless, Auto-scaling)**
-
-**Why Cloud Run?**
-- Serverless architecture with no infrastructure management
-- Auto-scales from 0 to 1000+ instances based on traffic
-- Pay-per-use pricing with generous free tier
-- Fast cold starts (<1 second) and automatic HTTPS
-
-**Deployment Status:** This API is deployed and available for testing.
-
-**📖 Full Deployment Guide:** See [docs/GCP_DEPLOYMENT.md](docs/GCP_DEPLOYMENT.md) for complete step-by-step deployment instructions including:
-- Initial setup and authentication
-- Building and pushing Docker images
-- Deployment configuration
-- Production settings (authentication, monitoring, auto-scaling)
-- Troubleshooting and maintenance
-- Cost estimation
-
-**Testing the Cloud Deployed API**
-
-The API is deployed for review, and it can optionally be tested using the commands described below. I've included a few snapshots of the API's docs page to prove that the cloud-hosted API is available and working correctly. The url to the cloud hosted API is required for testing, but it has not been commited to the repo directly. Instead, it is available in the provided snapshots. Just fill in the SERVICE_URL below with the relevant details from the url in the snapshots, then run the commands for testing the API.
+**Cloud API Screenshots:**
 
 ![API Documentation Overview](images/E-Commerce-Fraud-Detection-API-docs.png)
 *API Documentation - Interactive Swagger UI showing available endpoints*
@@ -1088,177 +814,31 @@ curl http://localhost:8000/model/info
 
 ## Testing
 
-Run comprehensive test suite to verify all components: shared infrastructure, preprocessing pipeline, and API functionality.
+**425 passing tests** covering configuration, data loading, EDA, evaluation, explainability, notebook utilities, preprocessing, and API.
 
-### Test Organization
-
-The test suite mirrors the source code structure with 425 passing tests:
-
-```
-tests/
-├── test_api.py              # API integration tests (33 tests)
-├── test_config/             # Shared config tests (44 tests)
-│   ├── test_data_config.py       # DataConfig (16 tests)
-│   ├── test_model_config.py      # ModelConfig, FeatureListsConfig (19 tests)
-│   └── test_training_config.py   # TrainingConfig (9 tests)
-├── test_data/               # Data loading tests (12 tests)
-│   └── test_loader.py            # load_and_split_data()
-├── test_eda/                # EDA utility tests (68 tests)
-│   ├── test_data_utils.py        # Data loading/splitting utilities
-│   ├── test_eda_utils.py         # VIF, correlations, mutual information
-│   └── test_feature_engineering.py # Feature engineering functions
-├── test_evaluation/         # Evaluation tests (26 tests)
-│   ├── test_metrics.py           # calculate_metrics, evaluate_model (14 tests)
-│   └── test_thresholds.py        # optimize_thresholds (12 tests)
-├── test_explainability/     # Explainability tests (9 tests)
-│   └── test_shap_explainer.py    # FraudExplainer class tests
-├── test_fd2_nb/             # Notebook 2 utility tests (63 tests)
-│   ├── test_bias_variance.py     # Bias-variance analysis (7 tests)
-│   ├── test_cv_analysis.py       # CV results analysis (25 tests)
-│   ├── test_hyperparameter_tuning.py # Tuning utilities (15 tests)
-│   └── test_model_comparison.py  # Model comparison (16 tests)
-├── test_fd3_nb/             # Notebook 3 utility tests (83 tests)
-│   ├── test_deployment.py        # Model deployment utilities (26 tests)
-│   ├── test_evaluation.py        # Model evaluation (15 tests)
-│   ├── test_feature_importance.py # Feature importance extraction (19 tests)
-│   ├── test_threshold_optimization.py # Threshold optimization (23 tests)
-│   └── test_visualization.py     # SHAP beeswarm plot tests (7 tests)
-└── test_preprocessing/      # Preprocessing tests (61 tests)
-    ├── test_config.py            # FeatureConfig (8 tests)
-    ├── test_features.py          # Feature engineering functions (15 tests)
-    ├── test_pipelines.py         # PreprocessingPipelineFactory (18 tests)
-    └── test_transformer.py       # FraudFeatureTransformer (20 tests)
-```
-
-### Running Tests
-
-**All Tests** (Recommended):
 ```bash
-# Run entire test suite
+# Run all tests
 uv run pytest tests/ -v
 
-# Quick smoke test (stop on first failure)
+# Quick smoke test
 uv run pytest tests/ -x
-```
 
-**By Component**:
-```bash
-# Configuration tests
-uv run pytest tests/test_config/ -v
-
-# Data loading tests
-uv run pytest tests/test_data/ -v
-
-# EDA utility tests
-uv run pytest tests/test_eda/ -v
-
-# Evaluation tests
-uv run pytest tests/test_evaluation/ -v
-
-# Explainability tests
-uv run pytest tests/test_explainability/ -v
-
-# fd2 notebook utility tests
-uv run pytest tests/test_fd2_nb/ -v
-
-# fd3 notebook utility tests
-uv run pytest tests/test_fd3_nb/ -v
-
-# Preprocessing tests
-uv run pytest tests/test_preprocessing/ -v
-
-# API tests
+# Test specific component
 uv run pytest tests/test_api.py -v
+uv run pytest tests/test_preprocessing/ -v
 ```
-
-**Specific Test Files**:
-```bash
-# Test specific module
-uv run pytest tests/test_config/test_model_config.py -v
-
-# Test specific class
-uv run pytest tests/test_api.py::TestPredictEndpoint -v
-
-# Test with detailed output
-uv run pytest tests/test_preprocessing/test_transformer.py -v --tb=short
-```
-
-### Test Coverage Summary
-
-**425 total tests** covering:
-- ✅ **Shared Configuration** (44 tests): DataConfig, ModelConfig, TrainingConfig
-- ✅ **Data Loading** (12 tests): load_and_split_data with stratification validation
-- ✅ **EDA Utilities** (68 tests): Data utils, EDA functions, feature engineering
-- ✅ **Evaluation** (26 tests): Metrics calculation and threshold optimization
-- ✅ **Explainability** (9 tests): FraudExplainer SHAP-based explanations
-- ✅ **fd2 Notebook Utilities** (63 tests): Model comparison, hyperparameter tuning, CV analysis, bias-variance
-- ✅ **fd3 Notebook Utilities** (83 tests): Evaluation, visualization, SHAP beeswarm, threshold optimization, deployment
-- ✅ **Preprocessing** (61 tests): FeatureConfig, feature engineering functions, pipelines, transformer
-- ✅ **API** (33 tests): Endpoints, validation, error handling, threshold strategies, explainability
-
-**Key Test Features**:
-- Comprehensive edge case coverage (division by zero, missing data)
-- Fixtures for reusable test data (conftest.py)
-- Integration tests for end-to-end workflows
-- Performance validation (response times)
-- All tests passing with 100% success rate
 
 ---
 
 ## Performance Benchmarking
 
-Comprehensive performance testing suite to measure API latency and throughput.
-
-### Running Benchmarks
-
-#### Quick Benchmark (Python Script)
-
 ```bash
-# Default benchmark (100 requests, 10 concurrent users)
+# Quick benchmark
 uv run python benchmarks/benchmark.py --url http://localhost:8000
 
-# Custom configuration
-uv run python benchmarks/benchmark.py \
-  --url http://localhost:8000 \
-  --iterations 500 \
-  --concurrent 20 \
-  --output benchmarks/results/benchmark_results.json
-```
-
-**Metrics Measured:**
-- **Cold Start**: First request latency (includes model loading overhead)
-- **Single Request**: Sequential request latency (P50, P95, P99)
-- **Concurrent Load**: Multi-user throughput (requests/second)
-- **Server vs E2E**: Processing time vs total latency (network overhead)
-
-#### Load Testing (Locust)
-
-```bash
-# Start Locust web UI
+# Load testing with Locust
 uv run locust -f benchmarks/locustfile.py --host=http://localhost:8000
-
-# Headless mode with 50 users, run for 60 seconds
-uv run locust -f benchmarks/locustfile.py \
-  --host=http://localhost:8000 \
-  --users 50 \
-  --spawn-rate 10 \
-  --run-time 60s \
-  --headless
-
-# Generate HTML report
-uv run locust -f benchmarks/locustfile.py \
-  --host=http://localhost:8000 \
-  --users 100 \
-  --spawn-rate 10 \
-  --run-time 120s \
-  --headless \
-  --html=benchmarks/results/locust_report.html
 ```
-
-**User Scenarios:**
-- **Normal Transactions** (70% of traffic): Established accounts with typical amounts
-- **Suspicious Transactions** (30% of traffic): New accounts with high amounts
-- **Stress Test**: Rapid-fire requests with minimal wait time
 
 ### Benchmark Results
 
@@ -1334,85 +914,21 @@ uv run locust -f benchmarks/locustfile.py \
 | **End-to-End** | 470.76 ms |
 | **Network Overhead** | 259.87 ms |
 
-#### Performance Comparison: Docker vs Cloud Run
+#### Performance Summary
 
-**Server Processing Time (Core Model Performance):**
-
-| Metric | Docker (Local) | Cloud Run | Difference |
-|--------|----------------|-----------|------------|
-| **Mean** | 19.94 ms | 32.31 ms | +12.37 ms (+62%) |
-| **Median** | 18.51 ms | 31.59 ms | +13.08 ms (+71%) |
-| **P95** | 33.84 ms | 36.40 ms | +2.56 ms (+8%) |
-| **P99** | 39.54 ms | 40.52 ms | +0.98 ms (+2%) |
-
-**Key Insight:** Server processing times are remarkably similar at higher percentiles (P95/P99), with only ~2-3ms difference. Both deployments meet the target of <50ms P95.
-
-**End-to-End Latency (User Experience):**
-
-| Metric | Docker (Local) | Cloud Run | Difference |
-|--------|----------------|-----------|------------|
-| **P95** | 37.13 ms | 226.87 ms | +189.74 ms |
-| **P99** | 44.36 ms | 252.56 ms | +208.20 ms |
-| **Network Overhead** | ~2.4 ms | ~130 ms | +127.6 ms |
-
-**Key Insight:** The significant E2E difference is entirely due to network latency (internet vs localhost), not model performance.
-
-**Throughput & Reliability:**
-
-| Metric | Docker (Local) | Cloud Run | Difference |
-|--------|----------------|-----------|------------|
-| **Throughput** | 48.16 RPS | 24.58 RPS | -49% |
-| **Success Rate** | 100% | 100% | 0% |
-| **Cold Start (E2E)** | 54.98 ms | 470.76 ms | +415.78 ms |
-
-**Key Insight:** Docker achieves ~2x throughput due to local deployment. Cloud Run throughput is limited by network latency, but server processing remains fast. Cloud Run cold starts are longer due to serverless container initialization.
-
-### Performance Analysis
-
-#### Overall Results
-
-✅ **Excellent Latency**: Both deployments achieve sub-40ms P95 server processing (Docker: 33.84ms, Cloud Run: 36.40ms - well below 50ms target)
-✅ **Consistent Performance**: Minimal variance in server processing times across both environments
-✅ **Production-Ready**: Both deployments meet all performance targets for fraud detection
-✅ **High Reliability**: 100% success rate under load (500 requests) for both deployments
-✅ **Highly Scalable**: Docker achieves 48.16 RPS locally; Cloud Run provides auto-scaling for traffic spikes
-
-**Comprehensive Testing:** Results based on 500 iterations with 20 concurrent users, providing more accurate performance characterization than typical benchmarks.
-
-#### Docker Deployment Insights
-
-**Docker Overhead:** Cold start is ~52ms (vs ~26ms for local uvicorn), which is acceptable for production deployment. The containerization provides isolation and portability benefits with minimal performance impact.
-
-**Network Overhead:** Average 2.4ms indicates local deployment, providing baseline for server performance.
-
-**Concurrent Load:** E2E latency increases under concurrent load (557ms P95) due to request queueing, but server processing remains consistently fast (32.16ms P95).
-
-#### Cloud Run Deployment Insights
-
-**Serverless Benefits:** Auto-scaling, zero infrastructure management, and pay-per-use pricing make Cloud Run ideal for variable traffic patterns.
-
-**Network Latency:** Average 130ms overhead is expected for internet-based deployment. This can be reduced by deploying to regions closer to users or using Cloud CDN.
-
-**Cold Starts:** ~471ms E2E for first request after idle period. Can be eliminated by setting minimum instances (recommended for production).
-
-**Server Performance:** Core model processing (36.4ms P95) is nearly identical to Docker, demonstrating consistent performance across environments.
-
-**Production Considerations:**
-- Set min instances to 1+ to avoid cold starts (~$6-10/month per instance)
-- Deploy to multiple regions for lower latency globally
-- Implement health check pings to keep instances warm
-- Cloud Run auto-scales to handle traffic spikes without configuration
-
-### Performance Targets vs Achieved
-
-| Target | Docker (Local) | Cloud Run | Status |
+| Metric | Docker (Local) | Cloud Run | Target |
 |--------|----------------|-----------|--------|
-| Server P95 < 50ms | 33.84 ms | 36.40 ms | ✅ Both Pass |
-| Server P99 < 100ms | 39.54 ms | 40.52 ms | ✅ Both Pass |
-| Throughput > 20 RPS | 48.16 RPS | 24.58 RPS | ✅ Both Pass |
-| Success Rate 100% | 100% | 100% | ✅ Both Pass |
+| **Server P95** | 33.84 ms | 36.40 ms | < 50ms ✅ |
+| **Server P99** | 39.54 ms | 40.52 ms | < 100ms ✅ |
+| **Throughput** | 48.16 RPS | 24.58 RPS | > 20 RPS ✅ |
+| **Success Rate** | 100% | 100% | 100% ✅ |
 
-**Verdict:** Both Docker and Cloud Run deployments exceed all performance requirements. Choose Docker for maximum throughput in controlled environments, or Cloud Run for serverless auto-scaling and simplified operations.
+**Key Findings:**
+- Server processing times nearly identical at P95/P99 (~2-3ms difference)
+- E2E latency difference due to network (~130ms Cloud Run overhead vs ~2ms local)
+- Cloud Run cold start ~471ms (set min instances for production)
+
+Both deployments exceed all performance requirements. Choose Docker for maximum throughput or Cloud Run for serverless auto-scaling.
 
 ---
 
