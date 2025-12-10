@@ -3,7 +3,7 @@
     "model_name": "XGBoost Fraud Detector",
     "model_type": "XGBClassifier",
     "version": "1.0",
-    "training_date": "2025-12-09",
+    "training_date": "2025-12-10",
     "framework": "xgboost + scikit-learn",
     "python_version": "3.12+",
     "note": "Model trained on train+val combined in Notebook 2, evaluated on test set here"
