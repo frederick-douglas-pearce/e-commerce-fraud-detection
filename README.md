@@ -394,21 +394,23 @@ This notebook contains:
 2. **Preprocessing**: Model-specific transformations (one-hot encoding, scaling)
 3. **Baseline Models**: Logistic Regression, Random Forest, XGBoost (all trained)
 4. **Hyperparameter Tuning**: Flexible GridSearchCV/RandomizedSearchCV with detailed logging
-  - Random Forest: GridSearchCV over 8 parameter combinations
-  - XGBoost: GridSearchCV over 108 combinations (tuned scale_pos_weight, gamma, learning_rate)
+  1. Randomized search of 50+ combinations across a wide range of parameters and their values
+  2. Identify parameters with values that remain constant across best performing parameter combinations
+  3. Grid search across a narrow range of only the most influential parameters 
 5. **CV Results Analysis**: Production-focused evaluation of model stability and timing
   - Comprehensive CSV logging of all CV results
   - Stability analysis (std_test_score across folds)
   - Timing measurements with appropriate caveats for parallel processing
 6. **Bias-Variance Analysis**: Train-validation gap and CV fold variance diagnostics
-  - XGBoost iteration tracking to find optimal n_estimators
+  - Random Forest and XGBoost iteration tracking to minimize overfitting and find the optimal n_estimators value
   - Model stability assessment across CV folds
 
 <p align="center">
-  <img src="notebooks/images/fd2/xgb_iteration_performance.png" alt="XGBoost Iteration Performance" width="700">
+  <img src="notebooks/images/fd2/rf_iteration_performance.png" alt="Random Forest Iteration Performance" width="49%">
+  <img src="notebooks/images/fd2/xgb_iteration_performance.png" alt="XGBoost Iteration Performance" width="49%">
 </p>
 
-*The figure above shows hyperparameter tuning optimized to minimize overfitting. The tuned model (n_estimators=100) was selected where validation performance plateaus while maintaining a small train-validation gap (1.9%), avoiding the overfitting seen at higher iteration counts.*
+*Bias-variance analysis comparing Random Forest (left) and XGBoost (right). XGBoost achieves significantly higher validation performance (PR-AUC: 0.868 vs 0.832) while exhibiting substantially less overfitting (train-validation gap: 1.5% vs 4.7%). The tuned XGBoost model (n_estimators=100) was selected where validation performance plateaus while maintaining a minimal train-validation gap.*
 
 7. **Evaluation**: ROC-AUC, PR-AUC, F1, Precision-Recall metrics (appropriate for imbalanced data)
 8. **Model Selection**: XGBoost (Tuned) selected as best performer (PR-AUC: 0.868)
@@ -418,6 +420,7 @@ This notebook contains:
 </p>
 
 *XGBoost (Tuned) achieves the best PR-AUC (0.868) while maintaining strong precision (73.5%) and recall (83.2%). The tuned model significantly outperforms baselines on the primary metric while providing a better precision-recall balance than Random Forest alternatives.*
+
 9. **Output**: Saves trained model and configuration for next notebook
   - `models/best_model.joblib` - Trained XGBoost pipeline (preprocessing + classifier)
   - `models/best_params.json` - Optimal hyperparameters
