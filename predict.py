@@ -400,7 +400,7 @@ async def predict_fraud(
     transaction: RawTransactionRequest,
     threshold_strategy: Literal[
         "optimal_f1", "target_performance", "conservative_90pct_recall", "balanced_85pct_recall", "aggressive_80pct_recall"
-    ] = "optimal_f1",
+    ] = "target_performance",
     include_explanation: bool = Query(
         False,
         description="Include SHAP-based explanation of top contributing features",
@@ -419,8 +419,8 @@ async def predict_fraud(
     using the production FraudFeatureTransformer pipeline before making predictions.
 
     **Threshold Strategies:**
-    - `optimal_f1`: Best precision-recall balance (F1 score optimized) - **RECOMMENDED DEFAULT**
-    - `target_performance`: Max recall while maintaining >=70% precision - **RECOMMENDED FOR PRODUCTION**
+    - `target_performance`: Max recall while maintaining >=70% precision - **DEFAULT**
+    - `optimal_f1`: Best precision-recall balance (F1 score optimized)
     - `conservative_90pct_recall`: Catches 90% of fraud (more false positives)
     - `balanced_85pct_recall`: Targets 85% recall with maximized precision
     - `aggressive_80pct_recall`: Targets 80% recall with highest precision (fewer false positives)
