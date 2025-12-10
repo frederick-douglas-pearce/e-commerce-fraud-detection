@@ -248,21 +248,42 @@ class ErrorResponse(BaseModel):
 
 
 class FeatureContributionResponse(BaseModel):
-    """A single feature's contribution to the fraud prediction."""
+    """A single feature's contribution to the fraud prediction.
+
+    SHAP values are computed in log-odds space where they are additive.
+    The probability contribution is an approximation for interpretability.
+    """
 
     feature: str = Field(..., description="Technical feature name")
     display_name: str = Field(..., description="Human-readable feature name")
     value: float = Field(..., description="Actual feature value for this prediction")
-    contribution: float = Field(..., description="SHAP contribution (positive = increases fraud risk)")
+    contribution_log_odds: float = Field(
+        ..., description="SHAP value in log-odds space (additive, positive = increases fraud risk)"
+    )
+    contribution_probability: float = Field(
+        ..., description="Approximate probability shift caused by this feature (e.g., +0.15 means +15%)"
+    )
 
 
 class ExplanationResponse(BaseModel):
-    """Explanation of a fraud prediction showing top contributing features."""
+    """Explanation of a fraud prediction showing top contributing features.
+
+    Understanding SHAP Values:
+    - SHAP values are computed in LOG-ODDS space, not probability space
+    - In log-odds space, contributions are additive: base + sum(SHAP) = final_log_odds
+    - The final probability = 1 / (1 + exp(-final_log_odds))
+    - contribution_probability shows the approximate impact on the final probability
+    """
 
     top_contributors: list[FeatureContributionResponse] = Field(
         ..., description="Top features contributing to the fraud score"
     )
-    base_fraud_rate: float = Field(..., description="Baseline fraud probability (expected value)")
+    base_fraud_rate: float = Field(
+        ..., description="Training data fraud rate (~2.2%), the prior probability before considering features"
+    )
+    final_fraud_probability: float = Field(
+        ..., description="Model's predicted fraud probability for this transaction"
+    )
     explanation_method: str = Field(default="shap", description="Method used for explanation")
 
     model_config = {
@@ -270,19 +291,22 @@ class ExplanationResponse(BaseModel):
             "example": {
                 "top_contributors": [
                     {
-                        "feature": "avs_match",
-                        "display_name": "Address Verification Match",
-                        "value": 0,
-                        "contribution": 0.32,
-                    },
-                    {
                         "feature": "account_age_days",
                         "display_name": "Account Age (days)",
                         "value": 5,
-                        "contribution": 0.28,
+                        "contribution_log_odds": 2.60,
+                        "contribution_probability": 0.18,
+                    },
+                    {
+                        "feature": "security_score",
+                        "display_name": "Security Score (0-3)",
+                        "value": 0,
+                        "contribution_log_odds": 1.08,
+                        "contribution_probability": 0.06,
                     },
                 ],
                 "base_fraud_rate": 0.022,
+                "final_fraud_probability": 0.917,
                 "explanation_method": "shap",
             }
         }
@@ -405,12 +429,25 @@ async def predict_fraud(
     - `include_explanation`: Set to `true` to include SHAP-based explanation
     - `top_n`: Number of top risk-increasing features to return (default: 3, range: 1-10)
 
+    **Understanding SHAP Explanations:**
+
+    SHAP values are computed in **log-odds space**, not probability space. This means:
+    - `contribution_log_odds`: The raw SHAP value (additive in log-odds space)
+    - `contribution_probability`: Approximate probability shift for interpretability
+
+    Example interpretation:
+    - `contribution_log_odds: 2.6` means this feature adds 2.6 to the log-odds
+    - `contribution_probability: 0.18` means this feature increases probability by ~18%
+
+    The math: `base_log_odds + sum(all SHAP values) = final_log_odds`, then
+    `final_probability = 1 / (1 + exp(-final_log_odds))`
+
     **Returns:**
     - Fraud prediction (True/False)
     - Fraud probability (0.0-1.0)
     - Risk level (low/medium/high)
     - Processing metadata
-    - Explanation (optional): Top features that increased the fraud risk score
+    - Explanation (optional): Top features with log-odds and probability contributions
     """
     start_time = time.time()
 
@@ -466,11 +503,13 @@ async def predict_fraud(
                         feature=contrib.feature,
                         display_name=contrib.display_name,
                         value=contrib.value,
-                        contribution=contrib.contribution,
+                        contribution_log_odds=contrib.contribution_log_odds,
+                        contribution_probability=contrib.contribution_probability,
                     )
                     for contrib in explanation_result.top_contributors
                 ],
                 base_fraud_rate=explanation_result.base_fraud_rate,
+                final_fraud_probability=explanation_result.final_fraud_probability,
                 explanation_method=explanation_result.explanation_method,
             )
 

@@ -343,6 +343,7 @@ class TestPredictExplanation:
 
         # Check base fields
         assert isinstance(explanation["base_fraud_rate"], float)
+        assert isinstance(explanation["final_fraud_probability"], float)
         assert explanation["explanation_method"] == "shap"
 
         # Check top_contributors structure
@@ -352,7 +353,8 @@ class TestPredictExplanation:
             assert "feature" in contrib
             assert "display_name" in contrib
             assert "value" in contrib
-            assert "contribution" in contrib
+            assert "contribution_log_odds" in contrib
+            assert "contribution_probability" in contrib
 
     def test_explanation_default_top_n(self, client, suspicious_transaction):
         """Test that explanation returns default top 3 contributors."""
@@ -412,16 +414,16 @@ class TestPredictExplanation:
         assert response.status_code == 422
 
     def test_explanation_contributions_are_positive(self, client, suspicious_transaction):
-        """Test that all contributions are positive (increase fraud risk)."""
+        """Test that all log-odds contributions are positive (increase fraud risk)."""
         response = client.post(
             "/predict?include_explanation=true&top_n=5",
             json=suspicious_transaction,
         )
         data = response.json()
         for contrib in data["explanation"]["top_contributors"]:
-            assert contrib["contribution"] > 0, (
-                f"Expected positive contribution for {contrib['feature']}, "
-                f"got {contrib['contribution']}"
+            assert contrib["contribution_log_odds"] > 0, (
+                f"Expected positive log-odds contribution for {contrib['feature']}, "
+                f"got {contrib['contribution_log_odds']}"
             )
 
     def test_explanation_with_threshold_strategy(self, client, suspicious_transaction):

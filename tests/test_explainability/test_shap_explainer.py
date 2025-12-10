@@ -124,14 +124,15 @@ class TestExplain:
             assert isinstance(contrib.feature, str)
             assert isinstance(contrib.display_name, str)
             assert isinstance(contrib.value, float)
-            assert isinstance(contrib.contribution, float)
+            assert isinstance(contrib.contribution_log_odds, float)
+            assert isinstance(contrib.contribution_probability, float)
 
     def test_explain_only_positive_contributions(self, explainer, sample_features):
-        """Test that only_positive=True returns only positive contributions."""
+        """Test that only_positive=True returns only positive log-odds contributions."""
         result = explainer.explain(sample_features, top_n=10, only_positive=True)
         for contrib in result.top_contributors:
-            assert contrib.contribution > 0, (
-                f"Expected positive contribution, got {contrib.contribution}"
+            assert contrib.contribution_log_odds > 0, (
+                f"Expected positive log-odds contribution, got {contrib.contribution_log_odds}"
             )
 
     def test_explain_includes_negative_when_requested(self, explainer, sample_features):
@@ -139,27 +140,40 @@ class TestExplain:
         result = explainer.explain(sample_features, top_n=30, only_positive=False)
         # With 30 features requested and only_positive=False, we should get all features
         # At least some should have negative contributions
-        contributions = [c.contribution for c in result.top_contributors]
+        contributions = [c.contribution_log_odds for c in result.top_contributors]
         # It's possible all are positive for a very suspicious transaction,
         # so just check we got results
         assert len(result.top_contributors) > 0
 
     def test_explain_contributions_sorted_by_magnitude(self, explainer, sample_features):
-        """Test that contributions are sorted by absolute magnitude (descending)."""
+        """Test that contributions are sorted by absolute log-odds magnitude (descending)."""
         result = explainer.explain(sample_features, top_n=5, only_positive=False)
-        contributions = [abs(c.contribution) for c in result.top_contributors]
+        contributions = [abs(c.contribution_log_odds) for c in result.top_contributors]
         assert contributions == sorted(contributions, reverse=True)
 
     def test_explain_has_valid_base_fraud_rate(self, explainer, sample_features):
-        """Test that explanation includes valid base fraud rate."""
+        """Test that base_fraud_rate is the training data fraud rate (~2.2%)."""
         result = explainer.explain(sample_features)
         assert isinstance(result.base_fraud_rate, float)
-        assert 0.0 <= result.base_fraud_rate <= 1.0
+        # Should be close to training fraud rate (0.022)
+        assert 0.02 <= result.base_fraud_rate <= 0.025
+
+    def test_explain_has_valid_final_probability(self, explainer, sample_features):
+        """Test that final_fraud_probability is valid and matches model prediction."""
+        result = explainer.explain(sample_features)
+        assert isinstance(result.final_fraud_probability, float)
+        assert 0.0 <= result.final_fraud_probability <= 1.0
 
     def test_explain_method_is_shap(self, explainer, sample_features):
         """Test that explanation method is 'shap'."""
         result = explainer.explain(sample_features)
         assert result.explanation_method == "shap"
+
+    def test_probability_contribution_is_bounded(self, explainer, sample_features):
+        """Test that probability contributions are reasonable (bounded by -1 to 1)."""
+        result = explainer.explain(sample_features, top_n=5, only_positive=False)
+        for contrib in result.top_contributors:
+            assert -1.0 <= contrib.contribution_probability <= 1.0
 
 
 class TestFeatureDescriptions:
