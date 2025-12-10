@@ -530,20 +530,19 @@ uv run python train.py \
 - **Precision**: > 0.70 (minimize false positives)
 - **Inference Time**: < 100ms per prediction
 
-**Achieved Results (XGBoost Tuned - Validation Set)**
-- **PR-AUC**: 0.8679 ✅ (Target: > 0.85)
-- **ROC-AUC**: 0.9790 ✅ (Target: > 0.95)
-- **F1 Score**: 0.7756 ✅ (Target: > 0.75)
-- **Recall**: 0.8360 ✅ (Target: > 0.80)
-- **Precision**: 0.7233 ✅ (Target: > 0.70)
+**Achieved Results (XGBoost Tuned - Test Set)**
+- **PR-AUC**: 0.8659 ✅ (Target: > 0.85)
+- **ROC-AUC**: 0.9761 ✅ (Target: > 0.95)
+- **F1 Score**: 0.7776 ✅ (Target: > 0.75)
+- **Recall**: 0.8290 ✅ (Target: > 0.80)
+- **Precision**: 0.7321 ✅ (Target: > 0.70)
 - **Inference Time (P95)**: 33.84ms ✅ (Target: < 50ms)
 - **Inference Time (P99)**: 39.54ms ✅ (Target: < 100ms)
 
 **Model Details:**
 - Best hyperparameters: n_estimators=100, max_depth=4, learning_rate=0.1, scale_pos_weight=8
-- Confusion Matrix: TN=58,206 | FP=410 | FN=222 | TP=1,101
+- Confusion Matrix: TN=58,216 | FP=401 | FN=226 | TP=1,096
 - Excellent precision-recall balance for fraud detection
-- Significant improvement over baseline (+31.5% precision, +2.5% PR-AUC)
 
 ---
 
