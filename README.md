@@ -498,10 +498,7 @@ Train the fraud detection model using the provided training script.
 **Training the Model**
 
 ```bash
-# Basic training (uses optimal hyperparameters, skips tuning for speed)
-uv run python train.py --skip-tuning
-
-# Full training with hyperparameter tuning (takes longer)
+# Train model with pre-optimized hyperparameters (from notebook tuning)
 uv run python train.py
 
 # Custom training options
@@ -511,6 +508,8 @@ uv run python train.py \
   --random-seed 42 \
   --verbose
 ```
+
+**Note:** Hyperparameter tuning was performed in `notebooks/fd2_model_selection_tuning.ipynb`. The training script uses those pre-optimized parameters for reproducible production training.
 
 **Output artifacts** (saved to `models/` directory):
 - `xgb_fraud_detector.joblib` - Trained XGBoost model pipeline
@@ -565,7 +564,7 @@ This section covers deployment options, the deployment roadmap, and API usage ex
 #### Option 1: Local Development
 ```bash
 uv sync                                                    # Install dependencies
-uv run python train.py --skip-tuning                       # Train model (if needed)
+uv run python train.py                                     # Train model (if needed)
 uv run uvicorn predict:app --reload --host 0.0.0.0 --port 8000
 ```
 Access: http://localhost:8000/docs

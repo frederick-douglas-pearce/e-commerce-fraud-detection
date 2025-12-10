@@ -1135,7 +1135,7 @@ docker run -d -p 8000:8000 fraud-detection-api:prod
 **Issue: Model files not found**
 ```bash
 # Solution: Train model first
-uv run python train.py --skip-tuning
+uv run python train.py
 
 # Verify artifacts exist
 ls -lh models/*.json models/*.joblib

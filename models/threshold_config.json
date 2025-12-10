@@ -7,6 +7,10 @@
       "precision": 0.9273066169617894,
       "recall": 0.7526475037821483,
       "f1": 0.830897703499601,
+      "tp": 995,
+      "fp": 78,
+      "tn": 58539,
+      "fn": 327,
       "description": "Optimal F1 score - best precision-recall balance"
     },
     "target_performance": {
@@ -14,8 +18,12 @@
       "precision": 0.7001909611712285,
       "recall": 0.8320726172465961,
       "f1": 0.7604562737642585,
-      "min_precision_constraint": 0.7,
-      "description": "Max recall with >=70% precision (RECOMMENDED)"
+      "min_precision": 0.7,
+      "tp": 1100,
+      "fp": 471,
+      "tn": 58146,
+      "fn": 222,
+      "description": "Max recall while maintaining >=70% precision (recommended)"
     },
     "conservative_90pct_recall": {
       "threshold": 0.2183302491903305,
@@ -23,6 +31,10 @@
       "achieved_recall": 0.9001512859304085,
       "precision": 0.35103244837758113,
       "f1": 0.5050933786078098,
+      "tp": 1190,
+      "fp": 2200,
+      "tn": 56417,
+      "fn": 132,
       "description": "Catch most fraud (90% recall), accept more false positives"
     },
     "balanced_85pct_recall": {
@@ -31,6 +43,10 @@
       "achieved_recall": 0.8502269288956127,
       "precision": 0.5854166666666667,
       "f1": 0.6933991363355954,
+      "tp": 1124,
+      "fp": 796,
+      "tn": 57821,
+      "fn": 198,
       "description": "Balanced precision-recall trade-off (85% recall target)"
     },
     "aggressive_80pct_recall": {
@@ -39,8 +55,12 @@
       "achieved_recall": 0.800302571860817,
       "precision": 0.8188854489164087,
       "f1": 0.8094873756694722,
+      "tp": 1058,
+      "fp": 234,
+      "tn": 58383,
+      "fn": 264,
       "description": "Prioritize precision (80% recall), reduce false positives"
     }
   },
-  "note": "target_performance maximizes recall while meeting precision constraint (recommended for production)"
+  "note": "Thresholds optimized on held-out test set predictions."
 }

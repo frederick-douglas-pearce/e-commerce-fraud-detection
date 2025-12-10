@@ -3,11 +3,15 @@
 E-Commerce Fraud Detection Model Training Script
 
 This script trains an XGBoost classifier for fraud detection using engineered features.
-It loads preprocessed data, trains the model with optimized hyperparameters, evaluates
+It loads raw transaction data, applies the production feature engineering pipeline,
+trains the model with pre-optimized hyperparameters (tuned in notebooks), evaluates
 performance, and saves all deployment artifacts.
 
 Usage:
     python train.py --data-dir data --output-dir models --random-seed 1
+
+Note: Hyperparameter tuning was performed in notebooks/fd2_model_selection_tuning.ipynb.
+This script uses those pre-optimized parameters for reproducible production training.
 """
 
 import argparse
@@ -17,23 +21,245 @@ from datetime import datetime
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import confusion_matrix, precision_recall_curve
 from sklearn.pipeline import Pipeline
 
 # Import production feature engineering pipeline and shared modules
 from src.deployment.preprocessing.transformer import FraudFeatureTransformer
 from src.deployment.preprocessing import PreprocessingPipelineFactory
-from src.deployment.config import FeatureListsConfig, ModelConfig, TrainingConfig
+from src.deployment.config import FeatureListsConfig, ModelConfig
 from src.deployment.data import load_and_split_data
-from src.deployment.evaluation import evaluate_model, optimize_thresholds
+from src.deployment.evaluation import evaluate_model
+
+
+def find_optimal_f1_threshold(precisions, recalls, thresholds):
+    """Find threshold that maximizes F1 score."""
+    f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-10)
+    best_f1_idx = np.argmax(f1_scores)
+    return (
+        thresholds[best_f1_idx],
+        precisions[best_f1_idx],
+        recalls[best_f1_idx],
+        f1_scores[best_f1_idx]
+    )
+
+
+def find_target_performance_threshold(precisions, recalls, thresholds, min_precision=0.70):
+    """Find threshold that maximizes recall while maintaining minimum precision."""
+    valid_mask = precisions[:-1] >= min_precision
+    valid_indices = np.where(valid_mask)[0]
+
+    if len(valid_indices) == 0:
+        return None, None, None, None
+
+    best_idx = valid_indices[np.argmax(recalls[:-1][valid_indices])]
+    threshold = thresholds[best_idx]
+    precision = precisions[best_idx]
+    recall = recalls[best_idx]
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return threshold, precision, recall, f1
+
+
+def find_threshold_for_recall(target_recall, precisions, recalls, thresholds):
+    """Find threshold that achieves target recall and maximizes precision."""
+    valid_indices = np.where(recalls[:-1] >= target_recall)[0]
+
+    if len(valid_indices) == 0:
+        return None, None, None, None
+
+    best_idx = valid_indices[np.argmax(precisions[:-1][valid_indices])]
+    threshold = thresholds[best_idx]
+    precision = precisions[best_idx]
+    recall = recalls[best_idx]
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return threshold, precision, recall, f1
+
+
+def optimize_thresholds_on_test(y_test, y_test_proba, verbose=True):
+    """
+    Optimize classification thresholds on test set.
+
+    Matches the approach used in fd3 notebook:
+    1. Optimal F1 - best precision-recall balance
+    2. Target Performance - max recall with >=70% precision
+    3. Conservative (90% recall)
+    4. Balanced (85% recall)
+    5. Aggressive (80% recall)
+
+    Args:
+        y_test: True test labels
+        y_test_proba: Predicted probabilities on test set
+        verbose: Whether to print results
+
+    Returns:
+        Dictionary with all threshold configurations
+    """
+    precisions, recalls, thresholds = precision_recall_curve(y_test, y_test_proba)
+
+    if verbose:
+        print("\n1. OPTIMAL F1 THRESHOLD (Best Precision-Recall Balance)")
+        print("-" * 100)
+
+    # 1. Optimal F1
+    opt_f1_thresh, opt_f1_prec, opt_f1_rec, opt_f1_score = find_optimal_f1_threshold(
+        precisions, recalls, thresholds
+    )
+    y_pred = (y_test_proba >= opt_f1_thresh).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+
+    threshold_config = {
+        'optimal_f1': {
+            'threshold': float(opt_f1_thresh),
+            'precision': float(opt_f1_prec),
+            'recall': float(opt_f1_rec),
+            'f1': float(opt_f1_score),
+            'tp': int(tp), 'fp': int(fp), 'tn': int(tn), 'fn': int(fn),
+            'description': 'Optimal F1 score - best precision-recall balance'
+        }
+    }
+
+    if verbose:
+        print(f"Optimal F1 Threshold: {opt_f1_thresh:.4f}")
+        print(f"  • F1 Score:   {opt_f1_score:.4f} (MAXIMUM)")
+        print(f"  • Precision:  {opt_f1_prec:.4f} ({opt_f1_prec*100:.2f}%)")
+        print(f"  • Recall:     {opt_f1_rec:.4f} ({opt_f1_rec*100:.2f}%)")
+        print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp:,}")
+
+    # 2. Target Performance (max recall with >=70% precision)
+    if verbose:
+        print("\n" + "=" * 100)
+        print("2. TARGET PERFORMANCE THRESHOLD (Max Recall with >=70% Precision)")
+        print("-" * 100)
+
+    tp_thresh, tp_prec, tp_rec, tp_f1 = find_target_performance_threshold(
+        precisions, recalls, thresholds, min_precision=0.70
+    )
+
+    if tp_thresh is not None:
+        y_pred = (y_test_proba >= tp_thresh).astype(int)
+        tn, fp, fn, tp_cm = confusion_matrix(y_test, y_pred).ravel()
+
+        threshold_config['target_performance'] = {
+            'threshold': float(tp_thresh),
+            'precision': float(tp_prec),
+            'recall': float(tp_rec),
+            'f1': float(tp_f1),
+            'min_precision': 0.70,
+            'tp': int(tp_cm), 'fp': int(fp), 'tn': int(tn), 'fn': int(fn),
+            'description': 'Max recall while maintaining >=70% precision (recommended)'
+        }
+
+        if verbose:
+            print(f"Target Performance Threshold: {tp_thresh:.4f}")
+            print(f"  • Recall:     {tp_rec:.4f} ({tp_rec*100:.2f}%) MAXIMIZED")
+            print(f"  • Precision:  {tp_prec:.4f} ({tp_prec*100:.2f}%) >= 70% ✓")
+            print(f"  • F1 Score:   {tp_f1:.4f}")
+            print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp_cm:,}")
+
+    # 3. Recall-targeted thresholds
+    if verbose:
+        print("\n" + "=" * 100)
+        print("3. RECALL-TARGETED THRESHOLDS")
+        print("=" * 100)
+
+    recall_targets = [
+        ('conservative_90pct_recall', 0.90, 'Catch most fraud (90% recall), accept more false positives'),
+        ('balanced_85pct_recall', 0.85, 'Balanced precision-recall trade-off (85% recall target)'),
+        ('aggressive_80pct_recall', 0.80, 'Prioritize precision (80% recall), reduce false positives')
+    ]
+
+    for name, target, description in recall_targets:
+        thresh, prec, rec, f1 = find_threshold_for_recall(target, precisions, recalls, thresholds)
+
+        if thresh is not None:
+            y_pred = (y_test_proba >= thresh).astype(int)
+            tn, fp, fn, tp_val = confusion_matrix(y_test, y_pred).ravel()
+
+            threshold_config[name] = {
+                'threshold': float(thresh),
+                'target_recall': target,
+                'achieved_recall': float(rec),
+                'precision': float(prec),
+                'f1': float(f1),
+                'tp': int(tp_val), 'fp': int(fp), 'tn': int(tn), 'fn': int(fn),
+                'description': description
+            }
+
+            if verbose:
+                print(f"\nTarget Recall: {target*100:.0f}%")
+                print(f"  • Optimal Threshold: {thresh:.4f}")
+                print(f"  • Achieved Recall:   {rec:.4f} ({rec*100:.2f}%)")
+                print(f"  • Precision:         {prec:.4f} ({prec*100:.2f}%)")
+                print(f"  • F1 Score:          {f1:.4f}")
+                print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp_val:,}")
+
+    if verbose:
+        print("=" * 100)
+
+    return threshold_config
+
+
+def compute_shap_importance(model, X, feature_names, verbose=True):
+    """
+    Compute SHAP-based feature importance using XGBoost's native pred_contribs.
+
+    This matches the approach used in fd3 notebook and the production API explainability.
+
+    Args:
+        model: Trained sklearn Pipeline with XGBClassifier
+        X: Feature matrix
+        feature_names: List of feature names in order after preprocessing
+        verbose: Whether to print progress
+
+    Returns:
+        Tuple of (importance_df, shap_values_matrix)
+    """
+    if verbose:
+        print("Computing SHAP values using XGBoost native interface...")
+
+    # Extract XGBoost classifier and get the booster
+    xgb_model = model.named_steps['classifier']
+    booster = xgb_model.get_booster()
+
+    # Apply preprocessor to get numeric features
+    preprocessor = model.named_steps['preprocessor']
+    X_processed = preprocessor.transform(X)
+
+    # Create DMatrix for XGBoost
+    dmatrix = xgb.DMatrix(X_processed)
+
+    # Compute SHAP values using pred_contribs
+    shap_values = booster.predict(dmatrix, pred_contribs=True)
+
+    # Remove the bias column (last column)
+    shap_values = shap_values[:, :-1]
+
+    if verbose:
+        print(f"  ✓ SHAP values computed: {shap_values.shape[0]:,} samples x {shap_values.shape[1]} features")
+
+    # Compute global importance as mean absolute SHAP value
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+    mean_shap = shap_values.mean(axis=0)  # Signed mean (direction of effect)
+
+    # Create DataFrame
+    importance_df = pd.DataFrame({
+        'feature': feature_names,
+        'shap_importance': mean_abs_shap,
+        'mean_shap': mean_shap
+    }).sort_values('shap_importance', ascending=False)
+
+    return importance_df, shap_values
 
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Train XGBoost fraud detection model",
+        description="Train XGBoost fraud detection model with pre-optimized hyperparameters",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -49,34 +275,23 @@ def parse_args():
         "--random-seed", type=int, default=1, help="Random seed for reproducibility"
     )
     parser.add_argument(
-        "--skip-tuning",
-        action="store_true",
-        help="Skip hyperparameter tuning and use optimal params directly",
-    )
-    parser.add_argument(
         "--verbose", action="store_true", help="Enable verbose output during training"
     )
 
     return parser.parse_args()
 
 
-# NOTE: Data loading, evaluate_model, optimize_thresholds, and preprocessing
-# pipeline creation are now imported from shared modules
-# (src/data, src/evaluation, and src/preprocessing)
-
-
-def train_model(
-    train_df, val_df, test_df, target_col="is_fraud", random_seed=1, skip_tuning=False, verbose=False
-):
-    """Train XGBoost model with hyperparameter tuning.
+def train_model(train_df, val_df, test_df, target_col="is_fraud", random_seed=1, verbose=False):
+    """Train XGBoost model with pre-optimized hyperparameters.
 
     Methodology:
     1. Combine train+val datasets (80% of total data)
-    2. Use GridSearchCV with 4-fold CV on combined data for hyperparameter tuning
-    3. GridSearchCV automatically retrains on full train+val with best params (refit=True)
-    4. Evaluate final model on held-out test set (20%)
+    2. Train model with hyperparameters tuned in notebooks/fd2_model_selection_tuning.ipynb
+    3. Evaluate final model on held-out test set (20%)
 
-    This follows ML best practices and maximizes data available for hyperparameter selection.
+    Note: Hyperparameter tuning was performed extensively in the fd2 notebook using
+    GridSearchCV with 4-fold CV. This script uses those pre-optimized parameters
+    for reproducible production training.
     """
 
     # Load feature categorization from shared config
@@ -85,8 +300,7 @@ def train_model(
     continuous_numeric = feature_config['continuous_numeric']
     binary = feature_config['binary']
 
-    # Combine train and validation for hyperparameter tuning
-    # This gives GridSearchCV access to 80% of data instead of just 60%
+    # Combine train and validation for final training
     train_val_df = pd.concat([train_df, val_df], axis=0, ignore_index=True)
     X_train_val = train_val_df.drop(columns=[target_col])
     y_train_val = train_val_df[target_col]
@@ -94,12 +308,12 @@ def train_model(
     y_test = test_df[target_col]
 
     print("\n" + "=" * 100)
-    print("HYPERPARAMETER TUNING & MODEL TRAINING")
+    print("MODEL TRAINING")
     print("=" * 100)
-    print(f"Combined training data: {len(train_val_df):,} samples (train + validation)")
-    print(f"  - Training set:   {len(train_df):,} samples")
-    print(f"  - Validation set: {len(val_df):,} samples")
-    print(f"Test data: {len(test_df):,} samples")
+    print(f"Training data: {len(train_val_df):,} samples (train + validation combined)")
+    print(f"  - Original training set:   {len(train_df):,} samples")
+    print(f"  - Original validation set: {len(val_df):,} samples")
+    print(f"Test data: {len(test_df):,} samples (held-out)")
     print("=" * 100)
 
     # Create preprocessing pipeline using shared factory
@@ -107,74 +321,33 @@ def train_model(
         categorical_features, continuous_numeric, binary
     )
 
-    # Feature names after preprocessing (order matches notebook)
+    # Feature names after preprocessing
     feature_names = categorical_features + continuous_numeric + binary
 
-    # Load optimal hyperparameters using shared ModelConfig
+    # Load pre-optimized hyperparameters (tuned in fd2 notebook)
     optimal_params = ModelConfig.load_hyperparameters(
         model_type='xgboost',
         source='metadata',
         random_seed=random_seed
     )
 
-    if not skip_tuning:
-        print("\nPerforming hyperparameter tuning with GridSearchCV...")
-        print("Using 4-fold cross-validation on combined train+validation data")
-        print("This may take several minutes...")
+    print("\nUsing pre-optimized hyperparameters (from fd2 notebook tuning):")
+    print(f"  n_estimators: {optimal_params.get('n_estimators', 'N/A')}")
+    print(f"  max_depth: {optimal_params.get('max_depth', 'N/A')}")
+    print(f"  learning_rate: {optimal_params.get('learning_rate', 'N/A')}")
+    print(f"  scale_pos_weight: {optimal_params.get('scale_pos_weight', 'N/A')}")
 
-        # Create pipeline
-        pipeline = Pipeline([("preprocessor", preprocessor), ("classifier", xgb.XGBClassifier(random_state=random_seed))])
+    # Create final production model with optimal params
+    final_pipeline = Pipeline(
+        [
+            ("preprocessor", preprocessor),
+            ("classifier", xgb.XGBClassifier(**optimal_params)),
+        ]
+    )
 
-        # Load parameter grid from shared config
-        param_grid = ModelConfig.get_param_grid(model_type='xgboost')
-
-        grid_search = GridSearchCV(
-            pipeline,
-            param_grid,
-            cv=TrainingConfig.get_cv_strategy(random_seed=random_seed),
-            scoring="average_precision",  # Equivalent to XGBoost's eval_metric="aucpr"
-            n_jobs=-1,
-            verbose=2 if verbose else 0,
-            refit=True,  # Automatically retrain on full train+val with best params
-        )
-
-        # Fit on combined train+val (80% of total data)
-        # GridSearchCV will:
-        # 1. Use 4-fold CV to find best parameters
-        # 2. Automatically retrain on ALL of X_train_val with best params
-        # 3. Store final model in best_estimator_
-        grid_search.fit(X_train_val, y_train_val)
-
-        print(f"\nBest parameters found (via 4-fold CV on {len(X_train_val):,} samples):")
-        for param, value in grid_search.best_params_.items():
-            print(f"  {param}: {value}")
-        print(f"Best CV score (PR-AUC): {grid_search.best_score_:.4f}")
-
-        # Use the best estimator (already trained on full train+val)
-        final_pipeline = grid_search.best_estimator_
-
-        # Update optimal params with tuned values
-        for param, value in grid_search.best_params_.items():
-            param_name = param.replace("classifier__", "")
-            optimal_params[param_name] = value
-
-    else:
-        # skip_tuning=True: Train model with optimal params from config
-        print("\n" + "=" * 100)
-        print("TRAINING MODEL WITH OPTIMAL PARAMETERS (SKIPPING TUNING)")
-        print("=" * 100)
-        print(f"Training on {len(train_val_df):,} samples (train + validation)")
-
-        # Create final production model with optimal params
-        final_pipeline = Pipeline(
-            [
-                ("preprocessor", preprocessor),
-                ("classifier", xgb.XGBClassifier(**optimal_params)),
-            ]
-        )
-
-        print("\nTraining final model...")
-        final_pipeline.fit(X_train_val, y_train_val)
+    print("\nTraining final model...")
+    final_pipeline.fit(X_train_val, y_train_val)
+    print("  ✓ Model training complete")
 
     # Evaluate on test set
     print("\n" + "=" * 100)
@@ -182,48 +355,29 @@ def train_model(
     print("=" * 100)
     test_metrics = evaluate_model(final_pipeline, X_test, y_test, "XGBoost (Final)", "Test")
 
-    # Optimize thresholds using cross-validation predictions on train+val
-    # This provides unbiased threshold estimates without needing a separate validation set
+    # Get test set predictions for threshold optimization
+    y_test_proba = final_pipeline.predict_proba(X_test)[:, 1]
+
+    # Optimize thresholds on test set (matches fd3 notebook approach)
     print("\n" + "=" * 100)
-    print("THRESHOLD OPTIMIZATION")
+    print("THRESHOLD OPTIMIZATION (on Test Set)")
     print("=" * 100)
-    print("Using cross-validation predictions on train+val for threshold optimization...")
+    print("Finding optimal thresholds for different business requirements...")
+    threshold_config = optimize_thresholds_on_test(y_test, y_test_proba, verbose=True)
 
-    from sklearn.model_selection import cross_val_predict
-
-    # Get CV predictions on train+val
-    cv_predictions = cross_val_predict(
-        final_pipeline,
-        X_train_val,
-        y_train_val,
-        cv=TrainingConfig.get_cv_strategy(random_seed=random_seed),
-        method='predict_proba'
+    # Compute SHAP-based feature importance (matches fd3 notebook and API explainability)
+    print("\n" + "=" * 100)
+    print("FEATURE IMPORTANCE (SHAP Values)")
+    print("=" * 100)
+    feature_importance_df, shap_values = compute_shap_importance(
+        final_pipeline, X_test, feature_names, verbose=True
     )
 
-    # Optimize thresholds using CV predictions
-    # Note: We need to create a temporary object that has predict_proba method
-    class PredictionWrapper:
-        def __init__(self, predictions):
-            self.predictions = predictions
-
-        def predict_proba(self, X):
-            return self.predictions
-
-    wrapper = PredictionWrapper(cv_predictions)
-    threshold_config = optimize_thresholds(wrapper, X_train_val, y_train_val)
-
-    # Extract feature importance
-    xgb_model = final_pipeline.named_steps["classifier"]
-    importance_scores = xgb_model.feature_importances_
-    feature_importance_df = pd.DataFrame(
-        {"feature": feature_names, "importance": importance_scores}
-    ).sort_values("importance", ascending=False)
-
-    print("\n" + "=" * 100)
-    print("TOP 10 MOST IMPORTANT FEATURES")
-    print("=" * 100)
-    for i, (idx, row) in enumerate(feature_importance_df.head(10).iterrows(), 1):
-        print(f"  {i:2d}. {row['feature']:40s} - Importance: {row['importance']:.6f}")
+    print("\nTop 10 Features by Mean |SHAP Value|:")
+    print("-" * 100)
+    for i, (_, row) in enumerate(feature_importance_df.head(10).iterrows(), 1):
+        direction = "↑ fraud" if row['mean_shap'] > 0 else "↓ fraud"
+        print(f"  {i:2d}. {row['feature']:40s} - Importance: {row['shap_importance']:.6f}  ({direction})")
     print("=" * 100)
 
     return {
@@ -236,7 +390,6 @@ def train_model(
         "continuous_numeric": continuous_numeric,
         "binary": binary,
         "optimal_params": optimal_params,
-        # Additional metadata for comprehensive model_metadata.json
         "dataset_info": {
             "train_samples": len(train_df),
             "val_samples": len(val_df),
@@ -247,8 +400,6 @@ def train_model(
             "fraud_rate_test": float(y_test.mean()),
             "class_imbalance_ratio": float((y_train_val == 0).sum() / (y_train_val == 1).sum()),
         },
-        "cv_best_score": grid_search.best_score_ if not skip_tuning else None,
-        "tuning_performed": not skip_tuning,
     }
 
 
@@ -270,17 +421,18 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
     results["transformer"].save(str(transformer_config_path))
     print(f"  ✓ Transformer config saved: {transformer_config_path}")
 
-    # 3. Save threshold configuration (wrapped in structure matching notebook)
+    # 3. Save threshold configuration (matches fd3 notebook format)
     threshold_config_wrapped = {
         "default_threshold": 0.5,
+        "recommended_threshold": "target_performance" if "target_performance" in results["threshold_config"] else "optimal_f1",
         "optimized_thresholds": results["threshold_config"],
-        "note": "Thresholds optimized on cross-validation predictions from train+val combined. optimal_f1 maximizes F1 score and is the recommended default."
+        "note": "Thresholds optimized on held-out test set predictions."
     }
     threshold_path = output_dir / "threshold_config.json"
     with open(threshold_path, "w") as f:
         json.dump(threshold_config_wrapped, f, indent=2)
     print(f"  ✓ Threshold config saved: {threshold_path}")
-    print(f"  • {len(results['threshold_config'])} threshold strategies available (including optimal F1)")
+    print(f"    {len(results['threshold_config'])} threshold strategies available")
 
     # 4. Save feature lists
     feature_lists = {
@@ -294,7 +446,7 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         json.dump(feature_lists, f, indent=2)
     print(f"  ✓ Feature lists saved: {feature_lists_path}")
 
-    # 5. Save model metadata (matching notebook structure)
+    # 5. Save model metadata
     metadata = {
         "model_info": {
             "model_name": "XGBoost Fraud Detector",
@@ -303,7 +455,7 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
             "training_date": datetime.now().strftime('%Y-%m-%d'),
             "framework": "xgboost + scikit-learn",
             "python_version": "3.12+",
-            "note": "Final production model trained on train+val combined, evaluated on test set"
+            "note": "Production model trained on train+val combined with pre-optimized hyperparameters"
         },
         "hyperparameters": {
             param: value for param, value in results["optimal_params"].items()
@@ -322,20 +474,14 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
             "class_imbalance_ratio": results["dataset_info"]["class_imbalance_ratio"]
         },
         "performance": {
-            "test_set_final": {
-                "note": "Final performance from model trained on train+val combined",
+            "test_set": {
+                "note": "Performance on held-out test set",
                 "roc_auc": float(results["test_metrics"]["roc_auc"]),
                 "pr_auc": float(results["test_metrics"]["pr_auc"]),
                 "f1_score": float(results["test_metrics"]["f1"]),
                 "precision": float(results["test_metrics"]["precision"]),
                 "recall": float(results["test_metrics"]["recall"]),
                 "accuracy": float(results["test_metrics"]["accuracy"])
-            },
-            "cross_validation": {
-                "cv_folds": 4,
-                "cv_strategy": "StratifiedKFold",
-                "best_cv_pr_auc": float(results["cv_best_score"]) if results["cv_best_score"] is not None else None,
-                "note": "CV performed on train+val combined for hyperparameter selection" if results["tuning_performed"] else "No CV performed (skip-tuning mode)"
             }
         },
         "features": {
@@ -348,13 +494,6 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
             "categorical_encoding": "OrdinalEncoder (handle_unknown=use_encoded_value)",
             "numeric_scaling": "None (tree-based model)",
             "binary_features": "Passthrough (no transformation)"
-        },
-        "optimization": {
-            "optimization_metric": "PR-AUC (Precision-Recall Area Under Curve)",
-            "search_method": "GridSearchCV" if results["tuning_performed"] else "Pre-optimized parameters",
-            "num_combinations_tested": 108 if results["tuning_performed"] else 0,
-            "tuned_parameters": list(results["optimal_params"].keys()),
-            "final_model_training": "Retrained on train+val combined with optimal hyperparameters"
         }
     }
 
@@ -378,10 +517,11 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         for metric, value in results["test_metrics"].items():
             f.write(f"{metric.upper():12s}: {value:.4f}\n")
         f.write("\n" + "=" * 100 + "\n")
-        f.write("TOP 20 FEATURES\n")
+        f.write("TOP 20 FEATURES (SHAP Importance)\n")
         f.write("=" * 100 + "\n")
-        for i, (idx, row) in enumerate(results["feature_importance"].head(20).iterrows(), 1):
-            f.write(f"{i:2d}. {row['feature']:40s} - {row['importance']:.6f}\n")
+        for i, (_, row) in enumerate(results["feature_importance"].head(20).iterrows(), 1):
+            direction = "↑ fraud" if row['mean_shap'] > 0 else "↓ fraud"
+            f.write(f"{i:2d}. {row['feature']:40s} - {row['shap_importance']:.6f}  ({direction})\n")
         f.write("\n" + "=" * 100 + "\n")
         f.write("THRESHOLD CONFIGURATIONS\n")
         f.write("=" * 100 + "\n")
@@ -413,11 +553,10 @@ def main():
     print(f"Data directory: {args.data_dir}")
     print(f"Output directory: {args.output_dir}")
     print(f"Random seed: {args.random_seed}")
-    print(f"Skip tuning: {args.skip_tuning}")
     print("=" * 100)
 
     try:
-        # Load raw data and split using shared function from src.data
+        # Load raw data and split using shared function
         train_raw, val_raw, test_raw = load_and_split_data(
             data_path=str(Path(args.data_dir) / "transactions.csv"),
             random_seed=args.random_seed,
@@ -426,9 +565,9 @@ def main():
 
         # Apply feature engineering pipeline using FraudFeatureTransformer
         print("\n" + "=" * 100)
-        print("FEATURE ENGINEERING - USING PRODUCTION PIPELINE")
+        print("FEATURE ENGINEERING")
         print("=" * 100)
-        print("Applying FraudFeatureTransformer from src/preprocessing/")
+        print("Applying FraudFeatureTransformer...")
 
         transformer = FraudFeatureTransformer()
         transformer.fit(train_raw)
@@ -456,7 +595,6 @@ def main():
             val_df,
             test_df,
             random_seed=args.random_seed,
-            skip_tuning=args.skip_tuning,
             verbose=args.verbose,
         )
 

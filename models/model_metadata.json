@@ -6,7 +6,7 @@
     "training_date": "2025-12-10",
     "framework": "xgboost + scikit-learn",
     "python_version": "3.12+",
-    "note": "Model trained on train+val combined in Notebook 2, evaluated on test set here"
+    "note": "Production model trained on train+val combined with pre-optimized hyperparameters"
   },
   "hyperparameters": {
     "n_estimators": 100,
@@ -20,7 +20,8 @@
     "reg_lambda": 1.0,
     "scale_pos_weight": 8,
     "eval_metric": "aucpr",
-    "random_state": 1
+    "random_state": 1,
+    "n_jobs": -1
   },
   "dataset_info": {
     "training_samples": 239756,
@@ -31,25 +32,19 @@
     },
     "test_samples": 59939,
     "num_features": 30,
-    "fraud_rate_train": 0.022061317895415895,
+    "fraud_rate_train_val": 0.02206409850014181,
     "fraud_rate_test": 0.022055756685964063,
-    "class_imbalance_ratio": 44.32820771363751
+    "class_imbalance_ratio": 44.32249527410208
   },
   "performance": {
     "test_set": {
-      "note": "Performance on held-out test set (model trained on train+val in Notebook 2)",
+      "note": "Performance on held-out test set",
       "roc_auc": 0.9761493408956425,
       "pr_auc": 0.8659391995996268,
       "f1_score": 0.7775807023767294,
       "precision": 0.7321309285237141,
       "recall": 0.8290468986384266,
       "accuracy": 0.9895393650211048
-    },
-    "cross_validation": {
-      "cv_folds": 4,
-      "cv_strategy": "StratifiedKFold",
-      "cv_pr_auc": 0.8681639277310786,
-      "note": "CV performed on train+val combined for hyperparameter selection in Notebook 2"
     }
   },
   "features": {
@@ -95,11 +90,5 @@
     "categorical_encoding": "OrdinalEncoder (handle_unknown=use_encoded_value)",
     "numeric_scaling": "None (tree-based model)",
     "binary_features": "Passthrough (no transformation)"
-  },
-  "workflow": {
-    "training_notebook": "fd2_model_selection_tuning.ipynb",
-    "evaluation_notebook": "fd3_model_evaluation_deployment.ipynb",
-    "model_source": "GridSearchCV best_estimator_ (auto-refit on train+val)",
-    "note": "Model loaded from xgb_fraud_detector.joblib, no retraining in fd3"
   }
 }

@@ -129,11 +129,11 @@ This refactoring eliminates code duplication across `bias_variance_analysis.py`,
 ✅ Uses shared `TrainingConfig` for CV
 ✅ Produces identical results to pre-refactor version
 
-### train.py --skip-tuning
+### train.py
 ✅ Runs successfully with refactored code
 ✅ Uses shared `FeatureListsConfig` for feature categories
 ✅ Uses `PreprocessingPipelineFactory` for pipeline creation
-✅ Loads hyperparameters via `ModelConfig`
+✅ Loads pre-optimized hyperparameters via `ModelConfig` (tuned in fd2 notebook)
 ✅ Uses shared `evaluate_model()` and `optimize_thresholds()`
 ✅ Successfully trains and saves model artifacts
 
