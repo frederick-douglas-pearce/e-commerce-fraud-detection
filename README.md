@@ -578,7 +578,8 @@ Access: http://localhost:8000/docs
 docker compose build                                       # Build image
 docker compose up -d                                       # Start container
 curl http://localhost:8000/health                          # Verify
-docker compose down                                        # Stop
+docker compose down                                        # Stop container
+docker compose down --rmi all                              # Stop and remove image
 ```
 
 #### Option 3: Google Cloud Run
