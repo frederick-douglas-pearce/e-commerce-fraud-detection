@@ -609,6 +609,12 @@ export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uw.a.run.app"
 
 **Note:** These examples use `curl` (a system command) and pipe to `uv run python -m json.tool` for JSON formatting. Using `uv run` ensures the correct Python version from the project's virtual environment.
 
+**Using a JSON file:** Instead of inline JSON with `-d '{...}'`, you can use a file with `-d @filename.json`. A sample high-risk transaction is provided in `transaction.json` for testing:
+```bash
+curl -X POST "$SERVICE_URL/predict" -H "Content-Type: application/json" \
+  -d @transaction.json | uv run python -m json.tool
+```
+
 #### Prediction Endpoint
 
 Make fraud predictions for transactions using the `/predict` endpoint.
@@ -646,7 +652,7 @@ curl -X POST "$SERVICE_URL/predict?threshold_strategy=balanced_85pct_recall" \
 
 **Note:** The API automatically generates 30 engineered features from these 15 raw fields using the production feature engineering pipeline.
 
-**Response:**
+**Response Example:**
 ```json
 {
   "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
