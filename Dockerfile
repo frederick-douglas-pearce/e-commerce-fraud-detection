@@ -60,9 +60,5 @@ USER appuser
 # Expose port (Cloud Run will set PORT env var, defaults to 8080)
 EXPOSE 8080
 
-# Health check - uses PORT environment variable
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import os; import requests; port = os.getenv('PORT', '8000'); requests.get(f'http://localhost:{port}/health').raise_for_status()" || exit 1
-
 # Run the FastAPI application using predict.py (reads PORT from environment)
 CMD ["python", "predict.py"]
