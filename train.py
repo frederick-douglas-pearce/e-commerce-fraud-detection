@@ -24,184 +24,22 @@ import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.metrics import confusion_matrix, precision_recall_curve
 from sklearn.pipeline import Pipeline
 
 # Import production feature engineering pipeline and shared modules
 from src.deployment.preprocessing.transformer import FraudFeatureTransformer
 from src.deployment.preprocessing import PreprocessingPipelineFactory
-from src.deployment.config import FeatureListsConfig, ModelConfig
+from src.deployment.config import (
+    FeatureListsConfig,
+    ModelConfig,
+    build_threshold_config,
+    build_model_metadata,
+)
 from src.deployment.data import load_and_split_data
 from src.deployment.evaluation import evaluate_model
 
-
-def find_optimal_f1_threshold(precisions, recalls, thresholds):
-    """Find threshold that maximizes F1 score."""
-    f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-10)
-    best_f1_idx = np.argmax(f1_scores)
-    return (
-        thresholds[best_f1_idx],
-        precisions[best_f1_idx],
-        recalls[best_f1_idx],
-        f1_scores[best_f1_idx]
-    )
-
-
-def find_target_performance_threshold(precisions, recalls, thresholds, min_precision=0.70):
-    """Find threshold that maximizes recall while maintaining minimum precision."""
-    valid_mask = precisions[:-1] >= min_precision
-    valid_indices = np.where(valid_mask)[0]
-
-    if len(valid_indices) == 0:
-        return None, None, None, None
-
-    best_idx = valid_indices[np.argmax(recalls[:-1][valid_indices])]
-    threshold = thresholds[best_idx]
-    precision = precisions[best_idx]
-    recall = recalls[best_idx]
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-
-    return threshold, precision, recall, f1
-
-
-def find_threshold_for_recall(target_recall, precisions, recalls, thresholds):
-    """Find threshold that achieves target recall and maximizes precision."""
-    valid_indices = np.where(recalls[:-1] >= target_recall)[0]
-
-    if len(valid_indices) == 0:
-        return None, None, None, None
-
-    best_idx = valid_indices[np.argmax(precisions[:-1][valid_indices])]
-    threshold = thresholds[best_idx]
-    precision = precisions[best_idx]
-    recall = recalls[best_idx]
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-
-    return threshold, precision, recall, f1
-
-
-def optimize_thresholds_on_test(y_test, y_test_proba, verbose=True):
-    """
-    Optimize classification thresholds on test set.
-
-    Matches the approach used in fd3 notebook:
-    1. Optimal F1 - best precision-recall balance
-    2. Target Performance - max recall with >=70% precision
-    3. Conservative (90% recall)
-    4. Balanced (85% recall)
-    5. Aggressive (80% recall)
-
-    Args:
-        y_test: True test labels
-        y_test_proba: Predicted probabilities on test set
-        verbose: Whether to print results
-
-    Returns:
-        Dictionary with all threshold configurations
-    """
-    precisions, recalls, thresholds = precision_recall_curve(y_test, y_test_proba)
-
-    if verbose:
-        print("\n1. OPTIMAL F1 THRESHOLD (Best Precision-Recall Balance)")
-        print("-" * 100)
-
-    # 1. Optimal F1
-    opt_f1_thresh, opt_f1_prec, opt_f1_rec, opt_f1_score = find_optimal_f1_threshold(
-        precisions, recalls, thresholds
-    )
-    y_pred = (y_test_proba >= opt_f1_thresh).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
-
-    threshold_config = {
-        'optimal_f1': {
-            'threshold': float(opt_f1_thresh),
-            'precision': float(opt_f1_prec),
-            'recall': float(opt_f1_rec),
-            'f1': float(opt_f1_score),
-            'tp': int(tp), 'fp': int(fp), 'tn': int(tn), 'fn': int(fn),
-            'description': 'Optimal F1 score - best precision-recall balance'
-        }
-    }
-
-    if verbose:
-        print(f"Optimal F1 Threshold: {opt_f1_thresh:.4f}")
-        print(f"  • F1 Score:   {opt_f1_score:.4f} (MAXIMUM)")
-        print(f"  • Precision:  {opt_f1_prec:.4f} ({opt_f1_prec*100:.2f}%)")
-        print(f"  • Recall:     {opt_f1_rec:.4f} ({opt_f1_rec*100:.2f}%)")
-        print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp:,}")
-
-    # 2. Target Performance (max recall with >=70% precision)
-    if verbose:
-        print("\n" + "=" * 100)
-        print("2. TARGET PERFORMANCE THRESHOLD (Max Recall with >=70% Precision)")
-        print("-" * 100)
-
-    tp_thresh, tp_prec, tp_rec, tp_f1 = find_target_performance_threshold(
-        precisions, recalls, thresholds, min_precision=0.70
-    )
-
-    if tp_thresh is not None:
-        y_pred = (y_test_proba >= tp_thresh).astype(int)
-        tn, fp, fn, tp_cm = confusion_matrix(y_test, y_pred).ravel()
-
-        threshold_config['target_performance'] = {
-            'threshold': float(tp_thresh),
-            'precision': float(tp_prec),
-            'recall': float(tp_rec),
-            'f1': float(tp_f1),
-            'min_precision': 0.70,
-            'tp': int(tp_cm), 'fp': int(fp), 'tn': int(tn), 'fn': int(fn),
-            'description': 'Max recall while maintaining >=70% precision (recommended)'
-        }
-
-        if verbose:
-            print(f"Target Performance Threshold: {tp_thresh:.4f}")
-            print(f"  • Recall:     {tp_rec:.4f} ({tp_rec*100:.2f}%) MAXIMIZED")
-            print(f"  • Precision:  {tp_prec:.4f} ({tp_prec*100:.2f}%) >= 70% ✓")
-            print(f"  • F1 Score:   {tp_f1:.4f}")
-            print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp_cm:,}")
-
-    # 3. Recall-targeted thresholds
-    if verbose:
-        print("\n" + "=" * 100)
-        print("3. RECALL-TARGETED THRESHOLDS")
-        print("=" * 100)
-
-    recall_targets = [
-        ('conservative_90pct_recall', 0.90, 'Catch most fraud (90% recall), accept more false positives'),
-        ('balanced_85pct_recall', 0.85, 'Balanced precision-recall trade-off (85% recall target)'),
-        ('aggressive_80pct_recall', 0.80, 'Prioritize precision (80% recall), reduce false positives')
-    ]
-
-    for name, target, description in recall_targets:
-        thresh, prec, rec, f1 = find_threshold_for_recall(target, precisions, recalls, thresholds)
-
-        if thresh is not None:
-            y_pred = (y_test_proba >= thresh).astype(int)
-            tn, fp, fn, tp_val = confusion_matrix(y_test, y_pred).ravel()
-
-            threshold_config[name] = {
-                'threshold': float(thresh),
-                'target_recall': target,
-                'achieved_recall': float(rec),
-                'precision': float(prec),
-                'f1': float(f1),
-                'tp': int(tp_val), 'fp': int(fp), 'tn': int(tn), 'fn': int(fn),
-                'description': description
-            }
-
-            if verbose:
-                print(f"\nTarget Recall: {target*100:.0f}%")
-                print(f"  • Optimal Threshold: {thresh:.4f}")
-                print(f"  • Achieved Recall:   {rec:.4f} ({rec*100:.2f}%)")
-                print(f"  • Precision:         {prec:.4f} ({prec*100:.2f}%)")
-                print(f"  • F1 Score:          {f1:.4f}")
-                print(f"  • Confusion Matrix:  TN={tn:,} | FP={fp:,} | FN={fn:,} | TP={tp_val:,}")
-
-    if verbose:
-        print("=" * 100)
-
-    return threshold_config
+# Import threshold optimization from fd3_nb (single source of truth)
+from src.fd3_nb.threshold_optimization import optimize_thresholds
 
 
 def compute_shap_importance(model, X, feature_names, verbose=True):
@@ -358,12 +196,64 @@ def train_model(train_df, val_df, test_df, target_col="is_fraud", random_seed=1,
     # Get test set predictions for threshold optimization
     y_test_proba = final_pipeline.predict_proba(X_test)[:, 1]
 
-    # Optimize thresholds on test set (matches fd3 notebook approach)
+    # Optimize thresholds on test set (using shared fd3_nb implementation)
     print("\n" + "=" * 100)
     print("THRESHOLD OPTIMIZATION (on Test Set)")
     print("=" * 100)
     print("Finding optimal thresholds for different business requirements...")
-    threshold_config = optimize_thresholds_on_test(y_test, y_test_proba, verbose=True)
+    optimal_f1_result, target_performance_result, threshold_results = optimize_thresholds(
+        y_test, y_test_proba, verbose=True
+    )
+
+    # Convert to optimized_thresholds dict format for build_threshold_config
+    optimized_thresholds = {
+        'optimal_f1': {
+            'threshold': float(optimal_f1_result['threshold']),
+            'precision': float(optimal_f1_result['precision']),
+            'recall': float(optimal_f1_result['recall']),
+            'f1': float(optimal_f1_result['f1']),
+            'tp': int(optimal_f1_result['tp']),
+            'fp': int(optimal_f1_result['fp']),
+            'tn': int(optimal_f1_result['tn']),
+            'fn': int(optimal_f1_result['fn']),
+            'description': 'Optimal F1 score - best precision-recall balance'
+        }
+    }
+
+    if target_performance_result is not None:
+        optimized_thresholds['target_performance'] = {
+            'threshold': float(target_performance_result['threshold']),
+            'precision': float(target_performance_result['precision']),
+            'recall': float(target_performance_result['recall']),
+            'f1': float(target_performance_result['f1']),
+            'min_precision': float(target_performance_result.get('min_precision', 0.70)),
+            'tp': int(target_performance_result['tp']),
+            'fp': int(target_performance_result['fp']),
+            'tn': int(target_performance_result['tn']),
+            'fn': int(target_performance_result['fn']),
+            'description': 'Max recall while maintaining >=70% precision (recommended)'
+        }
+
+    # Add recall-targeted thresholds
+    recall_names = ['conservative_90pct_recall', 'balanced_85pct_recall', 'aggressive_80pct_recall']
+    recall_descriptions = [
+        'Catch most fraud (90% recall), accept more false positives',
+        'Balanced precision-recall trade-off (85% recall target)',
+        'Prioritize precision (80% recall), reduce false positives'
+    ]
+    for i, result in enumerate(threshold_results):
+        optimized_thresholds[recall_names[i]] = {
+            'threshold': float(result['threshold']),
+            'target_recall': float(result['target_recall']),
+            'achieved_recall': float(result['recall']),
+            'precision': float(result['precision']),
+            'f1': float(result['f1']),
+            'tp': int(result['tp']),
+            'fp': int(result['fp']),
+            'tn': int(result['tn']),
+            'fn': int(result['fn']),
+            'description': recall_descriptions[i]
+        }
 
     # Compute SHAP-based feature importance (matches fd3 notebook and API explainability)
     print("\n" + "=" * 100)
@@ -383,7 +273,7 @@ def train_model(train_df, val_df, test_df, target_col="is_fraud", random_seed=1,
     return {
         "model": final_pipeline,
         "test_metrics": test_metrics,
-        "threshold_config": threshold_config,
+        "optimized_thresholds": optimized_thresholds,
         "feature_importance": feature_importance_df,
         "feature_names": feature_names,
         "categorical_features": categorical_features,
@@ -421,23 +311,13 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
     results["transformer"].save(str(transformer_config_path))
     print(f"  ✓ Transformer config saved: {transformer_config_path}")
 
-    # 3. Save threshold configuration (matches fd3 notebook format)
-    threshold_config_wrapped = {
-        "default_threshold": 0.5,
-        "recommended_threshold": "target_performance" if "target_performance" in results["threshold_config"] else "optimal_f1",
-        "risk_levels": {
-            "low": {"max_probability": 0.3},
-            "medium": {"max_probability": 0.7},
-            "high": {"max_probability": 1.0}
-        },
-        "optimized_thresholds": results["threshold_config"],
-        "note": "Thresholds optimized on held-out test set predictions."
-    }
+    # 3. Save threshold configuration (using shared builder)
+    threshold_config = build_threshold_config(results["optimized_thresholds"])
     threshold_path = output_dir / "threshold_config.json"
     with open(threshold_path, "w") as f:
-        json.dump(threshold_config_wrapped, f, indent=2)
+        json.dump(threshold_config, f, indent=2)
     print(f"  ✓ Threshold config saved: {threshold_path}")
-    print(f"    {len(results['threshold_config'])} threshold strategies available")
+    print(f"    {len(results['optimized_thresholds'])} threshold strategies available")
 
     # 4. Save feature lists
     feature_lists = {
@@ -451,56 +331,32 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         json.dump(feature_lists, f, indent=2)
     print(f"  ✓ Feature lists saved: {feature_lists_path}")
 
-    # 5. Save model metadata
-    metadata = {
-        "model_info": {
-            "model_name": "XGBoost Fraud Detector",
-            "model_type": "XGBClassifier",
-            "version": "1.0",
-            "training_date": datetime.now().strftime('%Y-%m-%d'),
-            "framework": "xgboost + scikit-learn",
-            "python_version": "3.12+",
-            "note": "Production model trained on train+val combined with pre-optimized hyperparameters"
+    # 5. Save model metadata (using shared builder)
+    dataset_info = {
+        "training_samples": results["dataset_info"]["train_val_samples"],
+        "training_sources": {
+            "original_train": results["dataset_info"]["train_samples"],
+            "original_val": results["dataset_info"]["val_samples"],
+            "combined_total": results["dataset_info"]["train_val_samples"]
         },
-        "hyperparameters": {
-            param: value for param, value in results["optimal_params"].items()
-        },
-        "dataset_info": {
-            "training_samples": results["dataset_info"]["train_val_samples"],
-            "training_sources": {
-                "original_train": results["dataset_info"]["train_samples"],
-                "original_val": results["dataset_info"]["val_samples"],
-                "combined_total": results["dataset_info"]["train_val_samples"]
-            },
-            "test_samples": results["dataset_info"]["test_samples"],
-            "num_features": results["dataset_info"]["num_features"],
-            "fraud_rate_train_val": results["dataset_info"]["fraud_rate_train_val"],
-            "fraud_rate_test": results["dataset_info"]["fraud_rate_test"],
-            "class_imbalance_ratio": results["dataset_info"]["class_imbalance_ratio"]
-        },
-        "performance": {
-            "test_set": {
-                "note": "Performance on held-out test set",
-                "roc_auc": float(results["test_metrics"]["roc_auc"]),
-                "pr_auc": float(results["test_metrics"]["pr_auc"]),
-                "f1_score": float(results["test_metrics"]["f1"]),
-                "precision": float(results["test_metrics"]["precision"]),
-                "recall": float(results["test_metrics"]["recall"]),
-                "accuracy": float(results["test_metrics"]["accuracy"])
-            }
-        },
-        "features": {
-            "continuous_numeric": results["continuous_numeric"],
-            "categorical": results["categorical_features"],
-            "binary": results["binary"],
-            "total_count": results["dataset_info"]["num_features"]
-        },
-        "preprocessing": {
-            "categorical_encoding": "OrdinalEncoder (handle_unknown=use_encoded_value)",
-            "numeric_scaling": "None (tree-based model)",
-            "binary_features": "Passthrough (no transformation)"
-        }
+        "test_samples": results["dataset_info"]["test_samples"],
+        "num_features": results["dataset_info"]["num_features"],
+        "fraud_rate_train": results["dataset_info"]["fraud_rate_train_val"],
+        "fraud_rate_test": results["dataset_info"]["fraud_rate_test"],
+        "class_imbalance_ratio": results["dataset_info"]["class_imbalance_ratio"]
     }
+    feature_lists = {
+        "continuous_numeric": results["continuous_numeric"],
+        "categorical": results["categorical_features"],
+        "binary": results["binary"]
+    }
+    metadata = build_model_metadata(
+        hyperparameters=results["optimal_params"],
+        test_metrics=results["test_metrics"],
+        dataset_info=dataset_info,
+        feature_lists=feature_lists,
+        note="Production model trained on train+val combined with pre-optimized hyperparameters"
+    )
 
     metadata_path = output_dir / "model_metadata.json"
     with open(metadata_path, "w") as f:
@@ -530,7 +386,7 @@ def save_artifacts(results, output_dir: Path, random_seed: int):
         f.write("\n" + "=" * 100 + "\n")
         f.write("THRESHOLD CONFIGURATIONS\n")
         f.write("=" * 100 + "\n")
-        for name, config in results["threshold_config"].items():
+        for name, config in results["optimized_thresholds"].items():
             f.write(f"\n{name}:\n")
             for key, value in config.items():
                 f.write(f"  {key}: {value}\n")

@@ -3,6 +3,8 @@ Model configuration for fraud detection project.
 
 Centralizes model hyperparameters and feature lists loading to ensure
 consistency across all scripts (bias_variance_analysis.py, train.py).
+
+All default values are loaded from deployment_defaults.json (single source of truth).
 """
 
 import json
@@ -11,10 +13,19 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 
+# Load defaults from JSON file (single source of truth)
+_CONFIG_PATH = Path(__file__).parent / "deployment_defaults.json"
+with open(_CONFIG_PATH) as f:
+    _DEFAULTS = json.load(f)
+
+_PATHS = _DEFAULTS["paths"]
+_MODEL_DEFAULTS = _DEFAULTS["model_defaults"]
+
+
 class FeatureListsConfig:
     """Configuration for feature categorization."""
 
-    DEFAULT_FEATURE_LISTS_PATH = Path("models/feature_lists.json")
+    DEFAULT_FEATURE_LISTS_PATH = Path(_PATHS["feature_lists"])
 
     @classmethod
     def load(cls, source: str = "feature_lists.json") -> Dict[str, List[str]]:
@@ -80,34 +91,14 @@ class FeatureListsConfig:
 class ModelConfig:
     """Configuration for model hyperparameters."""
 
-    DEFAULT_METADATA_PATH = Path("models/model_metadata.json")
-    DEFAULT_LOGS_DIR = Path("models/logs")
+    DEFAULT_METADATA_PATH = Path(_PATHS["model_metadata"])
+    DEFAULT_LOGS_DIR = Path(_PATHS["logs_dir"])
 
-    # Fallback hyperparameters if no config found
-    FALLBACK_XGBOOST_PARAMS = {
-        "n_estimators": 100,
-        "max_depth": 4,
-        "learning_rate": 0.1,
-        "subsample": 0.9,
-        "colsample_bytree": 0.9,
-        "min_child_weight": 7,
-        "gamma": 0.7,
-        'reg_alpha': 0.0,
-        'reg_lambda': 1.0,
-        "scale_pos_weight": 8,
-        "eval_metric": "aucpr",
-    }
+    # Fallback hyperparameters loaded from JSON (single source of truth)
+    FALLBACK_XGBOOST_PARAMS: Dict = _MODEL_DEFAULTS["xgboost"].copy()
+    FALLBACK_RANDOM_FOREST_PARAMS: Dict = _MODEL_DEFAULTS["random_forest"].copy()
 
-    FALLBACK_RANDOM_FOREST_PARAMS = {
-        "n_estimators": 400,
-        "max_depth": 20,
-        "min_samples_split": 10,
-        "min_samples_leaf": 5,
-        "max_features": "sqrt",
-        "class_weight": "balanced_subsample"
-    }
-
-    # Default parameter grids for hyperparameter tuning
+    # Default parameter grids for hyperparameter tuning (kept in Python - only used in notebooks)
     DEFAULT_XGBOOST_PARAM_GRID = {
         'classifier__n_estimators': [90, 100, 110],
         'classifier__max_depth': [4],
@@ -195,10 +186,7 @@ class ModelConfig:
 
         # Set random seed
         if random_seed is not None:
-            if model_type.lower() == "xgboost":
-                params['random_state'] = random_seed
-            else:
-                params['random_state'] = random_seed
+            params['random_state'] = random_seed
 
         # Add common parameters for XGBoost
         if model_type.lower() == "xgboost":

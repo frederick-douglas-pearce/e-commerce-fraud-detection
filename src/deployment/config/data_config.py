@@ -3,10 +3,20 @@ Data configuration for fraud detection project.
 
 Centralizes data loading parameters, split ratios, and random seeds
 to ensure consistency across all scripts (bias_variance_analysis.py, train.py).
+
+All default values are loaded from deployment_defaults.json (single source of truth).
 """
 
-import os
+import json
 from pathlib import Path
+
+
+# Load defaults from JSON file (single source of truth)
+_CONFIG_PATH = Path(__file__).parent / "deployment_defaults.json"
+with open(_CONFIG_PATH) as f:
+    _DEFAULTS = json.load(f)
+
+_DATA_DEFAULTS = _DEFAULTS["data"]
 
 
 class DataConfig:
@@ -14,21 +24,21 @@ class DataConfig:
 
     # Default random seed for reproducibility
     # Can be overridden by passing random_seed parameter to functions
-    DEFAULT_RANDOM_SEED = 1
+    DEFAULT_RANDOM_SEED: int = _DATA_DEFAULTS["default_random_seed"]
 
     # Train/validation/test split ratios
     # First split: 80% train+val, 20% test
     # Second split: 75% train, 25% val (from train+val)
     # Results in 60% train, 20% val, 20% test
-    TEST_SIZE = 0.2  # 20% for test set
-    VAL_SIZE = 0.25  # 25% of train+val -> 20% of total
+    TEST_SIZE: float = _DATA_DEFAULTS["test_size"]
+    VAL_SIZE: float = _DATA_DEFAULTS["val_size"]
 
     # Data paths
-    DEFAULT_DATA_DIR = Path("data")
-    DEFAULT_DATA_FILE = "transactions.csv"
+    DEFAULT_DATA_DIR: Path = Path(_DATA_DEFAULTS["default_data_dir"])
+    DEFAULT_DATA_FILE: str = _DATA_DEFAULTS["default_data_file"]
 
     # Target column name
-    TARGET_COLUMN = "is_fraud"
+    TARGET_COLUMN: str = _DATA_DEFAULTS["target_column"]
 
     @classmethod
     def get_data_path(cls, data_dir: str = None, filename: str = None) -> Path:

@@ -3,14 +3,17 @@ Deployment artifact utilities for fd3 notebook.
 
 This module provides functions for saving model artifacts, configurations,
 and metadata for production deployment.
+
+Uses shared builders from src.deployment.config for consistent artifact structure.
 """
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import joblib
+
+from src.deployment.config import build_threshold_config, build_model_metadata
 
 
 def save_production_model(
@@ -59,6 +62,7 @@ def save_threshold_config(
     Returns:
         Path to saved config
     """
+    # Build optimized_thresholds dict from function arguments
     optimized_thresholds = {
         'optimal_f1': {
             'threshold': float(optimal_f1_result['threshold']),
@@ -77,47 +81,33 @@ def save_threshold_config(
             'precision': float(target_performance_result['precision']),
             'recall': float(target_performance_result['recall']),
             'f1': float(target_performance_result['f1']),
-            'min_precision_constraint': min_prec,
+            'min_precision': min_prec,
             'description': f'Max recall with >={min_prec*100:.0f}% precision (RECOMMENDED)'
         }
 
     # Add recall-targeted thresholds
-    optimized_thresholds['conservative_90pct_recall'] = {
-        'threshold': float(threshold_results[0]['threshold']),
-        'target_recall': 0.90,
-        'achieved_recall': float(threshold_results[0]['recall']),
-        'precision': float(threshold_results[0]['precision']),
-        'f1': float(threshold_results[0]['f1']),
-        'description': 'Catch most fraud (90% recall), accept more false positives'
-    }
-    optimized_thresholds['balanced_85pct_recall'] = {
-        'threshold': float(threshold_results[1]['threshold']),
-        'target_recall': 0.85,
-        'achieved_recall': float(threshold_results[1]['recall']),
-        'precision': float(threshold_results[1]['precision']),
-        'f1': float(threshold_results[1]['f1']),
-        'description': 'Balanced precision-recall trade-off (85% recall target)'
-    }
-    optimized_thresholds['aggressive_80pct_recall'] = {
-        'threshold': float(threshold_results[2]['threshold']),
-        'target_recall': 0.80,
-        'achieved_recall': float(threshold_results[2]['recall']),
-        'precision': float(threshold_results[2]['precision']),
-        'f1': float(threshold_results[2]['f1']),
-        'description': 'Prioritize precision (80% recall), reduce false positives'
-    }
+    recall_names = ['conservative_90pct_recall', 'balanced_85pct_recall', 'aggressive_80pct_recall']
+    recall_targets = [0.90, 0.85, 0.80]
+    recall_descriptions = [
+        'Catch most fraud (90% recall), accept more false positives',
+        'Balanced precision-recall trade-off (85% recall target)',
+        'Prioritize precision (80% recall), reduce false positives'
+    ]
+    for i, result in enumerate(threshold_results):
+        optimized_thresholds[recall_names[i]] = {
+            'threshold': float(result['threshold']),
+            'target_recall': recall_targets[i],
+            'achieved_recall': float(result['recall']),
+            'precision': float(result['precision']),
+            'f1': float(result['f1']),
+            'description': recall_descriptions[i]
+        }
 
-    threshold_config = {
-        'default_threshold': 0.5,
-        'recommended_threshold': 'target_performance' if target_performance_result else 'optimal_f1',
-        'risk_levels': {
-            'low': {'max_probability': 0.3},
-            'medium': {'max_probability': 0.7},
-            'high': {'max_probability': 1.0}
-        },
-        'optimized_thresholds': optimized_thresholds,
-        'note': 'target_performance maximizes recall while meeting precision constraint (recommended for production)'
-    }
+    # Use shared builder to create final config structure
+    threshold_config = build_threshold_config(
+        optimized_thresholds,
+        note='target_performance maximizes recall while meeting precision constraint (recommended for production)'
+    )
 
     config_path = model_dir / filename
     with open(config_path, 'w') as f:
@@ -159,78 +149,67 @@ def save_model_metadata(
     Returns:
         Path to saved metadata
     """
-    metadata = {
-        'model_info': {
-            'model_name': 'XGBoost Fraud Detector',
-            'model_type': 'XGBClassifier',
-            'version': '1.0',
-            'training_date': datetime.now().strftime('%Y-%m-%d'),
-            'framework': 'xgboost + scikit-learn',
-            'python_version': '3.12+',
-            'note': 'Model trained on train+val combined in Notebook 2, evaluated on test set here'
-        },
-        'hyperparameters': {
-            'n_estimators': int(best_params['xgboost']['classifier__n_estimators']),
-            'max_depth': int(best_params['xgboost']['classifier__max_depth']),
-            'learning_rate': float(best_params['xgboost']['classifier__learning_rate']),
-            'subsample': float(best_params['xgboost']['classifier__subsample']),
-            'colsample_bytree': float(best_params['xgboost']['classifier__colsample_bytree']),
-            'min_child_weight': int(best_params['xgboost']['classifier__min_child_weight']),
-            'gamma': float(best_params['xgboost']['classifier__gamma']),
-            'reg_alpha': float(best_params['xgboost']['classifier__reg_alpha']),
-            'reg_lambda': float(best_params['xgboost']['classifier__reg_lambda']),
-            'scale_pos_weight': int(best_params['xgboost']['classifier__scale_pos_weight']),
-            'eval_metric': 'aucpr',
-            'random_state': random_seed
-        },
-        'dataset_info': {
-            'training_samples': dataset_sizes['train'] + dataset_sizes['val'],
-            'training_sources': {
-                'original_train': dataset_sizes['train'],
-                'original_val': dataset_sizes['val'],
-                'combined_total': dataset_sizes['train'] + dataset_sizes['val']
-            },
-            'test_samples': dataset_sizes['test'],
-            'num_features': 30,
-            'fraud_rate_train': fraud_rates['train'],
-            'fraud_rate_test': fraud_rates['test'],
-            'class_imbalance_ratio': (1 - fraud_rates['train']) / fraud_rates['train']
-        },
-        'performance': {
-            'test_set': {
-                'note': 'Performance on held-out test set (model trained on train+val in Notebook 2)',
-                'roc_auc': float(test_metrics['roc_auc']),
-                'pr_auc': float(test_metrics['pr_auc']),
-                'f1_score': float(test_metrics['f1']),
-                'precision': float(test_metrics['precision']),
-                'recall': float(test_metrics['recall']),
-                'accuracy': float(test_metrics['accuracy'])
-            },
-            'cross_validation': {
-                'cv_folds': validation_metrics.get('cv_folds', 4),
-                'cv_strategy': 'StratifiedKFold',
-                'cv_pr_auc': float(validation_metrics['xgboost_tuned']['pr_auc']),
-                'note': 'CV performed on train+val combined for hyperparameter selection in Notebook 2'
-            }
-        },
-        'features': {
-            'continuous_numeric': feature_lists['continuous_numeric'],
-            'categorical': feature_lists['categorical'],
-            'binary': feature_lists['binary'],
-            'total_count': 30
-        },
-        'preprocessing': {
-            'categorical_encoding': 'OrdinalEncoder (handle_unknown=use_encoded_value)',
-            'numeric_scaling': 'None (tree-based model)',
-            'binary_features': 'Passthrough (no transformation)'
-        },
-        'workflow': {
-            'training_notebook': 'fd2_model_selection_tuning.ipynb',
-            'evaluation_notebook': 'fd3_model_evaluation_deployment.ipynb',
-            'model_source': 'GridSearchCV best_estimator_ (auto-refit on train+val)',
-            'note': 'Model loaded from xgb_fraud_detector.joblib, no retraining in fd3'
-        }
+    # Extract hyperparameters from best_params structure
+    hyperparameters = {
+        'n_estimators': int(best_params['xgboost']['classifier__n_estimators']),
+        'max_depth': int(best_params['xgboost']['classifier__max_depth']),
+        'learning_rate': float(best_params['xgboost']['classifier__learning_rate']),
+        'subsample': float(best_params['xgboost']['classifier__subsample']),
+        'colsample_bytree': float(best_params['xgboost']['classifier__colsample_bytree']),
+        'min_child_weight': int(best_params['xgboost']['classifier__min_child_weight']),
+        'gamma': float(best_params['xgboost']['classifier__gamma']),
+        'reg_alpha': float(best_params['xgboost']['classifier__reg_alpha']),
+        'reg_lambda': float(best_params['xgboost']['classifier__reg_lambda']),
+        'scale_pos_weight': int(best_params['xgboost']['classifier__scale_pos_weight']),
+        'eval_metric': 'aucpr',
+        'random_state': random_seed
     }
+
+    # Build dataset_info for shared builder
+    dataset_info = {
+        'training_samples': dataset_sizes['train'] + dataset_sizes['val'],
+        'training_sources': {
+            'original_train': dataset_sizes['train'],
+            'original_val': dataset_sizes['val'],
+            'combined_total': dataset_sizes['train'] + dataset_sizes['val']
+        },
+        'test_samples': dataset_sizes['test'],
+        'num_features': (
+            len(feature_lists.get('continuous_numeric', []))
+            + len(feature_lists.get('categorical', []))
+            + len(feature_lists.get('binary', []))
+        ),
+        'fraud_rate_train': fraud_rates['train'],
+        'fraud_rate_test': fraud_rates['test'],
+        'class_imbalance_ratio': (1 - fraud_rates['train']) / fraud_rates['train']
+    }
+
+    # Build CV metrics for shared builder
+    cv_metrics = {
+        'cv_folds': validation_metrics.get('cv_folds', 4),
+        'cv_strategy': 'StratifiedKFold',
+        'cv_pr_auc': float(validation_metrics['xgboost_tuned']['pr_auc']),
+        'note': 'CV performed on train+val combined for hyperparameter selection in Notebook 2'
+    }
+
+    # Workflow info specific to notebook workflow
+    workflow_info = {
+        'training_notebook': 'fd2_model_selection_tuning.ipynb',
+        'evaluation_notebook': 'fd3_model_evaluation_deployment.ipynb',
+        'model_source': 'GridSearchCV best_estimator_ (auto-refit on train+val)',
+        'note': 'Model loaded from xgb_fraud_detector.joblib, no retraining in fd3'
+    }
+
+    # Use shared builder for consistent structure
+    metadata = build_model_metadata(
+        hyperparameters=hyperparameters,
+        test_metrics=test_metrics,
+        dataset_info=dataset_info,
+        feature_lists=feature_lists,
+        note='Model trained on train+val combined in Notebook 2, evaluated on test set here',
+        cv_metrics=cv_metrics,
+        workflow_info=workflow_info
+    )
 
     metadata_path = model_dir / filename
     with open(metadata_path, 'w') as f:
