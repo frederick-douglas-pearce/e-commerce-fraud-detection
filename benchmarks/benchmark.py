@@ -393,14 +393,22 @@ def main():
         default=10,
         help="Number of concurrent users (default: 10)",
     )
+    # Default output to benchmarks/results/ directory
+    script_dir = Path(__file__).parent
+    default_output = script_dir / "results" / "benchmark_results.json"
+
     parser.add_argument(
         "--output",
         type=str,
-        default="benchmark_results.json",
-        help="Output file path (default: benchmark_results.json)",
+        default=str(default_output),
+        help=f"Output file path (default: {default_output})",
     )
 
     args = parser.parse_args()
+
+    # Ensure output directory exists
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Run benchmark
     benchmark = FraudAPIBenchmark(
