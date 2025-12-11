@@ -652,10 +652,10 @@ curl -X POST "$SERVICE_URL/predict?threshold_strategy=balanced_85pct_recall" \
 
 **Note:** The API automatically generates 30 engineered features from these 15 raw fields using the production feature engineering pipeline.
 
-**Response Example:**
+**Response:**
 ```json
 {
-  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transaction_id": "...",
   "is_fraud": false,
   "fraud_probability": 0.12,
   "risk_level": "low",
@@ -680,16 +680,40 @@ curl -X POST "$SERVICE_URL/predict?include_explanation=true&top_n=3" \
 **Response with Explanation:**
 ```json
 {
-  "transaction_id": "...",
+  "transaction_id": "d9a95d88-a188-438f-b23a-46e8747929b0",
   "is_fraud": true,
-  "fraud_probability": 0.85,
+  "fraud_probability": 0.917,
+  "risk_level": "high",
+  "threshold_used": "target_performance",
+  "threshold_value": 0.456,
+  "model_version": "1.0",
+  "processing_time_ms": 72.47,
   "explanation": {
     "top_contributors": [
-      {"feature": "avs_match", "display_name": "Address Verification Match", "value": 0, "contribution": 0.32},
-      {"feature": "account_age_days", "display_name": "Account Age (days)", "value": 5, "contribution": 0.28},
-      {"feature": "security_score", "display_name": "Security Score", "value": 1, "contribution": 0.15}
+      {
+        "feature": "account_age_days",
+        "display_name": "Account Age (days)",
+        "value": 5.0,
+        "contribution_log_odds": 2.599,
+        "contribution_probability": 0.465
+      },
+      {
+        "feature": "security_score",
+        "display_name": "Security Score (0-3)",
+        "value": 0.0,
+        "contribution_log_odds": 1.081,
+        "contribution_probability": 0.127
+      },
+      {
+        "feature": "amount_vs_avg_ratio",
+        "display_name": "Amount vs User Average Ratio",
+        "value": 10.0,
+        "contribution_log_odds": 0.648,
+        "contribution_probability": 0.064
+      }
     ],
     "base_fraud_rate": 0.022,
+    "final_fraud_probability": 0.917,
     "explanation_method": "shap"
   }
 }
