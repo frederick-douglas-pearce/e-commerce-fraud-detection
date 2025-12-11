@@ -595,71 +595,19 @@ Deployed and available for testing. See [docs/GCP_DEPLOYMENT.md](docs/GCP_DEPLOY
 ![Predict Endpoint Response](images/E-Commerce-Fraud-Prediction-API-docs-response.png)
 *Predict Endpoint - Example response with fraud prediction*
 
-```bash
-# Set the service URL (replace x values with actual Cloud Run URL ID from snapshots)
-export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uw.a.run.app"
-
-# Test health endpoint
-uv run curl $SERVICE_URL/health | python -m json.tool
-
-# Expected response:
-# {
-#   "status": "healthy",
-#   "model_loaded": true,
-#   "model_version": "1.0",
-#   "uptime_seconds": 12.34,
-#   "timestamp": "2025-11-16T..."
-# }
-
-# Test prediction endpoint - Normal transaction
-uv run curl -X POST "$SERVICE_URL/predict" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": 12345,
-    "account_age_days": 180,
-    "total_transactions_user": 25,
-    "avg_amount_user": 250.50,
-    "amount": 850.75,
-    "country": "US",
-    "bin_country": "US",
-    "channel": "web",
-    "merchant_category": "retail",
-    "promo_used": 0,
-    "avs_match": 1,
-    "cvv_result": 1,
-    "three_ds_flag": 1,
-    "shipping_distance_km": 12.5,
-    "transaction_time": "2024-01-15 14:30:00"
-  }' | python -m json.tool
-
-# Test prediction endpoint - Suspicious transaction
-uv run curl -X POST "$SERVICE_URL/predict" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": 12345,
-    "account_age_days": 180,
-    "total_transactions_user": 25,
-    "avg_amount_user": 250.50,
-    "amount": 850.75,
-    "country": "US",
-    "bin_country": "US",
-    "channel": "web",
-    "merchant_category": "retail",
-    "promo_used": 0,
-    "avs_match": 0,
-    "cvv_result": 0,
-    "three_ds_flag": 0,
-    "shipping_distance_km": 1222.5,
-    "transaction_time": "2024-01-15 14:30:00"
-  }' | python -m json.tool
-
-# Access interactive API documentation
-open "$SERVICE_URL/docs"
-```
-
 ### API Usage Examples
 
-These examples work for both local and cloud deployments. For cloud deployments, replace `http://localhost:8000` with your cloud service URL.
+All examples below use the `SERVICE_URL` environment variable. Set it based on your deployment:
+
+```bash
+# Local deployment (Docker or uvicorn)
+export SERVICE_URL="http://localhost:8000"
+
+# Google Cloud Run (replace with your actual URL)
+export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uw.a.run.app"
+```
+
+**Note:** These examples use `curl` (a system command) and `python -m json.tool` for JSON formatting. Neither requires `uv run` since they're standard system utilities.
 
 #### Prediction Endpoint
 
@@ -669,7 +617,7 @@ The API accepts **raw transaction data** (15 fields) and automatically applies f
 
 **Request:**
 ```bash
-curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_recall" \
+curl -X POST "$SERVICE_URL/predict?threshold_strategy=balanced_85pct_recall" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 12345,
@@ -687,7 +635,7 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_re
     "three_ds_flag": 1,
     "shipping_distance_km": 12.5,
     "transaction_time": "2024-01-15 14:30:00"
-  }'
+  }' | python -m json.tool
 ```
 
 **Required Fields:**
@@ -718,9 +666,9 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=balanced_85pct_re
 Request SHAP-based explanations showing which features increased fraud risk:
 
 ```bash
-curl -X POST "http://localhost:8000/predict?include_explanation=true&top_n=3" \
+curl -X POST "$SERVICE_URL/predict?include_explanation=true&top_n=3" \
   -H "Content-Type: application/json" \
-  -d @transaction.json
+  -d @transaction.json | python -m json.tool
 ```
 
 **Response with Explanation:**
@@ -759,9 +707,9 @@ Choose different risk tolerance levels:
 
 **Example - Conservative Strategy:**
 ```bash
-curl -X POST "http://localhost:8000/predict?threshold_strategy=conservative_90pct_recall" \
+curl -X POST "$SERVICE_URL/predict?threshold_strategy=conservative_90pct_recall" \
   -H "Content-Type: application/json" \
-  -d @transaction.json
+  -d @transaction.json | python -m json.tool
 ```
 
 #### Risk Levels
@@ -819,7 +767,7 @@ After modifying threshold targets, retrain with `uv run python train.py` to rege
 
 #### Health Check
 ```bash
-curl http://localhost:8000/health
+curl $SERVICE_URL/health | python -m json.tool
 ```
 
 **Response:**
@@ -835,7 +783,7 @@ curl http://localhost:8000/health
 
 #### Model Information
 ```bash
-curl http://localhost:8000/model/info
+curl $SERVICE_URL/model/info | python -m json.tool
 ```
 
 **Response:**
