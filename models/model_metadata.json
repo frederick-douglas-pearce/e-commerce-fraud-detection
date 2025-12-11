@@ -32,7 +32,7 @@
     },
     "test_samples": 59939,
     "num_features": 30,
-    "fraud_rate_train_val": 0.02206409850014181,
+    "fraud_rate_train": 0.02206409850014181,
     "fraud_rate_test": 0.022055756685964063,
     "class_imbalance_ratio": 44.32249527410208
   },

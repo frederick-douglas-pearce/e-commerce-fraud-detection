@@ -2,9 +2,15 @@
   "default_threshold": 0.5,
   "recommended_threshold": "target_performance",
   "risk_levels": {
-    "low": {"max_probability": 0.3},
-    "medium": {"max_probability": 0.7},
-    "high": {"max_probability": 1.0}
+    "low": {
+      "max_probability": 0.3
+    },
+    "medium": {
+      "max_probability": 0.7
+    },
+    "high": {
+      "max_probability": 1.0
+    }
   },
   "optimized_thresholds": {
     "optimal_f1": {
