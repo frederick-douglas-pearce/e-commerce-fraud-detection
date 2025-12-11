@@ -767,7 +767,7 @@ Each prediction includes a `risk_level` classification based on configurable pro
 }
 ```
 
-Adjust thresholds based on your business requirements - for example, lowering the `medium` boundary to 0.2 will flag more transactions for review. After modifying, retrain the model with `train.py` to regenerate `models/threshold_config.json`.
+Adjust thresholds based on your business requirements - for example, lowering the `low` boundary to 0.2 will flag more transactions for review. After modifying, retrain the model with `train.py` to regenerate `models/threshold_config.json`.
 
 #### Threshold Targets (Retraining)
 
@@ -830,11 +830,27 @@ curl $SERVICE_URL/model/info | uv run python -m json.tool
     "f1": 0.7756
   },
   "threshold_strategies": {
-    "balanced_85pct_recall": {
-      "threshold": 0.35,
-      "precision": 0.72,
-      "recall": 0.85
+    "optimal_f1": {
+      "threshold": 0.815,
+      "precision": 0.927,
+      "recall": 0.752,
+      "f1": 0.831,
+      "tp": 995,
+      "fp": 78,
+      "tn": 58539,
+      "fn": 327,
+      "description": "Optimal F1 score - best precision-recall balance"
+    },
+    "target_performance": {
+      "threshold": 0.456,
+      "precision": 0.700,
+      "recall": 0.832,
+      ...
     }
+    "conservative_90pct_recall": {
+      ...
+    }, 
+    ...
   },
   "raw_features_required": [
     "user_id", "account_age_days", "total_transactions_user", "avg_amount_user",
@@ -872,8 +888,13 @@ uv run pytest tests/test_preprocessing/ -v
 # Quick benchmark
 uv run python benchmarks/benchmark.py --url http://localhost:8000
 
-# Load testing with Locust
+# Load testing with Locust (web UI at http://localhost:8089)
 uv run locust -f benchmarks/locustfile.py --host=http://localhost:8000
+
+# Headless mode (no web UI)
+# -u: number of concurrent users, -r: spawn rate (users/sec), -t: test duration
+uv run locust -f benchmarks/locustfile.py --host=http://localhost:8000 \
+  --headless -u 10 -r 2 -t 30s
 ```
 
 ### Benchmark Results
