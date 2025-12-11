@@ -277,8 +277,7 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ├── images/                             # Screenshots and documentation images
 ├── Dockerfile                          # Container image definition
 ├── docker-compose.yml                  # Local Docker deployment
-├── requirements.txt                    # Python dependencies (pip format)
-├── pyproject.toml                      # Python dependencies (uv format)
+├── pyproject.toml                      # Python dependencies
 ├── uv.lock                             # Locked dependency versions
 ├── .gitignore                          # Git exclusions
 ├── claude.md                           # Project context for Claude Code
