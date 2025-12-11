@@ -36,17 +36,22 @@ import requests
 class FraudAPIBenchmark:
     """Benchmark suite for Fraud Detection API."""
 
-    def __init__(self, base_url: str, iterations: int = 100, concurrent_users: int = 10, output_path: str = "benchmark_results.json"):
+    def __init__(self, base_url: str, iterations: int = 100, concurrent_users: int = 10, output_path: str = "benchmark_results.json", with_explanation: bool = False):
         self.base_url = base_url.rstrip("/")
         self.iterations = iterations
         self.concurrent_users = concurrent_users
         self.output_path = output_path
+        self.with_explanation = with_explanation
+        self.predict_url = f"{self.base_url}/predict"
+        if with_explanation:
+            self.predict_url += "?include_explanation=true&top_n=3"
         self.results = {
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "base_url": base_url,
                 "iterations": iterations,
                 "concurrent_users": concurrent_users,
+                "with_explanation": with_explanation,
             },
             "health_check": {},
             "cold_start": {},
@@ -107,7 +112,7 @@ class FraudAPIBenchmark:
         try:
             start = time.time()
             response = requests.post(
-                f"{self.base_url}/predict", json=payload, timeout=30
+                self.predict_url, json=payload, timeout=30
             )
             e2e_time = (time.time() - start) * 1000  # ms
 
@@ -130,7 +135,8 @@ class FraudAPIBenchmark:
 
     def benchmark_single_requests(self) -> None:
         """Benchmark single sequential requests."""
-        print(f"\n🔥 Benchmarking {self.iterations} single requests...")
+        mode = "with SHAP explanation" if self.with_explanation else "prediction only"
+        print(f"\n🔥 Benchmarking {self.iterations} single requests ({mode})...")
         payload = self.sample_payload()
 
         server_times = []
@@ -142,7 +148,7 @@ class FraudAPIBenchmark:
             try:
                 start = time.time()
                 response = requests.post(
-                    f"{self.base_url}/predict", json=payload, timeout=10
+                    self.predict_url, json=payload, timeout=10
                 )
                 e2e_time = (time.time() - start) * 1000  # ms
 
@@ -192,15 +198,17 @@ class FraudAPIBenchmark:
 
     def benchmark_concurrent_requests(self) -> None:
         """Benchmark concurrent requests with thread pool."""
-        print(f"\n⚡ Benchmarking {self.concurrent_users} concurrent users...")
+        mode = "with SHAP explanation" if self.with_explanation else "prediction only"
+        print(f"\n⚡ Benchmarking {self.concurrent_users} concurrent users ({mode})...")
         payload = self.sample_payload()
+        predict_url = self.predict_url  # Capture for closure
 
         def make_request():
             """Make a single request and return timing."""
             try:
                 start = time.time()
                 response = requests.post(
-                    f"{self.base_url}/predict", json=payload, timeout=10
+                    predict_url, json=payload, timeout=10
                 )
                 e2e_time = (time.time() - start) * 1000  # ms
 
@@ -281,6 +289,8 @@ class FraudAPIBenchmark:
         print(f"  Base URL: {self.results['metadata']['base_url']}")
         print(f"  Iterations: {self.results['metadata']['iterations']}")
         print(f"  Concurrent Users: {self.results['metadata']['concurrent_users']}")
+        mode = "with SHAP explanation" if self.results['metadata'].get('with_explanation') else "prediction only"
+        print(f"  Mode: {mode}")
 
         # Health Check
         if self.results.get("health_check"):
@@ -393,6 +403,11 @@ def main():
         default=10,
         help="Number of concurrent users (default: 10)",
     )
+    parser.add_argument(
+        "--with-explanation",
+        action="store_true",
+        help="Include SHAP explanation in requests (slower, tests explainability feature)",
+    )
     # Default output to benchmarks/results/ directory
     script_dir = Path(__file__).parent
     default_output = script_dir / "results" / "benchmark_results.json"
@@ -416,6 +431,7 @@ def main():
         iterations=args.iterations,
         concurrent_users=args.concurrent,
         output_path=args.output,
+        with_explanation=args.with_explanation,
     )
     benchmark.run()
 

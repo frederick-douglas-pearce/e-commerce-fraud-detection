@@ -9,12 +9,12 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PORT=8000
-    volumes:
+    # volumes:
       # Mount source code for development (optional - comment out for production)
-      - ./predict.py:/app/predict.py
-      - ./src:/app/src
+      # - ./predict.py:/app/predict.py
+      # - ./src:/app/src
       # Mount models directory (for easy model updates)
-      - ./models:/app/models:ro
+      # - ./models:/app/models:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
