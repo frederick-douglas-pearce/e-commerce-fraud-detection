@@ -607,7 +607,7 @@ export SERVICE_URL="http://localhost:8000"
 export SERVICE_URL="https://fraud-detection-api-xxxxxxxxxx-uw.a.run.app"
 ```
 
-**Note:** These examples use `curl` (a system command) and `python -m json.tool` for JSON formatting. Neither requires `uv run` since they're standard system utilities.
+**Note:** These examples use `curl` (a system command) and pipe to `uv run python -m json.tool` for JSON formatting. Using `uv run` ensures the correct Python version from the project's virtual environment.
 
 #### Prediction Endpoint
 
@@ -635,7 +635,7 @@ curl -X POST "$SERVICE_URL/predict?threshold_strategy=balanced_85pct_recall" \
     "three_ds_flag": 1,
     "shipping_distance_km": 12.5,
     "transaction_time": "2024-01-15 14:30:00"
-  }' | python -m json.tool
+  }' | uv run python -m json.tool
 ```
 
 **Required Fields:**
@@ -668,7 +668,7 @@ Request SHAP-based explanations showing which features increased fraud risk:
 ```bash
 curl -X POST "$SERVICE_URL/predict?include_explanation=true&top_n=3" \
   -H "Content-Type: application/json" \
-  -d @transaction.json | python -m json.tool
+  -d @transaction.json | uv run python -m json.tool
 ```
 
 **Response with Explanation:**
@@ -709,7 +709,7 @@ Choose different risk tolerance levels:
 ```bash
 curl -X POST "$SERVICE_URL/predict?threshold_strategy=conservative_90pct_recall" \
   -H "Content-Type: application/json" \
-  -d @transaction.json | python -m json.tool
+  -d @transaction.json | uv run python -m json.tool
 ```
 
 #### Risk Levels
@@ -767,7 +767,7 @@ After modifying threshold targets, retrain with `uv run python train.py` to rege
 
 #### Health Check
 ```bash
-curl $SERVICE_URL/health | python -m json.tool
+curl $SERVICE_URL/health | uv run python -m json.tool
 ```
 
 **Response:**
@@ -783,7 +783,7 @@ curl $SERVICE_URL/health | python -m json.tool
 
 #### Model Information
 ```bash
-curl $SERVICE_URL/model/info | python -m json.tool
+curl $SERVICE_URL/model/info | uv run python -m json.tool
 ```
 
 **Response:**
