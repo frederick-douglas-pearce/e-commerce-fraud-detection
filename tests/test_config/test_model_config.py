@@ -107,39 +107,6 @@ class TestFeatureListsConfig:
 class TestModelConfig:
     """Tests for ModelConfig class"""
 
-    def test_get_param_grid_xgboost(self):
-        """Test get_param_grid returns valid XGBoost parameter grid"""
-        param_grid = ModelConfig.get_param_grid('xgboost')
-
-        # Check it's a dictionary
-        assert isinstance(param_grid, dict)
-
-        # Check expected parameters exist
-        assert 'classifier__n_estimators' in param_grid
-        assert 'classifier__max_depth' in param_grid
-        assert 'classifier__learning_rate' in param_grid
-        assert 'classifier__gamma' in param_grid
-        assert 'classifier__scale_pos_weight' in param_grid
-
-    def test_get_param_grid_random_forest(self):
-        """Test get_param_grid returns valid Random Forest parameter grid"""
-        param_grid = ModelConfig.get_param_grid('random_forest')
-
-        # Check it's a dictionary
-        assert isinstance(param_grid, dict)
-
-        # Check expected parameters exist
-        assert 'classifier__n_estimators' in param_grid
-        assert 'classifier__max_depth' in param_grid
-        assert 'classifier__min_samples_split' in param_grid
-        assert 'classifier__min_samples_leaf' in param_grid
-        assert 'classifier__class_weight' in param_grid
-
-    def test_get_param_grid_invalid_model_type(self):
-        """Test get_param_grid raises error for invalid model type"""
-        with pytest.raises(ValueError, match="Unsupported model type"):
-            ModelConfig.get_param_grid('invalid_model')
-
     def test_load_hyperparameters_xgboost_from_metadata(self):
         """Test loading XGBoost hyperparameters from metadata"""
         params = ModelConfig.load_hyperparameters('xgboost', source='metadata')
@@ -147,7 +114,7 @@ class TestModelConfig:
         # Check it's a dictionary
         assert isinstance(params, dict)
 
-        # Check expected parameters exist (either from metadata or fallback)
+        # Check expected parameters exist
         assert 'n_estimators' in params
         assert 'max_depth' in params
         assert 'learning_rate' in params
@@ -165,24 +132,19 @@ class TestModelConfig:
         with pytest.raises(ValueError, match="Unsupported model type"):
             ModelConfig.load_hyperparameters('invalid_model', source='metadata')
 
-    def test_fallback_params_exist(self):
-        """Test that fallback parameters are defined"""
-        # Should not raise errors
-        assert hasattr(ModelConfig, 'FALLBACK_XGBOOST_PARAMS')
-        assert hasattr(ModelConfig, 'FALLBACK_RANDOM_FOREST_PARAMS')
+    def test_load_hyperparameters_missing_metadata_raises_error(self, tmp_path, monkeypatch):
+        """Test that missing metadata file raises FileNotFoundError"""
+        # Point to a non-existent metadata file
+        monkeypatch.setattr(ModelConfig, 'DEFAULT_METADATA_PATH', tmp_path / "nonexistent.json")
 
-        # Check they're dictionaries with expected keys
-        assert isinstance(ModelConfig.FALLBACK_XGBOOST_PARAMS, dict)
-        assert isinstance(ModelConfig.FALLBACK_RANDOM_FOREST_PARAMS, dict)
+        with pytest.raises(FileNotFoundError, match="Could not load hyperparameters"):
+            ModelConfig.load_hyperparameters('xgboost', source='metadata')
 
-        assert 'n_estimators' in ModelConfig.FALLBACK_XGBOOST_PARAMS
-        assert 'n_estimators' in ModelConfig.FALLBACK_RANDOM_FOREST_PARAMS
+    def test_default_paths_exist(self):
+        """Test that default path attributes are defined"""
+        assert hasattr(ModelConfig, 'DEFAULT_METADATA_PATH')
+        assert hasattr(ModelConfig, 'DEFAULT_LOGS_DIR')
 
-    def test_default_param_grids_exist(self):
-        """Test that default parameter grids are defined"""
-        assert hasattr(ModelConfig, 'DEFAULT_XGBOOST_PARAM_GRID')
-        assert hasattr(ModelConfig, 'DEFAULT_RANDOM_FOREST_PARAM_GRID')
-
-        # Check they're dictionaries
-        assert isinstance(ModelConfig.DEFAULT_XGBOOST_PARAM_GRID, dict)
-        assert isinstance(ModelConfig.DEFAULT_RANDOM_FOREST_PARAM_GRID, dict)
+        # Check they're Path objects
+        assert isinstance(ModelConfig.DEFAULT_METADATA_PATH, Path)
+        assert isinstance(ModelConfig.DEFAULT_LOGS_DIR, Path)

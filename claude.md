@@ -234,9 +234,8 @@ Centralizes all configuration for data loading, model hyperparameters, and train
 **`src/deployment/config/model_config.py`**:
 - `FeatureListsConfig.load()`: Loads feature categorization from `models/feature_lists.json`
 - `ModelConfig.load_hyperparameters()`: Loads hyperparameters from model metadata or CV results
-- `ModelConfig.get_param_grid()`: Returns parameter grid for GridSearchCV
-- Fallback hyperparameters for XGBoost and Random Forest
 - Supports loading from multiple sources: metadata, CV results, or custom JSON files
+- Raises `FileNotFoundError` if hyperparameters cannot be loaded (fail-fast, no silent fallbacks)
 
 **`src/deployment/config/training_config.py`**:
 - `TrainingConfig.get_cv_strategy()`: Returns StratifiedKFold(4) for cross-validation
@@ -572,7 +571,7 @@ predictions = pipeline.predict(test_df)
 
 1. **Configuration Tests** (`tests/test_config/` - 44 tests):
    - `test_data_config.py` (16 tests): DataConfig constants, get_data_path(), get_random_seed(), get_split_config()
-   - `test_model_config.py` (19 tests): FeatureListsConfig.load(), ModelConfig.get_param_grid(), hyperparameter loading
+   - `test_model_config.py` (16 tests): FeatureListsConfig.load(), ModelConfig.load_hyperparameters()
    - `test_training_config.py` (9 tests): CV strategy (StratifiedKFold), threshold targets, random seed handling
 
 2. **Data Loading Tests** (`tests/test_data/` - 12 tests):

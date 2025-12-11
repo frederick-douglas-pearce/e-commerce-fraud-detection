@@ -19,7 +19,6 @@ with open(_CONFIG_PATH) as f:
     _DEFAULTS = json.load(f)
 
 _PATHS = _DEFAULTS["paths"]
-_MODEL_DEFAULTS = _DEFAULTS["model_defaults"]
 
 
 class FeatureListsConfig:
@@ -94,53 +93,6 @@ class ModelConfig:
     DEFAULT_METADATA_PATH = Path(_PATHS["model_metadata"])
     DEFAULT_LOGS_DIR = Path(_PATHS["logs_dir"])
 
-    # Fallback hyperparameters loaded from JSON (single source of truth)
-    FALLBACK_XGBOOST_PARAMS: Dict = _MODEL_DEFAULTS["xgboost"].copy()
-    FALLBACK_RANDOM_FOREST_PARAMS: Dict = _MODEL_DEFAULTS["random_forest"].copy()
-
-    # Default parameter grids for hyperparameter tuning (kept in Python - only used in notebooks)
-    DEFAULT_XGBOOST_PARAM_GRID = {
-        'classifier__n_estimators': [90, 100, 110],
-        'classifier__max_depth': [4],
-        'classifier__learning_rate': [0.1],
-        'classifier__subsample': [0.9],
-        'classifier__colsample_bytree': [0.9],
-        'classifier__min_child_weight': [7],
-        'classifier__gamma': [0.6, 0.7],
-        'classifier__reg_alpha': [0.0, 0.1],
-        'classifier__reg_lambda': [0, 1.0],
-        'classifier__scale_pos_weight': [8]
-    }
-
-    DEFAULT_RANDOM_FOREST_PARAM_GRID = {
-        'classifier__n_estimators': [350, 400, 450],
-        'classifier__max_depth': [15, 20],
-        'classifier__min_samples_split': [10],
-        'classifier__min_samples_leaf': [5],
-        'classifier__max_features': ['sqrt'],
-        'classifier__class_weight': ['balanced_subsample']
-    }
-
-    @classmethod
-    def get_param_grid(cls, model_type: str = "xgboost") -> Dict:
-        """Get default parameter grid for hyperparameter tuning.
-
-        Args:
-            model_type: Type of model ('xgboost', 'random_forest')
-
-        Returns:
-            Dictionary of parameter grid for GridSearchCV
-
-        Raises:
-            ValueError: If model_type is not supported
-        """
-        if model_type.lower() == "xgboost":
-            return cls.DEFAULT_XGBOOST_PARAM_GRID.copy()
-        elif model_type.lower() == "random_forest":
-            return cls.DEFAULT_RANDOM_FOREST_PARAM_GRID.copy()
-        else:
-            raise ValueError(f"Unsupported model type: {model_type}. Use 'xgboost' or 'random_forest'")
-
     @classmethod
     def load_hyperparameters(
         cls,
@@ -160,7 +112,7 @@ class ModelConfig:
 
         Raises:
             ValueError: If model_type is not supported
-            FileNotFoundError: If source file doesn't exist
+            FileNotFoundError: If source file doesn't exist or hyperparameters not found
         """
         if model_type.lower() not in ["xgboost", "random_forest"]:
             raise ValueError(f"Unsupported model type: {model_type}. Use 'xgboost' or 'random_forest'")
@@ -176,13 +128,12 @@ class ModelConfig:
             # Assume it's a file path
             params = cls._load_from_file(source, model_type)
 
-        # Use fallback if loading failed
+        # Fail explicitly if no hyperparameters found
         if params is None:
-            print(f"  ℹ️  Using fallback {model_type} hyperparameters")
-            if model_type.lower() == "xgboost":
-                params = cls.FALLBACK_XGBOOST_PARAMS.copy()
-            else:
-                params = cls.FALLBACK_RANDOM_FOREST_PARAMS.copy()
+            raise FileNotFoundError(
+                f"Could not load hyperparameters for {model_type} from {source}. "
+                f"Ensure {cls.DEFAULT_METADATA_PATH} exists and contains 'hyperparameters' section."
+            )
 
         # Set random seed
         if random_seed is not None:

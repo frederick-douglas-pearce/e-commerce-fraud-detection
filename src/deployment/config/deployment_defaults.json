@@ -16,29 +16,6 @@
     "cv_folds": 4,
     "cv_shuffle": true
   },
-  "model_defaults": {
-    "xgboost": {
-      "n_estimators": 100,
-      "max_depth": 4,
-      "learning_rate": 0.1,
-      "subsample": 0.9,
-      "colsample_bytree": 0.9,
-      "min_child_weight": 7,
-      "gamma": 0.7,
-      "reg_alpha": 0.0,
-      "reg_lambda": 1.0,
-      "scale_pos_weight": 8,
-      "eval_metric": "aucpr"
-    },
-    "random_forest": {
-      "n_estimators": 400,
-      "max_depth": 20,
-      "min_samples_split": 10,
-      "min_samples_leaf": 5,
-      "max_features": "sqrt",
-      "class_weight": "balanced_subsample"
-    }
-  },
   "deployment": {
     "default_threshold": 0.5,
     "threshold_targets": {
