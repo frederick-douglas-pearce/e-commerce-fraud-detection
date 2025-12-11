@@ -43,6 +43,9 @@ A machine learning project to detect fraudulent e-commerce transactions using cl
 - [Testing](#testing)
 - [Performance Benchmarking](#performance-benchmarking)
 
+### Configuration
+- [Configuration Settings](#configuration-settings)
+
 ### Additional Information
 - [Contributing](#contributing)
 - [License](#license)
@@ -211,6 +214,7 @@ This project is being developed as part of the [DataTalksClub Machine Learning Z
 ├── src/                                # Source code modules
 │   ├── deployment/                     # Production code for model deployment
 │   │   ├── config/                     # Configuration management
+│   │   │   ├── deployment_defaults.json # Central config (risk_levels, thresholds)
 │   │   │   ├── data_config.py          # Data loading configuration
 │   │   │   ├── model_config.py         # Hyperparameters & feature lists
 │   │   │   ├── training_config.py      # CV strategy & thresholds
@@ -764,7 +768,7 @@ curl -X POST "http://localhost:8000/predict?threshold_strategy=conservative_90pc
 
 Each prediction includes a `risk_level` classification based on configurable probability thresholds. This enables automated workflow routing where certain risk levels trigger manual review while others are processed automatically.
 
-**Default Configuration** (in `models/threshold_config.json`):
+**Default Configuration** (in `src/deployment/config/deployment_defaults.json`):
 
 | Risk Level | Probability Range | Recommended Action |
 |------------|-------------------|-------------------|
@@ -775,15 +779,43 @@ Each prediction includes a `risk_level` classification based on configurable pro
 **Configuration:**
 ```json
 {
-  "risk_levels": {
-    "low": {"max_probability": 0.3},
-    "medium": {"max_probability": 0.7},
-    "high": {"max_probability": 1.0}
+  "deployment": {
+    "risk_levels": {
+      "low": {"max_probability": 0.3},
+      "medium": {"max_probability": 0.7},
+      "high": {"max_probability": 1.0}
+    }
   }
 }
 ```
 
-Adjust thresholds based on your business requirements - for example, lowering the `medium` boundary to 0.2 will flag more transactions for review.
+Adjust thresholds based on your business requirements - for example, lowering the `medium` boundary to 0.2 will flag more transactions for review. After modifying, retrain the model with `train.py` to regenerate `models/threshold_config.json`.
+
+#### Threshold Targets (Retraining)
+
+When retraining the model, the system automatically optimizes thresholds for multiple recall targets. You can customize which recall targets are computed by modifying the `threshold_targets` in `src/deployment/config/deployment_defaults.json`:
+
+**Default Configuration:**
+```json
+{
+  "deployment": {
+    "threshold_targets": {
+      "conservative_90pct_recall": 0.90,
+      "balanced_85pct_recall": 0.85,
+      "aggressive_80pct_recall": 0.80
+    }
+  }
+}
+```
+
+**Customization Examples:**
+- Add a 95% recall target: `"very_conservative_95pct_recall": 0.95`
+- Remove unused targets to simplify the config
+- Adjust recall values to match your fraud detection requirements
+
+After modifying threshold targets, retrain with `uv run python train.py` to regenerate optimized thresholds in `models/threshold_config.json`.
+
+**Note:** The `optimal_f1` and `target_performance` thresholds are always computed automatically during training and cannot be disabled.
 
 #### Health Check
 ```bash
@@ -955,6 +987,30 @@ uv run locust -f benchmarks/locustfile.py --host=http://localhost:8000
 - Cloud Run cold start ~471ms (set min instances for production)
 
 Both deployments exceed all performance requirements. Choose Docker for maximum throughput or Cloud Run for serverless auto-scaling.
+
+---
+
+## Configuration Settings
+
+The central configuration file `src/deployment/config/deployment_defaults.json` contains settings that control model training and API behavior. This section documents key settings that API users may want to customize.
+
+### Key User-Configurable Settings
+
+| Setting | Location | Default | Description |
+|---------|----------|---------|-------------|
+| `risk_levels` | `deployment.risk_levels` | low: 0.3, medium: 0.7, high: 1.0 | Probability thresholds for risk classification |
+| `threshold_targets` | `deployment.threshold_targets` | 80%, 85%, 90% recall | Recall targets for threshold optimization |
+| `default_random_seed` | `data.default_random_seed` | 1 | Random seed for reproducible training |
+| `test_size` | `data.test_size` | 0.2 | Fraction of data held out for testing |
+| `cv_folds` | `training.cv_folds` | 4 | Number of cross-validation folds |
+
+### Modifying Configuration
+
+1. Edit `src/deployment/config/deployment_defaults.json`
+2. Retrain the model: `uv run python train.py`
+3. Restart the API service to load new `models/threshold_config.json`
+
+**Note:** Settings like `risk_levels` and `threshold_targets` are documented in the [API Usage Examples](#api-usage-examples) section with detailed examples.
 
 ---
 
