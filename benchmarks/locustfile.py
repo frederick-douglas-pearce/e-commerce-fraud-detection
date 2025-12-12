@@ -29,6 +29,14 @@ class FraudDetectionUser(HttpUser):
     - Waits 0.1-0.5 seconds between requests (realistic think time)
     - Sends prediction requests with randomized transaction data
     - Simulates real-world variation in transaction attributes
+    - Tests all threshold strategies and explainability feature
+
+    Task Weights (relative frequency):
+    - Normal transactions: 10 (most common)
+    - Suspicious transactions: 3
+    - Predictions with SHAP explanation: 2
+    - Health checks: 1
+    - Model info requests: 1
     """
 
     wait_time = between(0.1, 0.5)  # Wait 100-500ms between requests
@@ -44,6 +52,20 @@ class FraudDetectionUser(HttpUser):
         "entertainment",
         "utilities",
     ]
+    THRESHOLD_STRATEGIES = [
+        "target_performance",
+        "optimal_f1",
+        "conservative_90pct_recall",
+        "balanced_85pct_recall",
+        "aggressive_80pct_recall",
+    ]
+
+    def _generate_transaction_time(self) -> str:
+        """Generate a realistic transaction timestamp."""
+        hour = random.randint(0, 23)
+        minute = random.randint(0, 59)
+        second = random.randint(0, 59)
+        return f"2025-01-15 {hour:02d}:{minute:02d}:{second:02d}"
 
     def on_start(self):
         """Called when a simulated user starts (optional: check health)."""
@@ -52,10 +74,9 @@ class FraudDetectionUser(HttpUser):
         if response.status_code != 200:
             print("⚠️  Warning: API health check failed")
 
-    @task(10)  # Weight 10: Most common task
-    def predict_normal_transaction(self):
-        """Simulate a typical legitimate transaction."""
-        payload = {
+    def _build_normal_payload(self) -> dict:
+        """Build payload for a typical legitimate transaction."""
+        return {
             "user_id": random.randint(1000, 99999),
             "account_age_days": random.randint(30, 365),  # Established accounts
             "total_transactions_user": random.randint(10, 100),
@@ -70,11 +91,17 @@ class FraudDetectionUser(HttpUser):
             "cvv_result": 1,
             "three_ds_flag": random.randint(0, 1),
             "shipping_distance_km": round(random.uniform(0, 100), 2),
-            "transaction_time": "2024-01-15 14:30:00",
+            "transaction_time": self._generate_transaction_time(),
         }
 
+    @task(10)  # Weight 10: Most common task
+    def predict_normal_transaction(self):
+        """Simulate a typical legitimate transaction."""
+        payload = self._build_normal_payload()
+        strategy = random.choice(self.THRESHOLD_STRATEGIES)
+
         with self.client.post(
-            "/predict",
+            f"/predict?threshold_strategy={strategy}",
             json=payload,
             catch_response=True,
             name="/predict [normal]",
@@ -89,10 +116,9 @@ class FraudDetectionUser(HttpUser):
             else:
                 response.failure(f"HTTP {response.status_code}")
 
-    @task(3)  # Weight 3: Less common
-    def predict_suspicious_transaction(self):
-        """Simulate a potentially suspicious transaction."""
-        payload = {
+    def _build_suspicious_payload(self) -> dict:
+        """Build payload for a potentially suspicious transaction."""
+        return {
             "user_id": random.randint(1000, 99999),
             "account_age_days": random.randint(1, 30),  # New accounts
             "total_transactions_user": random.randint(1, 5),  # Few transactions
@@ -107,11 +133,17 @@ class FraudDetectionUser(HttpUser):
             "cvv_result": random.randint(0, 1),
             "three_ds_flag": 0,  # No 3D Secure
             "shipping_distance_km": round(random.uniform(100, 500), 2),  # Far shipping
-            "transaction_time": "2024-01-15 14:30:00",
+            "transaction_time": self._generate_transaction_time(),
         }
 
+    @task(3)  # Weight 3: Less common
+    def predict_suspicious_transaction(self):
+        """Simulate a potentially suspicious transaction."""
+        payload = self._build_suspicious_payload()
+        strategy = random.choice(self.THRESHOLD_STRATEGIES)
+
         with self.client.post(
-            "/predict",
+            f"/predict?threshold_strategy={strategy}",
             json=payload,
             catch_response=True,
             name="/predict [suspicious]",
@@ -143,6 +175,28 @@ class FraudDetectionUser(HttpUser):
             else:
                 response.failure(f"HTTP {response.status_code}")
 
+    @task(2)  # Weight 2: Some users request explanations
+    def predict_with_explanation(self):
+        """Request prediction with SHAP explanation (slower, tests explainability)."""
+        payload = self._build_suspicious_payload()  # Use suspicious for more interesting explanations
+        top_n = random.choice([3, 5])
+
+        with self.client.post(
+            f"/predict?include_explanation=true&top_n={top_n}",
+            json=payload,
+            catch_response=True,
+            name="/predict [with explanation]",
+        ) as response:
+            if response.status_code == 200:
+                data = response.json()
+                # Validate explanation is present
+                if data.get("explanation") and "top_contributors" in data["explanation"]:
+                    response.success()
+                else:
+                    response.failure("Missing explanation in response")
+            else:
+                response.failure(f"HTTP {response.status_code}")
+
 
 class StressTestUser(HttpUser):
     """
@@ -155,6 +209,13 @@ class StressTestUser(HttpUser):
     """
 
     wait_time = between(0, 0.1)  # Minimal wait time
+
+    def _generate_transaction_time(self) -> str:
+        """Generate a realistic transaction timestamp."""
+        hour = random.randint(0, 23)
+        minute = random.randint(0, 59)
+        second = random.randint(0, 59)
+        return f"2025-01-15 {hour:02d}:{minute:02d}:{second:02d}"
 
     @task
     def predict_rapid_fire(self):
@@ -174,7 +235,7 @@ class StressTestUser(HttpUser):
             "cvv_result": random.randint(0, 1),
             "three_ds_flag": random.randint(0, 1),
             "shipping_distance_km": round(random.uniform(0, 500), 2),
-            "transaction_time": "2024-01-15 14:30:00",
+            "transaction_time": self._generate_transaction_time(),
         }
 
         self.client.post("/predict", json=payload, name="/predict [stress]")

@@ -61,4 +61,6 @@ USER appuser
 EXPOSE 8080
 
 # Run the FastAPI application using predict.py (reads PORT from environment)
+# Note: Single worker is optimal for CPU-bound ML inference workloads.
+# Cloud Run handles scaling by spinning up multiple container instances.
 CMD ["python", "predict.py"]
